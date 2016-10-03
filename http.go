@@ -7,16 +7,43 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"strings"
 )
 
+const MAX_QUERIES = 1000
+
+// Client is not safe for concurrent usage.
 type Client struct {
 	pilosaURL string
+	queries   []string
 }
 
 func NewClient(pilosaURL string) *Client {
 	return &Client{
 		pilosaURL: pilosaURL,
+		queries:   make([]string, 0),
 	}
+}
+
+func (c *Client) AddQuery(query string) {
+	c.queries = append(c.queries, query)
+}
+
+type Results struct {
+	Results []interface{}
+}
+
+func (c *Client) ExecuteQueries(db int) (Results, error) {
+	if len(c.queries) == 0 {
+		return Results{}, nil
+	}
+	r := Results{}
+	err := c.pilosaPost(bytes.NewBufferString(strings.Join(c.queries, "")), db, &r)
+	return r, err
+}
+
+func (c *Client) ClearQueries() {
+	c.queries = c.queries[:0]
 }
 
 type SetBitResponse struct {

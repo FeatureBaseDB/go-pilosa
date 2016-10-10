@@ -98,7 +98,8 @@ func (c *Client) CountBit(db int, bitmapID int, frame string) (int64, error) {
 }
 
 func (c *Client) pilosaPostRaw(query io.Reader, db int) (string, error) {
-	req, err := http.Post(fmt.Sprintf("%s/query?db=%d?", c.pilosaURL, db), "application/pql", query)
+	postURL := fmt.Sprintf("%s/query?db=%d", c.pilosaURL, db)
+	req, err := http.Post(postURL, "application/pql", query)
 	if err != nil {
 		return "", err
 	}
@@ -108,7 +109,8 @@ func (c *Client) pilosaPostRaw(query io.Reader, db int) (string, error) {
 }
 
 func (c *Client) pilosaPost(query io.Reader, db int, v interface{}) error {
-	req, err := http.Post(fmt.Sprintf("%s/query?db=%d?", c.pilosaURL, db), "application/pql", query)
+	postURL := fmt.Sprintf("%s/query?db=%d", c.pilosaURL, db)
+	req, err := http.Post(postURL, "application/pql", query)
 	if err != nil {
 		return err
 	}

@@ -112,11 +112,21 @@ func (c *Client) pilosaPost(query io.Reader, db int, v interface{}) error {
 	postURL := fmt.Sprintf("%s/query?db=%d", c.pilosaURL, db)
 	req, err := http.Post(postURL, "application/pql", query)
 	if err != nil {
-		return err
+		return fmt.Errorf("error with http.Post in pilosaPost: %v", err)
+	}
+	if req.StatusCode >= 400 {
+		bod, err := ioutil.ReadAll(req.Body)
+		if err != nil {
+			bod = []byte("")
+		}
+		return fmt.Errorf("bad status: %v - Body: %v", req.Status, string(bod))
 	}
 	dec := json.NewDecoder(req.Body)
 
 	err = dec.Decode(v)
-	return err
+	if err != nil {
+		return fmt.Errorf("error json decoding request body: %v", err)
+	}
+	return nil
 
 }

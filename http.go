@@ -33,7 +33,7 @@ type Results struct {
 	Results []interface{}
 }
 
-func (c *Client) ExecuteQueries(db int) (Results, error) {
+func (c *Client) ExecuteQueries(db string) (Results, error) {
 	if len(c.queries) == 0 {
 		return Results{}, nil
 	}
@@ -50,7 +50,7 @@ type SetBitResponse struct {
 	Results []bool
 }
 
-func (c *Client) SetBit(db int, bitmapID int, frame string, profileID int) (bool, error) {
+func (c *Client) SetBit(db string, bitmapID int, frame string, profileID int) (bool, error) {
 	query := bytes.NewBufferString(fmt.Sprintf("SetBit(%d, '%s', %d)", bitmapID, frame, profileID))
 	resp := SetBitResponse{}
 	err := c.pilosaPost(query, db, &resp)
@@ -67,7 +67,7 @@ type ClearBitResponse struct {
 	Results []bool
 }
 
-func (c *Client) ClearBit(db int, bitmapID int, frame string, profileID int) (bool, error) {
+func (c *Client) ClearBit(db string, bitmapID int, frame string, profileID int) (bool, error) {
 	query := bytes.NewBufferString(fmt.Sprintf("ClearBit(%d, '%s', %d)", bitmapID, frame, profileID))
 	resp := ClearBitResponse{}
 	err := c.pilosaPost(query, db, &resp)
@@ -84,7 +84,7 @@ type CountBitResponse struct {
 	Results []int64
 }
 
-func (c *Client) CountBit(db int, bitmapID int, frame string) (int64, error) {
+func (c *Client) CountBit(db string, bitmapID int, frame string) (int64, error) {
 	query := bytes.NewBufferString(fmt.Sprintf("Count(Bitmap(%d, '%s'))", bitmapID, frame))
 	resp := CountBitResponse{}
 	err := c.pilosaPost(query, db, &resp)
@@ -97,8 +97,8 @@ func (c *Client) CountBit(db int, bitmapID int, frame string) (int64, error) {
 	return resp.Results[0], nil
 }
 
-func (c *Client) pilosaPostRaw(query io.Reader, db int) (string, error) {
-	postURL := fmt.Sprintf("%s/query?db=%d", c.pilosaURL, db)
+func (c *Client) pilosaPostRaw(query io.Reader, db string) (string, error) {
+	postURL := fmt.Sprintf("%s/query?db=%s", c.pilosaURL, db)
 	req, err := http.Post(postURL, "application/pql", query)
 	if err != nil {
 		return "", err
@@ -108,8 +108,8 @@ func (c *Client) pilosaPostRaw(query io.Reader, db int) (string, error) {
 	return string(buf), err
 }
 
-func (c *Client) pilosaPost(query io.Reader, db int, v interface{}) error {
-	postURL := fmt.Sprintf("%s/query?db=%d", c.pilosaURL, db)
+func (c *Client) pilosaPost(query io.Reader, db string, v interface{}) error {
+	postURL := fmt.Sprintf("%s/query?db=%s", c.pilosaURL, db)
 	req, err := http.Post(postURL, "application/pql", query)
 	if err != nil {
 		return fmt.Errorf("error with http.Post in pilosaPost: %v", err)

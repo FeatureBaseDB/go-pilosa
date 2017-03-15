@@ -1,11 +1,5 @@
 package pilosa
 
-// ICluster contains the interface for Cluster implementations
-type ICluster interface {
-	getAddress() *URI
-	removeAddress(address *URI)
-}
-
 // Cluster is a simple ICluster implementation
 type Cluster struct {
 	addresses []*URI
@@ -16,7 +10,6 @@ type Cluster struct {
 func NewCluster() *Cluster {
 	return &Cluster{
 		addresses: make([]*URI, 0),
-		nextIndex: 0,
 	}
 }
 
@@ -41,6 +34,11 @@ func (c *Cluster) GetAddress() *URI {
 	uri := c.addresses[c.nextIndex%len(c.addresses)]
 	c.nextIndex = (c.nextIndex + 1) % len(c.addresses)
 	return uri
+}
+
+// RemoveAddress removes an address from the cluster
+func (c *Cluster) RemoveAddress(address *URI) {
+	// TODO:
 }
 
 // GetAddresses returns all addresses in this cluster

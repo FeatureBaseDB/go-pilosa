@@ -14,52 +14,28 @@ func TestURIWithHostPort(t *testing.T) {
 	compare(t, uri, "http", "db1.pilosa.com", 3333)
 }
 
-func TestURIParseFullAddress(t *testing.T) {
-	uri, err := NewURIFromAddress("http+protobuf://db1.pilosa.com:3333")
-	if err != nil {
-		t.Fatalf("Can't parse address")
+func TestURIFromAddress(t *testing.T) {
+	var test = []struct {
+		address string
+		scheme  string
+		host    string
+		port    uint16
+	}{
+		{"http+protobuf://db1.pilosa.com:3333", "http+protobuf", "db1.pilosa.com", 3333},
+		{"db1.pilosa.com:3333", "http", "db1.pilosa.com", 3333},
+		{"https://db1.pilosa.com", "https", "db1.pilosa.com", 15000},
+		{"db1.pilosa.com", "http", "db1.pilosa.com", 15000},
+		{"https://:3333", "https", "localhost", 3333},
+		{":3333", "http", "localhost", 3333},
 	}
-	compare(t, uri, "http+protobuf", "db1.pilosa.com", 3333)
-}
 
-func TestURIParseHostPort(t *testing.T) {
-	uri, err := NewURIFromAddress("db1.pilosa.com:3333")
-	if err != nil {
-		t.Fatalf("Can't parse address")
+	for _, item := range test {
+		uri, err := NewURIFromAddress(item.address)
+		if err != nil {
+			t.Fatalf("Can't parse address: %s", item.address)
+		}
+		compare(t, uri, item.scheme, item.host, item.port)
 	}
-	compare(t, uri, "http", "db1.pilosa.com", 3333)
-}
-
-func TestURIParseSchemeHost(t *testing.T) {
-	uri, err := NewURIFromAddress("https://db1.pilosa.com")
-	if err != nil {
-		t.Fatalf("Can't parse address")
-	}
-	compare(t, uri, "https", "db1.pilosa.com", 15000)
-}
-
-func TestURIParseHost(t *testing.T) {
-	uri, err := NewURIFromAddress("db1.pilosa.com")
-	if err != nil {
-		t.Fatalf("Can't parse address")
-	}
-	compare(t, uri, "http", "db1.pilosa.com", 15000)
-}
-
-func TestURIParseSchemePort(t *testing.T) {
-	uri, err := NewURIFromAddress("https://:3333")
-	if err != nil {
-		t.Fatalf("Can't parse address")
-	}
-	compare(t, uri, "https", "localhost", 3333)
-}
-
-func TestURIParsePort(t *testing.T) {
-	uri, err := NewURIFromAddress(":3333")
-	if err != nil {
-		t.Fatalf("Can't parse address")
-	}
-	compare(t, uri, "http", "localhost", 3333)
 }
 
 func TestInvalidAddress(t *testing.T) {
@@ -96,12 +72,12 @@ func TestEquals(t *testing.T) {
 
 func compare(t *testing.T, uri *URI, scheme string, host string, port uint16) {
 	if uri.GetScheme() != scheme {
-		t.Fatalf("Scheme does not match")
+		t.Fatalf("Scheme does not match: %s != %s", uri.scheme, scheme)
 	}
 	if uri.GetHost() != host {
-		t.Fatalf("Host does not match")
+		t.Fatalf("Host does not match: %s != %s", uri.host, host)
 	}
 	if uri.GetPort() != port {
-		t.Fatalf("Port does not match")
+		t.Fatalf("Port does not match: %d != %d", uri.port, port)
 	}
 }

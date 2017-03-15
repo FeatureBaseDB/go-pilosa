@@ -38,6 +38,6 @@ func TestGetAddress(t *testing.T) {
 	}
 	c = NewClusterWithAddress(NewURI())
 	if !c.GetAddress().Equals(NewURI()) {
-		t.Fatalf("GetAddres should return a value if there are addresses in the cluster")
+		t.Fatalf("GetAddress should return a value if there are addresses in the cluster")
 	}
 }

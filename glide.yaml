@@ -1,0 +1,5 @@
+package: github.com/pilosa/gopilosa
+import:
+- package: github.com/golang/protobuf
+  subpackages:
+  - proto

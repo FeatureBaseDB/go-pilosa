@@ -33,11 +33,11 @@ $ go test
 
 And integration tests with:
 
-**TODO**
+$ go test -tags=integration
 
 Run the tests with coverage:
 ```
-$ go test -cover
+$ go test -cover -tags=integration
 ```
 
 ### Generating protobuf classes

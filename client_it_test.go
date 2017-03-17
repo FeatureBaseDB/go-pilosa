@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reflect"
 	"strconv"
 	"testing"
 )
@@ -33,11 +34,20 @@ func Setup() {
 }
 
 func TearDown() {
+	/*
+		client := getClient()
+		err := client.DeleteDatabase(dbname)
+		if err != nil {
+			panic(err)
+		}
+	*/
+}
+
+func Reset() {
 	client := getClient()
-	err := client.DeleteDatabase(dbname)
-	if err != nil {
-		panic(err)
-	}
+	client.DeleteDatabase(dbname)
+	client.CreateDatabase(dbname)
+	client.CreateFrame(dbname, "test-frame")
 }
 
 func TestCreateDefaultClient(t *testing.T) {
@@ -55,6 +65,38 @@ func TestClientReturnsResponse(t *testing.T) {
 	}
 	if response == nil {
 		t.Fatalf("Response should not be nil")
+	}
+}
+
+func TestQueryWithProfiles(t *testing.T) {
+	Reset()
+	client := getClient()
+	targetAttrs := map[string]interface{}{
+		"name":       "some string",
+		"age":        uint64(95),
+		"registered": true,
+		"height":     1.83,
+	}
+	_, err := client.Query(dbname, "SetBit(id=1, frame='test-frame', profileID=100)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.Query(dbname, "SetProfileAttrs(id=100, name='some string', age=95, registered=true, height=1.83)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := client.QueryWithOptions(&QueryOptions{GetProfiles: true}, dbname, "Bitmap(id=1, frame='test-frame')")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Profiles) != 1 {
+		t.Fatalf("Profile count should be == 1")
+	}
+	if response.Profiles[0].ID != 100 {
+		t.Fatalf("Profile ID should be == 100")
+	}
+	if !reflect.DeepEqual(response.Profiles[0].Attributes, targetAttrs) {
+		t.Fatalf("Protile attrs does not match")
 	}
 }
 

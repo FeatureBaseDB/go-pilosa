@@ -9,6 +9,7 @@ import (
 // QueryResponse represents the response from a Pilosa query
 type QueryResponse struct {
 	Results      []*QueryResult
+	Profiles     []*ProfileItem
 	ErrorMessage string
 	IsSuccess    bool
 }
@@ -28,8 +29,18 @@ func newQueryResponseFromInternal(response *internal.QueryResponse) (*QueryRespo
 		}
 		results = append(results, result)
 	}
+	profiles := make([]*ProfileItem, 0, len(response.Profiles))
+	for _, p := range response.Profiles {
+		profileItem, err := newProfileItemFromInternal(p)
+		if err != nil {
+			return nil, err
+		}
+		profiles = append(profiles, profileItem)
+	}
+
 	return &QueryResponse{
 		Results:   results,
+		Profiles:  profiles,
 		IsSuccess: true,
 	}, nil
 }
@@ -122,4 +133,21 @@ func convertInternalAttrsToMap(attrs []*internal.Attr) (attrsMap map[string]inte
 	}
 
 	return attrsMap, nil
+}
+
+// ProfileItem representes a column in the database
+type ProfileItem struct {
+	ID         uint64
+	Attributes map[string]interface{}
+}
+
+func newProfileItemFromInternal(profile *internal.Profile) (*ProfileItem, error) {
+	attrs, err := convertInternalAttrsToMap(profile.Attrs)
+	if err != nil {
+		return nil, err
+	}
+	return &ProfileItem{
+		ID:         profile.ID,
+		Attributes: attrs,
+	}, nil
 }

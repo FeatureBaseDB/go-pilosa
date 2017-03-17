@@ -35,13 +35,18 @@ func NewClientWithCluster(cluster *Cluster) *Client {
 	}
 }
 
-// Query sends a query to the Pilosa server
+// Query sends a query to the Pilosa server with default options
 func (c *Client) Query(databaseName string, query string) (*QueryResponse, error) {
+	return c.QueryWithOptions(&QueryOptions{}, databaseName, query)
+}
+
+// QueryWithOptions sends a query to the Pilosa server with the given options
+func (c *Client) QueryWithOptions(options *QueryOptions, databaseName string, query string) (*QueryResponse, error) {
 	err := validateDatabaseName(databaseName)
 	if err != nil {
 		return nil, err
 	}
-	data := makeRequestData(databaseName, query)
+	data := makeRequestData(databaseName, query, options)
 	return c.httpRequest("POST", "/query", data, true)
 }
 
@@ -156,12 +161,18 @@ func (c *Client) httpRequest(method string, path string, data []byte, needsRespo
 	return nil, nil
 }
 
-func makeRequestData(databaseName string, query string) []byte {
+func makeRequestData(databaseName string, query string, options *QueryOptions) []byte {
 	request := &internal.QueryRequest{
-		DB:    databaseName,
-		Query: query,
+		DB:       databaseName,
+		Query:    query,
+		Profiles: options.GetProfiles,
 	}
 	r, _ := request.Marshal()
 	// request.Marshal never returns an error
 	return r
+}
+
+// QueryOptions contains options that can be sent with a query
+type QueryOptions struct {
+	GetProfiles bool
 }

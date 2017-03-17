@@ -29,9 +29,12 @@ func TestNewBitmapResultFromInternal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed with error: %s", err)
 	}
-	assertMapEquals(t, targetAttrs, result.Attributes)
+	// assertMapEquals(t, targetAttrs, result.Attributes)
+	if !reflect.DeepEqual(targetAttrs, result.Attributes) {
+		t.Fatal()
+	}
 	if !reflect.DeepEqual(targetBits, result.Bits) {
-		t.Fatalf("Not equal")
+		t.Fatal()
 	}
 }
 
@@ -126,24 +129,12 @@ func TestNewQueryResponseFromInternalFailure(t *testing.T) {
 	if qr != nil && err == nil {
 		t.Fatalf("Should have failed")
 	}
-}
+	response = &internal.QueryResponse{
+		Profiles: []*internal.Profile{&internal.Profile{ID: 1, Attrs: attrs}},
+	}
+	qr, err = newQueryResponseFromInternal(response)
+	if qr != nil && err == nil {
+		t.Fatalf("Should have failed")
+	}
 
-func assertMapEquals(t *testing.T, map1 map[string]interface{}, map2 map[string]interface{}) {
-	if map1 == nil && map2 == nil {
-		return
-	}
-	if map1 == nil && map2 != nil {
-		t.Fatalf("map1 is nil, map2 is not nil")
-	}
-	if map1 != nil && map2 == nil {
-		t.Fatalf("map1 is not nil, map is nil")
-	}
-	if len(map1) != len(map2) {
-		t.Fatalf("len(map1) != len(map2)")
-	}
-	for k := range map1 {
-		if map1[k] != map2[k] {
-			t.Fatalf("Element %s (map1) != %s (map2)", map1[k], map2[k])
-		}
-	}
 }

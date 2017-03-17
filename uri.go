@@ -22,7 +22,7 @@ func NewURI() *URI {
 	return &URI{
 		scheme: "http",
 		host:   "localhost",
-		port:   15000,
+		port:   10101,
 	}
 }
 
@@ -87,7 +87,7 @@ func parseAddress(address string) (uri *URI, err error) {
 	if m[3] != "" {
 		host = m[3]
 	}
-	var port = 15000
+	var port = 10101
 	if m[5] != "" {
 		port, _ = strconv.Atoi(m[5])
 	}

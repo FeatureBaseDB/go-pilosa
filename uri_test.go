@@ -6,7 +6,7 @@ import (
 
 func TestDefaultURI(t *testing.T) {
 	uri := NewURI()
-	compare(t, uri, "http", "localhost", 15000)
+	compare(t, uri, "http", "localhost", 10101)
 }
 
 func TestURIWithHostPort(t *testing.T) {
@@ -23,8 +23,8 @@ func TestURIFromAddress(t *testing.T) {
 	}{
 		{"http+protobuf://db1.pilosa.com:3333", "http+protobuf", "db1.pilosa.com", 3333},
 		{"db1.pilosa.com:3333", "http", "db1.pilosa.com", 3333},
-		{"https://db1.pilosa.com", "https", "db1.pilosa.com", 15000},
-		{"db1.pilosa.com", "http", "db1.pilosa.com", 15000},
+		{"https://db1.pilosa.com", "https", "db1.pilosa.com", 10101},
+		{"db1.pilosa.com", "http", "db1.pilosa.com", 10101},
 		{"https://:3333", "https", "localhost", 3333},
 		{":3333", "http", "localhost", 3333},
 	}

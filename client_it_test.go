@@ -250,7 +250,7 @@ func TestInvalidResponse(t *testing.T) {
 }
 
 func getClient() *Client {
-	uri, err := NewURIFromAddress("localhost:15000")
+	uri, err := NewURIFromAddress(":10101")
 	if err != nil {
 		panic(err)
 	}

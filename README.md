@@ -32,8 +32,9 @@ $ go test
 ```
 
 And integration tests with:
-
+```
 $ go test -tags=integration
+```
 
 Run the tests with coverage:
 ```

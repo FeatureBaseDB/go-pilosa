@@ -19,13 +19,13 @@ type Client struct {
 // NewClient creates the default client
 func NewClient() *Client {
 	return &Client{
-		cluster: NewClusterWithAddress(NewURI()),
+		cluster: NewClusterWithHost(NewURI()),
 	}
 }
 
 // NewClientWithAddress creates a client with the given address
 func NewClientWithAddress(address *URI) *Client {
-	return NewClientWithCluster(NewClusterWithAddress(address))
+	return NewClientWithCluster(NewClusterWithHost(address))
 }
 
 // NewClientWithCluster creates a client with the given cluster
@@ -99,7 +99,7 @@ func (c *Client) createOrDeleteFrame(method string, frame *Frame) error {
 }
 
 func (c *Client) httpRequest(method string, path string, data []byte, needsResponse bool) (*QueryResponse, error) {
-	addr := c.cluster.GetAddress()
+	addr := c.cluster.GetHost()
 	if addr == nil {
 		return nil, ErrorEmptyCluster
 	}

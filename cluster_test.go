@@ -2,19 +2,19 @@ package pilosa
 
 import "testing"
 
-func TestNewClusterWithAddress(t *testing.T) {
+func TestNewClusterWithHost(t *testing.T) {
 	c := NewClusterWithHost(NewURI())
-	addresses := c.GetHosts()
-	if len(addresses) != 1 || !addresses[0].Equals(NewURI()) {
+	hosts := c.GetHosts()
+	if len(hosts) != 1 || !hosts[0].Equals(NewURI()) {
 		t.Fail()
 	}
 }
 
-func TestAddAddress(t *testing.T) {
+func TestAddHost(t *testing.T) {
 	const addr = "http://localhost:3000"
 	c := NewCluster()
 	if c.GetHosts() == nil {
-		t.Fatalf("GetAddresses should not be nil")
+		t.Fatalf("GetHosts should not be nil")
 	}
 	uri, err := NewURIFromAddress(addr)
 	if err != nil {
@@ -25,8 +25,8 @@ func TestAddAddress(t *testing.T) {
 		t.Fatalf("Cannot parse address")
 	}
 	c.AddHost(uri)
-	addresses := c.GetHosts()
-	if len(addresses) != 1 || !addresses[0].Equals(target) {
+	hosts := c.GetHosts()
+	if len(hosts) != 1 || !hosts[0].Equals(target) {
 		t.Fail()
 	}
 }
@@ -38,6 +38,6 @@ func TestGetHosts(t *testing.T) {
 	}
 	c = NewClusterWithHost(NewURI())
 	if !c.GetHost().Equals(NewURI()) {
-		t.Fatalf("GetHost should return a value if there are addresses in the cluster")
+		t.Fatalf("GetHost should return a value if there are hosts in the cluster")
 	}
 }

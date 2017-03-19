@@ -239,6 +239,11 @@ func NewDatabaseWithOptions(name string, options *DatabaseOptions) (*Database, e
 	}, nil
 }
 
+// GetName returns the name of this database
+func (d *Database) GetName() string {
+	return d.name
+}
+
 // Frame creates the info for a Pilosa frame with default options
 func (d *Database) Frame(name string) (*Frame, error) {
 	return d.FrameWithRowLabel(name, "id")

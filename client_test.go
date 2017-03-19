@@ -2,6 +2,16 @@ package pilosa
 
 import "testing"
 
+func TestNewDatabase(t *testing.T) {
+	db, err := NewDatabase("db-name")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if db.GetName() != "db-name" {
+		t.Fatalf("database name was not set")
+	}
+}
+
 func TestNewDatabaseWithInvalidColumnLabel(t *testing.T) {
 	_, err := NewDatabaseWithColumnLabel("foo", "$$INVALID$$")
 	if err == nil {

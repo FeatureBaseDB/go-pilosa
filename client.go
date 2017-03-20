@@ -6,6 +6,8 @@ import (
 	"io/ioutil"
 	"net/http"
 
+	"encoding/json"
+
 	"github.com/pilosa/go-client-pilosa/internal"
 )
 
@@ -43,7 +45,17 @@ func (c *Client) Query(database *Database, query string) (*QueryResponse, error)
 // QueryWithOptions sends a query to the Pilosa server with the given options
 func (c *Client) QueryWithOptions(options *QueryOptions, database *Database, query string) (*QueryResponse, error) {
 	data := makeRequestData(database.name, query, options)
-	return c.httpRequest("POST", "/query", data, true)
+	buf, err := c.httpRequest("POST", "/query", data, true)
+	if err != nil {
+		return nil, err
+	}
+	iqr := &internal.QueryResponse{}
+	err = iqr.Unmarshal(buf)
+	if err != nil {
+		return nil, err
+	}
+	return newQueryResponseFromInternal(iqr)
+
 }
 
 // CreateDatabase creates a database with default options
@@ -84,6 +96,19 @@ func (c *Client) DeleteFrame(frame *Frame) error {
 	return c.createOrDeleteFrame("DELETE", frame)
 }
 
+func (c *Client) Schema() (*Schema, error) {
+	response, err := c.httpRequest("GET", "/schema", nil, true)
+	if err != nil {
+		return nil, err
+	}
+	var schema *Schema
+	err = json.NewDecoder(bytes.NewReader(response)).Decode(&schema)
+	if err != nil {
+		return nil, err
+	}
+	return schema, nil
+}
+
 func (c *Client) createOrDeleteDatabase(method string, database *Database) error {
 	data := []byte(fmt.Sprintf(`{"db": "%s", "options": {"columnLabel": "%s"}}`,
 		database.name, database.options.columnLabel))
@@ -98,7 +123,7 @@ func (c *Client) createOrDeleteFrame(method string, frame *Frame) error {
 	return err
 }
 
-func (c *Client) httpRequest(method string, path string, data []byte, needsResponse bool) (*QueryResponse, error) {
+func (c *Client) httpRequest(method string, path string, data []byte, needsResponse bool) ([]byte, error) {
 	addr := c.cluster.GetHost()
 	if addr == nil {
 		return nil, ErrorEmptyCluster
@@ -137,12 +162,7 @@ func (c *Client) httpRequest(method string, path string, data []byte, needsRespo
 		if err != nil {
 			return nil, err
 		}
-		iqr := &internal.QueryResponse{}
-		err = iqr.Unmarshal(buf)
-		if err != nil {
-			return nil, err
-		}
-		return newQueryResponseFromInternal(iqr)
+		return buf, nil
 	}
 	return nil, nil
 }
@@ -176,15 +196,30 @@ func NewDatabaseOptionsWithColumnLabel(columnLabel string) (*DatabaseOptions, er
 	}, nil
 }
 
+// FrameOptions contains frame options
+type FrameOptions struct {
+	rowLabel string
+}
+
+// Frame is a Pilosa frame
+type Frame struct {
+	name     string
+	database *Database
+	options  FrameOptions
+}
+
+// Database is a Pilosa database
 type Database struct {
 	name    string
 	options DatabaseOptions
 }
 
+// NewDatabase creates the info for a Pilosa database with default options
 func NewDatabase(name string) (*Database, error) {
 	return NewDatabaseWithColumnLabel(name, "profileID")
 }
 
+// NewDatabaseWithColumnLabel creates the info for a Pilosa database with the given column label
 func NewDatabaseWithColumnLabel(name string, label string) (*Database, error) {
 	options, err := NewDatabaseOptionsWithColumnLabel(label)
 	if err != nil {
@@ -193,6 +228,7 @@ func NewDatabaseWithColumnLabel(name string, label string) (*Database, error) {
 	return NewDatabaseWithOptions(name, options)
 }
 
+// NewDatabaseWithOptions creates the info for a Pilosa database with the given options
 func NewDatabaseWithOptions(name string, options *DatabaseOptions) (*Database, error) {
 	if err := validateDatabaseName(name); err != nil {
 		return nil, err
@@ -203,10 +239,17 @@ func NewDatabaseWithOptions(name string, options *DatabaseOptions) (*Database, e
 	}, nil
 }
 
+// GetName returns the name of this database
+func (d *Database) GetName() string {
+	return d.name
+}
+
+// Frame creates the info for a Pilosa frame with default options
 func (d *Database) Frame(name string) (*Frame, error) {
 	return d.FrameWithRowLabel(name, "id")
 }
 
+// FrameWithRowLabel creates the info for a Pilosa frame with the given label
 func (d *Database) FrameWithRowLabel(name string, label string) (*Frame, error) {
 	if err := validateFrameName(name); err != nil {
 		return nil, err
@@ -218,12 +261,18 @@ func (d *Database) FrameWithRowLabel(name string, label string) (*Frame, error) 
 	}, nil
 }
 
-type FrameOptions struct {
-	rowLabel string
+// Schema contains the database and frame metadata
+type Schema struct {
+	DBs []*DBInfo `json:"dbs"`
 }
 
-type Frame struct {
-	name     string
-	database *Database
-	options  FrameOptions
+// DBInfo represents schema information for a database.
+type DBInfo struct {
+	Name   string       `json:"name"`
+	Frames []*FrameInfo `json:"frames"`
+}
+
+// FrameInfo represents schema information for a frame.
+type FrameInfo struct {
+	Name string `json:"name"`
 }

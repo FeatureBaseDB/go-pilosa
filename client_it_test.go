@@ -243,9 +243,58 @@ func TestInvalidResponse(t *testing.T) {
 		panic(err)
 	}
 	client := NewClientWithAddress(uri)
-	response, err := client.httpRequest("GET", "/foo", nil, true)
+	response, err := client.Query(db, "don't care")
 	if err == nil {
 		t.Fatalf("Got response: %s", response)
+	}
+}
+
+func TestSchema(t *testing.T) {
+	client := getClient()
+	schema, err := client.Schema()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// go-testdb should be in the schema
+	for _, db := range schema.DBs {
+		if db.Name == "go-testdb" {
+			// test-frame should be in the schema
+			for _, frame := range db.Frames {
+				if frame.Name == "test-frame" {
+					// OK!
+					return
+				}
+			}
+		}
+	}
+	t.Fatal("go-testdb or test-frame was not found")
+}
+
+func TestErrorRetrievingSchema(t *testing.T) {
+	server := getMockServer(404, []byte("sorry, not found"), -1)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		panic(err)
+	}
+	client := NewClientWithAddress(uri)
+	_, err = client.Schema()
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func TestInvalidSchema(t *testing.T) {
+	server := getMockServer(200, []byte("unserialize this"), -1)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		panic(err)
+	}
+	client := NewClientWithAddress(uri)
+	_, err = client.Schema()
+	if err == nil {
+		t.Fatal("should have failed")
 	}
 }
 

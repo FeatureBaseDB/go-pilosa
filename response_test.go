@@ -82,8 +82,8 @@ func TestNewQueryResponseFromInternal(t *testing.T) {
 	if len(qr.Results) != 2 {
 		t.Fatalf("Number of results should be 2")
 	}
-	if qr.Results[0] != qr.GetResult() {
-		t.Fatalf("GetResult() should return the first result")
+	if qr.Results[0] != qr.Result() {
+		t.Fatalf("Result() should return the first result")
 	}
 	if !reflect.DeepEqual(targetAttrs, qr.Results[0].BitmapResult.Attributes) {
 		t.Fatalf("The bitmap result should contain the attributes")
@@ -110,8 +110,8 @@ func TestNewQueryResponseWithErrorFromInternal(t *testing.T) {
 	if qr.IsSuccess {
 		t.Fatalf("IsSuccess should be false")
 	}
-	if qr.GetResult() != nil {
-		t.Fatalf("If there are no results, GetResult should return nil")
+	if qr.Result() != nil {
+		t.Fatalf("If there are no results, Result should return nil")
 	}
 }
 

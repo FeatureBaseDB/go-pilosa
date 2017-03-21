@@ -1,54 +1,67 @@
 package pilosa
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 )
 
-// IPqlQuery is a interface for PQL queries
-type IPqlQuery interface {
-	GetDatabase() *Database
-	ToString() string
+// PQLQuery is a interface for PQL queries
+type PQLQuery interface {
+	Database() *Database
+	String() string
+	Error() error
 }
 
-// PqlQuery is the base implementation for IPqlQuery
-type PqlQuery struct {
+// PQLBaseQuery is the base implementation for IPqlQuery
+type PQLBaseQuery struct {
 	database *Database
 	pql      string
 }
 
-// NewPqlQuery creates a new PqlQuery with the given PQL and database
-func NewPqlQuery(pql string, database *Database) *PqlQuery {
-	return &PqlQuery{
+// NewPQLQuery creates a new PqlQuery with the given PQL and database
+func NewPQLQuery(pql string, database *Database) *PQLBaseQuery {
+	return &PQLBaseQuery{
 		database: database,
 		pql:      pql,
 	}
 }
 
-// GetDatabase returns the database for this query
-func (q *PqlQuery) GetDatabase() *Database {
+// Database returns the database for this query
+func (q *PQLBaseQuery) Database() *Database {
 	return q.database
 }
 
-// ToString converts this query to string
-func (q *PqlQuery) ToString() string {
+// String converts this query to string
+func (q *PQLBaseQuery) String() string {
 	return q.pql
 }
 
-// PqlBitmapQuery is the return type for bitmap queries
-type PqlBitmapQuery struct {
+// Error returns the error or nil for this query
+func (q PQLBaseQuery) Error() error {
+	return nil
+}
+
+// PQLBitmapQuery is the return type for bitmap queries
+type PQLBitmapQuery struct {
 	database *Database
 	pql      string
+	err      error
 }
 
-// GetDatabase returns the database for this query
-func (q *PqlBitmapQuery) GetDatabase() *Database {
+// Database returns the database for this query
+func (q *PQLBitmapQuery) Database() *Database {
 	return q.database
 }
 
-// ToString converts this query to string
-func (q *PqlBitmapQuery) ToString() string {
+// String converts this query to string
+func (q *PQLBitmapQuery) String() string {
 	return q.pql
+}
+
+// Error returns the error or nil for this query
+func (q PQLBitmapQuery) Error() error {
+	return q.err
 }
 
 // DatabaseOptions contains the options for a Pilosa database
@@ -56,11 +69,12 @@ type DatabaseOptions struct {
 	columnLabel string
 }
 
-// NewPqlBitmapQuery creates a new PqlBitmapQuery
-func NewPqlBitmapQuery(pql string, database *Database) *PqlBitmapQuery {
-	return &PqlBitmapQuery{
+// NewPQLBitmapQuery creates a new PqlBitmapQuery
+func NewPQLBitmapQuery(pql string, database *Database, err error) *PQLBitmapQuery {
+	return &PQLBitmapQuery{
 		database: database,
 		pql:      pql,
+		err:      err,
 	}
 }
 
@@ -105,8 +119,8 @@ func NewDatabaseWithOptions(name string, options *DatabaseOptions) (*Database, e
 	}, nil
 }
 
-// GetName returns the name of this database
-func (d *Database) GetName() string {
+// Name returns the name of this database
+func (d *Database) Name() string {
 	return d.name
 }
 
@@ -128,32 +142,42 @@ func (d *Database) FrameWithRowLabel(name string, label string) (*Frame, error) 
 }
 
 // Union creates a Union query
-func (d *Database) Union(bitmap1 *PqlBitmapQuery, bitmap2 *PqlBitmapQuery, bitmaps ...*PqlBitmapQuery) *PqlBitmapQuery {
+func (d *Database) Union(bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
 	return d.bitmapOperation("Union", bitmap1, bitmap2, bitmaps...)
 }
 
 // Intersect creates an Intersect query
-func (d *Database) Intersect(bitmap1 *PqlBitmapQuery, bitmap2 *PqlBitmapQuery, bitmaps ...*PqlBitmapQuery) *PqlBitmapQuery {
+func (d *Database) Intersect(bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
 	return d.bitmapOperation("Intersect", bitmap1, bitmap2, bitmaps...)
 }
 
 // Difference creates an Intersect query
-func (d *Database) Difference(bitmap1 *PqlBitmapQuery, bitmap2 *PqlBitmapQuery, bitmaps ...*PqlBitmapQuery) *PqlBitmapQuery {
+func (d *Database) Difference(bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
 	return d.bitmapOperation("Difference", bitmap1, bitmap2, bitmaps...)
 }
 
 // Count creates a Count query
-func (d *Database) Count(bitmap *PqlBitmapQuery) IPqlQuery {
-	return NewPqlQuery(fmt.Sprintf("Count(%s)", bitmap.ToString()), d)
+func (d *Database) Count(bitmap *PQLBitmapQuery) *PQLBaseQuery {
+	return NewPQLQuery(fmt.Sprintf("Count(%s)", bitmap.String()), d)
 }
 
-func (d *Database) bitmapOperation(name string, bitmap1 *PqlBitmapQuery, bitmap2 *PqlBitmapQuery, bitmaps ...*PqlBitmapQuery) *PqlBitmapQuery {
-	args := make([]string, 0, 2+len(bitmaps))
-	args = append(args, bitmap1.ToString(), bitmap2.ToString())
-	for _, bitmap := range bitmaps {
-		args = append(args, bitmap.ToString())
+func (d *Database) bitmapOperation(name string, bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
+	var err error
+	if err = bitmap1.Error(); err != nil {
+		return NewPQLBitmapQuery("", d, err)
 	}
-	return NewPqlBitmapQuery(fmt.Sprintf("%s(%s)", name, strings.Join(args, ", ")), d)
+	if err = bitmap2.Error(); err != nil {
+		return NewPQLBitmapQuery("", d, err)
+	}
+	args := make([]string, 0, 2+len(bitmaps))
+	args = append(args, bitmap1.String(), bitmap2.String())
+	for _, bitmap := range bitmaps {
+		if err = bitmap.Error(); err != nil {
+			return NewPQLBitmapQuery("", d, err)
+		}
+		args = append(args, bitmap.String())
+	}
+	return NewPQLBitmapQuery(fmt.Sprintf("%s(%s)", name, strings.Join(args, ", ")), d, nil)
 }
 
 // FrameInfo represents schema information for a frame.
@@ -174,32 +198,43 @@ type Frame struct {
 }
 
 // Bitmap creates a bitmap query
-func (f *Frame) Bitmap(rowID uint64) *PqlBitmapQuery {
-	return NewPqlBitmapQuery(fmt.Sprintf("Bitmap(%s=%d, frame='%s')",
-		f.options.rowLabel, rowID, f.name), f.database)
+func (f *Frame) Bitmap(rowID uint64) *PQLBitmapQuery {
+	return NewPQLBitmapQuery(fmt.Sprintf("Bitmap(%s=%d, frame='%s')",
+		f.options.rowLabel, rowID, f.name), f.database, nil)
 }
 
 // SetBit creates a SetBit query
-func (f *Frame) SetBit(rowID uint64, columnID uint64) IPqlQuery {
-	return NewPqlQuery(fmt.Sprintf("SetBit(%s=%d, frame='%s', %s=%d)",
+func (f *Frame) SetBit(rowID uint64, columnID uint64) *PQLBaseQuery {
+	return NewPQLQuery(fmt.Sprintf("SetBit(%s=%d, frame='%s', %s=%d)",
 		f.options.rowLabel, rowID, f.name, f.database.options.columnLabel, columnID), f.database)
 }
 
 // ClearBit creates a ClearBit query
-func (f *Frame) ClearBit(rowID uint64, columnID uint64) IPqlQuery {
-	return NewPqlQuery(fmt.Sprintf("ClearBit(%s=%d, frame='%s', %s=%d)",
+func (f *Frame) ClearBit(rowID uint64, columnID uint64) *PQLBaseQuery {
+	return NewPQLQuery(fmt.Sprintf("ClearBit(%s=%d, frame='%s', %s=%d)",
 		f.options.rowLabel, rowID, f.name, f.database.options.columnLabel, columnID), f.database)
 }
 
 // TopN creates a TopN query with the given item count
-func (f *Frame) TopN(n uint64) *PqlBitmapQuery {
-	return NewPqlBitmapQuery(fmt.Sprintf("TopN(frame='%s', n=%d)", f.name, n), f.database)
+func (f *Frame) TopN(n uint64) *PQLBitmapQuery {
+	return NewPQLBitmapQuery(fmt.Sprintf("TopN(frame='%s', n=%d)", f.name, n), f.database, nil)
 }
 
 // BitmapTopN creates a TopN query with the given item count and bitmap
-func (f *Frame) BitmapTopN(n uint64, bitmap *PqlBitmapQuery) *PqlBitmapQuery {
-	return NewPqlBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d)",
-		bitmap.ToString(), f.name, n), f.database)
+func (f *Frame) BitmapTopN(n uint64, bitmap *PQLBitmapQuery) *PQLBitmapQuery {
+	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d)",
+		bitmap, f.name, n), f.database, nil)
 }
 
-// TODO: FilterTopN variant.
+// FilterFieldTopN creates a TopN query with the given item count, bitmap, field and the filter for that field
+func (f *Frame) FilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, values ...interface{}) *PQLBitmapQuery {
+	if err := validateLabel(field); err != nil {
+		return NewPQLBitmapQuery("", f.database, err)
+	}
+	b, err := json.Marshal(values)
+	if err != nil {
+		return NewPQLBitmapQuery("", f.database, err)
+	}
+	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d, field='%s', %s)",
+		bitmap, f.name, n, field, string(b)), f.database, nil)
+}

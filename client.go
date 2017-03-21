@@ -38,13 +38,16 @@ func NewClientWithCluster(cluster *Cluster) *Client {
 }
 
 // Query sends a query to the Pilosa server
-func (c *Client) Query(query IPqlQuery) (*QueryResponse, error) {
-	return c.QueryRaw(query.GetDatabase(), query.ToString())
+func (c *Client) Query(query PQLQuery) (*QueryResponse, error) {
+	return c.QueryWithOptions(&QueryOptions{}, query)
 }
 
 // QueryWithOptions sends a query to the Pilosa server with the given options
-func (c *Client) QueryWithOptions(options *QueryOptions, query IPqlQuery) (*QueryResponse, error) {
-	return c.QueryRawWithOptions(options, query.GetDatabase(), query.ToString())
+func (c *Client) QueryWithOptions(options *QueryOptions, query PQLQuery) (*QueryResponse, error) {
+	if err := query.Error(); err != nil {
+		return nil, err
+	}
+	return c.QueryRawWithOptions(options, query.Database(), query.String())
 }
 
 // QueryRaw sends a query to the Pilosa server with default options
@@ -134,12 +137,12 @@ func (c *Client) createOrDeleteFrame(method string, frame *Frame) error {
 }
 
 func (c *Client) httpRequest(method string, path string, data []byte, needsResponse bool) ([]byte, error) {
-	addr := c.cluster.GetHost()
+	addr := c.cluster.Host()
 	if addr == nil {
 		return nil, ErrorEmptyCluster
 	}
 	client := &http.Client{}
-	request, err := http.NewRequest(method, addr.GetNormalizedAddress()+path, bytes.NewReader(data))
+	request, err := http.NewRequest(method, addr.NormalizedAddress()+path, bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}

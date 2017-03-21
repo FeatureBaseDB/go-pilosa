@@ -13,6 +13,41 @@ var b2 = sampleFrame.Bitmap(20)
 var b3 = sampleFrame.Bitmap(42)
 var b4 = collabFrame.Bitmap(2)
 
+func TestNewDatabase(t *testing.T) {
+	db, err := NewDatabase("db-name")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if db.Name() != "db-name" {
+		t.Fatalf("database name was not set")
+	}
+}
+
+func TestNewDatabaseWithInvalidColumnLabel(t *testing.T) {
+	_, err := NewDatabaseWithColumnLabel("foo", "$$INVALID$$")
+	if err == nil {
+		t.Fatal()
+	}
+}
+
+func TestNewDatabaseWithInvalidName(t *testing.T) {
+	_, err := NewDatabase("$FOO")
+	if err == nil {
+		t.Fatal()
+	}
+}
+
+func TestNewFrameWithInvalidName(t *testing.T) {
+	db, err := NewDatabase("foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.FrameWithRowLabel("$$INVALIDFRAME$$", "label")
+	if err == nil {
+		t.Fatal(err)
+	}
+}
+
 func TestBitmap(t *testing.T) {
 	comparePql(t,
 		sampleFrame.Bitmap(5),
@@ -83,6 +118,42 @@ func TestTopN(t *testing.T) {
 	comparePql(t,
 		sampleFrame.BitmapTopN(10, collabFrame.Bitmap(3)),
 		"TopN(Bitmap(project=3, frame='collaboration'), frame='sample-frame', n=10)")
+	comparePql(t,
+		sampleFrame.FilterFieldTopN(12, collabFrame.Bitmap(7), "category", 80, 81),
+		"TopN(Bitmap(project=7, frame='collaboration'), frame='sample-frame', n=12, field='category', [80,81])")
+}
+
+func TestFilterFieldTopNInvalidField(t *testing.T) {
+	q := sampleFrame.FilterFieldTopN(12, collabFrame.Bitmap(7), "$invalid$", 80, 81)
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+}
+
+func TestFilterFieldTopNInvalidValue(t *testing.T) {
+	q := sampleFrame.FilterFieldTopN(12, collabFrame.Bitmap(7), "category", 80, func() {})
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+}
+
+func TestBitmapOperationInvalidArg(t *testing.T) {
+	invalid := sampleFrame.FilterFieldTopN(12, collabFrame.Bitmap(7), "$invalid$", 80, 81)
+	// invalid argument in pos 1
+	q := sampleDb.Union(invalid, b1)
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+	// invalid argument in pos 2
+	q = sampleDb.Intersect(b1, invalid)
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+	// invalid argument in pos 3
+	q = sampleDb.Intersect(b1, b2, invalid)
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
 }
 
 func TestCount(t *testing.T) {
@@ -90,8 +161,8 @@ func TestCount(t *testing.T) {
 	comparePql(t, q, "Count(Bitmap(project=42, frame='collaboration'))")
 }
 
-func comparePql(t *testing.T, q IPqlQuery, target string) {
-	pql := q.ToString()
+func comparePql(t *testing.T, q PQLQuery, target string) {
+	pql := q.String()
 	if pql != target {
 		t.Fatalf("%s != %s", pql, target)
 	}

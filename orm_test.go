@@ -158,12 +158,12 @@ func TestBitmapOperationInvalidArg(t *testing.T) {
 
 func TestSetProfileAttrsTest(t *testing.T) {
 	attrs := map[string]interface{}{
-		"color": "blue",
+		"quote": "\"Don't worry, be happy\"",
 		"happy": true,
 	}
 	comparePql(t,
 		projectDb.SetProfileAttrs(5, attrs),
-		"SetProfileAttrs(user=5, color=\"blue\", happy=true)")
+		"SetProfileAttrs(user=5, happy=true, quote=\"\\\"Don't worry, be happy\\\"\")")
 }
 
 func TestSetProfileAttrsInvalidAttr(t *testing.T) {
@@ -178,13 +178,13 @@ func TestSetProfileAttrsInvalidAttr(t *testing.T) {
 
 func TestSetBitmapAttrsTest(t *testing.T) {
 	attrs := map[string]interface{}{
-		"color":  "blue",
+		"quote":  "\"Don't worry, be happy\"",
 		"active": true,
 	}
 
 	comparePql(t,
 		collabFrame.SetBitmapAttrs(5, attrs),
-		"SetBitmapAttrs(project=5, frame='collaboration', active=true, color=\"blue\")")
+		"SetBitmapAttrs(project=5, frame='collaboration', active=true, quote=\"\\\"Don't worry, be happy\\\"\")")
 }
 
 func TestSetBitmapAttrsInvalidAttr(t *testing.T) {

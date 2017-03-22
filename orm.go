@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 )
+
+const timeFormat = "2006-01-02T15:04"
 
 // PQLQuery is a interface for PQL queries
 type PQLQuery interface {
@@ -21,8 +24,8 @@ type PQLBaseQuery struct {
 	err      error
 }
 
-// NewPQLQuery creates a new PqlQuery with the given PQL and database
-func NewPQLQuery(pql string, database *Database, err error) *PQLBaseQuery {
+// NewPQLBaseQuery creates a new PqlQuery with the given PQL and database
+func NewPQLBaseQuery(pql string, database *Database, err error) *PQLBaseQuery {
 	return &PQLBaseQuery{
 		database: database,
 		pql:      pql,
@@ -161,16 +164,16 @@ func (d *Database) Difference(bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, 
 
 // Count creates a Count query
 func (d *Database) Count(bitmap *PQLBitmapQuery) *PQLBaseQuery {
-	return NewPQLQuery(fmt.Sprintf("Count(%s)", bitmap.String()), d, nil)
+	return NewPQLBaseQuery(fmt.Sprintf("Count(%s)", bitmap.String()), d, nil)
 }
 
 // SetProfileAttrs creates a SetProfileAttrs query
 func (d *Database) SetProfileAttrs(columnID uint64, attrs map[string]interface{}) *PQLBaseQuery {
 	attrsString, err := createAttributesString(attrs)
 	if err != nil {
-		return NewPQLQuery("", d, err)
+		return NewPQLBaseQuery("", d, err)
 	}
-	return NewPQLQuery(fmt.Sprintf("SetProfileAttrs(%s=%d, %s)",
+	return NewPQLBaseQuery(fmt.Sprintf("SetProfileAttrs(%s=%d, %s)",
 		d.options.columnLabel, columnID, attrsString), d, nil)
 }
 
@@ -218,13 +221,13 @@ func (f *Frame) Bitmap(rowID uint64) *PQLBitmapQuery {
 
 // SetBit creates a SetBit query
 func (f *Frame) SetBit(rowID uint64, columnID uint64) *PQLBaseQuery {
-	return NewPQLQuery(fmt.Sprintf("SetBit(%s=%d, frame='%s', %s=%d)",
+	return NewPQLBaseQuery(fmt.Sprintf("SetBit(%s=%d, frame='%s', %s=%d)",
 		f.options.rowLabel, rowID, f.name, f.database.options.columnLabel, columnID), f.database, nil)
 }
 
 // ClearBit creates a ClearBit query
 func (f *Frame) ClearBit(rowID uint64, columnID uint64) *PQLBaseQuery {
-	return NewPQLQuery(fmt.Sprintf("ClearBit(%s=%d, frame='%s', %s=%d)",
+	return NewPQLBaseQuery(fmt.Sprintf("ClearBit(%s=%d, frame='%s', %s=%d)",
 		f.options.rowLabel, rowID, f.name, f.database.options.columnLabel, columnID), f.database, nil)
 }
 
@@ -256,10 +259,16 @@ func (f *Frame) FilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, 
 func (f *Frame) SetBitmapAttrs(rowID uint64, attrs map[string]interface{}) *PQLBaseQuery {
 	attrsString, err := createAttributesString(attrs)
 	if err != nil {
-		return NewPQLQuery("", f.database, err)
+		return NewPQLBaseQuery("", f.database, err)
 	}
-	return NewPQLQuery(fmt.Sprintf("SetBitmapAttrs(%s=%d, frame='%s', %s)",
+	return NewPQLBaseQuery(fmt.Sprintf("SetBitmapAttrs(%s=%d, frame='%s', %s)",
 		f.options.rowLabel, rowID, f.name, attrsString), f.database, nil)
+}
+
+// Range creates a Range query
+func (f *Frame) Range(rowID uint64, start time.Time, end time.Time) *PQLBaseQuery {
+	return NewPQLBaseQuery(fmt.Sprintf("Range(%s=%d, frame='%s', start='%s', end='%s')",
+		f.options.rowLabel, rowID, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.database, nil)
 }
 
 func createAttributesString(attrs map[string]interface{}) (string, error) {

@@ -50,78 +50,78 @@ func TestNewFrameWithInvalidName(t *testing.T) {
 }
 
 func TestBitmap(t *testing.T) {
-	comparePql(t,
-		sampleFrame.Bitmap(5),
-		"Bitmap(id=5, frame='sample-frame')")
-	comparePql(t,
-		collabFrame.Bitmap(10),
-		"Bitmap(project=10, frame='collaboration')")
+	comparePQL(t,
+		"Bitmap(id=5, frame='sample-frame')",
+		sampleFrame.Bitmap(5))
+	comparePQL(t,
+		"Bitmap(project=10, frame='collaboration')",
+		collabFrame.Bitmap(10))
 }
 
 func TestSetBit(t *testing.T) {
-	comparePql(t,
-		sampleFrame.SetBit(5, 10),
-		"SetBit(id=5, frame='sample-frame', profileID=10)")
-	comparePql(t,
-		collabFrame.SetBit(10, 20),
-		"SetBit(project=10, frame='collaboration', user=20)")
+	comparePQL(t,
+		"SetBit(id=5, frame='sample-frame', profileID=10)",
+		sampleFrame.SetBit(5, 10))
+	comparePQL(t,
+		"SetBit(project=10, frame='collaboration', user=20)",
+		collabFrame.SetBit(10, 20))
 }
 
 func TestClearBit(t *testing.T) {
-	comparePql(t,
-		sampleFrame.ClearBit(5, 10),
-		"ClearBit(id=5, frame='sample-frame', profileID=10)")
-	comparePql(t,
-		collabFrame.ClearBit(10, 20),
-		"ClearBit(project=10, frame='collaboration', user=20)")
+	comparePQL(t,
+		"ClearBit(id=5, frame='sample-frame', profileID=10)",
+		sampleFrame.ClearBit(5, 10))
+	comparePQL(t,
+		"ClearBit(project=10, frame='collaboration', user=20)",
+		collabFrame.ClearBit(10, 20))
 }
 
 func TestUnion(t *testing.T) {
-	comparePql(t,
-		sampleDb.Union(b1, b2),
-		"Union(Bitmap(id=10, frame='sample-frame'), Bitmap(id=20, frame='sample-frame'))")
-	comparePql(t,
-		sampleDb.Union(b1, b2, b3),
-		"Union(Bitmap(id=10, frame='sample-frame'), Bitmap(id=20, frame='sample-frame'), Bitmap(id=42, frame='sample-frame'))")
-	comparePql(t,
-		sampleDb.Union(b1, b4),
-		"Union(Bitmap(id=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))")
+	comparePQL(t,
+		"Union(Bitmap(id=10, frame='sample-frame'), Bitmap(id=20, frame='sample-frame'))",
+		sampleDb.Union(b1, b2))
+	comparePQL(t,
+		"Union(Bitmap(id=10, frame='sample-frame'), Bitmap(id=20, frame='sample-frame'), Bitmap(id=42, frame='sample-frame'))",
+		sampleDb.Union(b1, b2, b3))
+	comparePQL(t,
+		"Union(Bitmap(id=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))",
+		sampleDb.Union(b1, b4))
 }
 
 func TestIntersect(t *testing.T) {
-	comparePql(t,
-		sampleDb.Intersect(b1, b2),
-		"Intersect(Bitmap(id=10, frame='sample-frame'), Bitmap(id=20, frame='sample-frame'))")
-	comparePql(t,
-		sampleDb.Intersect(b1, b2, b3),
-		"Intersect(Bitmap(id=10, frame='sample-frame'), Bitmap(id=20, frame='sample-frame'), Bitmap(id=42, frame='sample-frame'))")
-	comparePql(t,
-		sampleDb.Intersect(b1, b4),
-		"Intersect(Bitmap(id=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))")
+	comparePQL(t,
+		"Intersect(Bitmap(id=10, frame='sample-frame'), Bitmap(id=20, frame='sample-frame'))",
+		sampleDb.Intersect(b1, b2))
+	comparePQL(t,
+		"Intersect(Bitmap(id=10, frame='sample-frame'), Bitmap(id=20, frame='sample-frame'), Bitmap(id=42, frame='sample-frame'))",
+		sampleDb.Intersect(b1, b2, b3))
+	comparePQL(t,
+		"Intersect(Bitmap(id=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))",
+		sampleDb.Intersect(b1, b4))
 }
 
 func TestDifference(t *testing.T) {
-	comparePql(t,
-		sampleDb.Difference(b1, b2),
-		"Difference(Bitmap(id=10, frame='sample-frame'), Bitmap(id=20, frame='sample-frame'))")
-	comparePql(t,
-		sampleDb.Difference(b1, b2, b3),
-		"Difference(Bitmap(id=10, frame='sample-frame'), Bitmap(id=20, frame='sample-frame'), Bitmap(id=42, frame='sample-frame'))")
-	comparePql(t,
-		sampleDb.Difference(b1, b4),
-		"Difference(Bitmap(id=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))")
+	comparePQL(t,
+		"Difference(Bitmap(id=10, frame='sample-frame'), Bitmap(id=20, frame='sample-frame'))",
+		sampleDb.Difference(b1, b2))
+	comparePQL(t,
+		"Difference(Bitmap(id=10, frame='sample-frame'), Bitmap(id=20, frame='sample-frame'), Bitmap(id=42, frame='sample-frame'))",
+		sampleDb.Difference(b1, b2, b3))
+	comparePQL(t,
+		"Difference(Bitmap(id=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))",
+		sampleDb.Difference(b1, b4))
 }
 
 func TestTopN(t *testing.T) {
-	comparePql(t,
-		sampleFrame.TopN(27),
-		"TopN(frame='sample-frame', n=27)")
-	comparePql(t,
-		sampleFrame.BitmapTopN(10, collabFrame.Bitmap(3)),
-		"TopN(Bitmap(project=3, frame='collaboration'), frame='sample-frame', n=10)")
-	comparePql(t,
-		sampleFrame.FilterFieldTopN(12, collabFrame.Bitmap(7), "category", 80, 81),
-		"TopN(Bitmap(project=7, frame='collaboration'), frame='sample-frame', n=12, field='category', [80,81])")
+	comparePQL(t,
+		"TopN(frame='sample-frame', n=27)",
+		sampleFrame.TopN(27))
+	comparePQL(t,
+		"TopN(Bitmap(project=3, frame='collaboration'), frame='sample-frame', n=10)",
+		sampleFrame.BitmapTopN(10, collabFrame.Bitmap(3)))
+	comparePQL(t,
+		"TopN(Bitmap(project=7, frame='collaboration'), frame='sample-frame', n=12, field='category', [80,81])",
+		sampleFrame.FilterFieldTopN(12, collabFrame.Bitmap(7), "category", 80, 81))
 }
 
 func TestFilterFieldTopNInvalidField(t *testing.T) {
@@ -162,9 +162,9 @@ func TestSetProfileAttrsTest(t *testing.T) {
 		"quote": "\"Don't worry, be happy\"",
 		"happy": true,
 	}
-	comparePql(t,
-		projectDb.SetProfileAttrs(5, attrs),
-		"SetProfileAttrs(user=5, happy=true, quote=\"\\\"Don't worry, be happy\\\"\")")
+	comparePQL(t,
+		"SetProfileAttrs(user=5, happy=true, quote=\"\\\"Don't worry, be happy\\\"\")",
+		projectDb.SetProfileAttrs(5, attrs))
 }
 
 func TestSetProfileAttrsInvalidAttr(t *testing.T) {
@@ -183,9 +183,9 @@ func TestSetBitmapAttrsTest(t *testing.T) {
 		"active": true,
 	}
 
-	comparePql(t,
-		collabFrame.SetBitmapAttrs(5, attrs),
-		"SetBitmapAttrs(project=5, frame='collaboration', active=true, quote=\"\\\"Don't worry, be happy\\\"\")")
+	comparePQL(t,
+		"SetBitmapAttrs(project=5, frame='collaboration', active=true, quote=\"\\\"Don't worry, be happy\\\"\")",
+		collabFrame.SetBitmapAttrs(5, attrs))
 }
 
 func TestSetBitmapAttrsInvalidAttr(t *testing.T) {
@@ -200,18 +200,18 @@ func TestSetBitmapAttrsInvalidAttr(t *testing.T) {
 
 func TestCount(t *testing.T) {
 	q := projectDb.Count(collabFrame.Bitmap(42))
-	comparePql(t, q, "Count(Bitmap(project=42, frame='collaboration'))")
+	comparePQL(t, "Count(Bitmap(project=42, frame='collaboration'))", q)
 }
 
 func TestRange(t *testing.T) {
 	start := time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2000, time.February, 2, 3, 4, 0, 0, time.UTC)
-	comparePql(t,
-		collabFrame.Range(10, start, end),
-		"Range(project=10, frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')")
+	comparePQL(t,
+		"Range(project=10, frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
+		collabFrame.Range(10, start, end))
 }
 
-func comparePql(t *testing.T, q PQLQuery, target string) {
+func comparePQL(t *testing.T, target string, q PQLQuery) {
 	pql := q.String()
 	if pql != target {
 		t.Fatalf("%s != %s", pql, target)

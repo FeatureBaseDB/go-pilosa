@@ -3,6 +3,7 @@ package pilosa
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -17,13 +18,15 @@ type PQLQuery interface {
 type PQLBaseQuery struct {
 	database *Database
 	pql      string
+	err      error
 }
 
 // NewPQLQuery creates a new PqlQuery with the given PQL and database
-func NewPQLQuery(pql string, database *Database) *PQLBaseQuery {
+func NewPQLQuery(pql string, database *Database, err error) *PQLBaseQuery {
 	return &PQLBaseQuery{
 		database: database,
 		pql:      pql,
+		err:      err,
 	}
 }
 
@@ -39,7 +42,7 @@ func (q *PQLBaseQuery) String() string {
 
 // Error returns the error or nil for this query
 func (q PQLBaseQuery) Error() error {
-	return nil
+	return q.err
 }
 
 // PQLBitmapQuery is the return type for bitmap queries
@@ -158,7 +161,17 @@ func (d *Database) Difference(bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, 
 
 // Count creates a Count query
 func (d *Database) Count(bitmap *PQLBitmapQuery) *PQLBaseQuery {
-	return NewPQLQuery(fmt.Sprintf("Count(%s)", bitmap.String()), d)
+	return NewPQLQuery(fmt.Sprintf("Count(%s)", bitmap.String()), d, nil)
+}
+
+// SetProfileAttrs creates a SetProfileAttrs query
+func (d *Database) SetProfileAttrs(columnID uint64, attrs map[string]interface{}) *PQLBaseQuery {
+	attrsString, err := createAttributesString(attrs)
+	if err != nil {
+		return NewPQLQuery("", d, err)
+	}
+	return NewPQLQuery(fmt.Sprintf("SetProfileAttrs(%s=%d, %s)",
+		d.options.columnLabel, columnID, attrsString), d, nil)
 }
 
 func (d *Database) bitmapOperation(name string, bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
@@ -206,13 +219,13 @@ func (f *Frame) Bitmap(rowID uint64) *PQLBitmapQuery {
 // SetBit creates a SetBit query
 func (f *Frame) SetBit(rowID uint64, columnID uint64) *PQLBaseQuery {
 	return NewPQLQuery(fmt.Sprintf("SetBit(%s=%d, frame='%s', %s=%d)",
-		f.options.rowLabel, rowID, f.name, f.database.options.columnLabel, columnID), f.database)
+		f.options.rowLabel, rowID, f.name, f.database.options.columnLabel, columnID), f.database, nil)
 }
 
 // ClearBit creates a ClearBit query
 func (f *Frame) ClearBit(rowID uint64, columnID uint64) *PQLBaseQuery {
 	return NewPQLQuery(fmt.Sprintf("ClearBit(%s=%d, frame='%s', %s=%d)",
-		f.options.rowLabel, rowID, f.name, f.database.options.columnLabel, columnID), f.database)
+		f.options.rowLabel, rowID, f.name, f.database.options.columnLabel, columnID), f.database, nil)
 }
 
 // TopN creates a TopN query with the given item count
@@ -237,4 +250,31 @@ func (f *Frame) FilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, 
 	}
 	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d, field='%s', %s)",
 		bitmap, f.name, n, field, string(b)), f.database, nil)
+}
+
+// SetBitmapAttrs creates a SetBitmapAttrs query
+func (f *Frame) SetBitmapAttrs(rowID uint64, attrs map[string]interface{}) *PQLBaseQuery {
+	attrsString, err := createAttributesString(attrs)
+	if err != nil {
+		return NewPQLQuery("", f.database, err)
+	}
+	return NewPQLQuery(fmt.Sprintf("SetBitmapAttrs(%s=%d, frame='%s', %s)",
+		f.options.rowLabel, rowID, f.name, attrsString), f.database, nil)
+}
+
+func createAttributesString(attrs map[string]interface{}) (string, error) {
+	attrsList := make([]string, 0, len(attrs))
+	for k, v := range attrs {
+		// TODO: validate the type of v is one of string, int64, float64, bool
+		if err := validateLabel(k); err != nil {
+			return "", err
+		}
+		if vs, ok := v.(string); ok {
+			attrsList = append(attrsList, fmt.Sprintf("%s=\"%s\"", k, vs))
+		} else {
+			attrsList = append(attrsList, fmt.Sprintf("%s=%v", k, v))
+		}
+	}
+	sort.Strings(attrsList)
+	return strings.Join(attrsList, ", "), nil
 }

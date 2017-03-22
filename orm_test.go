@@ -156,6 +156,47 @@ func TestBitmapOperationInvalidArg(t *testing.T) {
 	}
 }
 
+func TestSetProfileAttrsTest(t *testing.T) {
+	attrs := map[string]interface{}{
+		"color": "blue",
+		"happy": true,
+	}
+	comparePql(t,
+		projectDb.SetProfileAttrs(5, attrs),
+		"SetProfileAttrs(user=5, color=\"blue\", happy=true)")
+}
+
+func TestSetProfileAttrsInvalidAttr(t *testing.T) {
+	attrs := map[string]interface{}{
+		"color":     "blue",
+		"$invalid$": true,
+	}
+	if projectDb.SetProfileAttrs(5, attrs).Error() == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
+func TestSetBitmapAttrsTest(t *testing.T) {
+	attrs := map[string]interface{}{
+		"color":  "blue",
+		"active": true,
+	}
+
+	comparePql(t,
+		collabFrame.SetBitmapAttrs(5, attrs),
+		"SetBitmapAttrs(project=5, frame='collaboration', active=true, color=\"blue\")")
+}
+
+func TestSetBitmapAttrsInvalidAttr(t *testing.T) {
+	attrs := map[string]interface{}{
+		"color":     "blue",
+		"$invalid$": true,
+	}
+	if collabFrame.SetBitmapAttrs(5, attrs).Error() == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
 func TestCount(t *testing.T) {
 	q := projectDb.Count(collabFrame.Bitmap(42))
 	comparePql(t, q, "Count(Bitmap(project=42, frame='collaboration'))")

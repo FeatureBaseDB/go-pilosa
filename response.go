@@ -45,8 +45,8 @@ func newQueryResponseFromInternal(response *internal.QueryResponse) (*QueryRespo
 	}, nil
 }
 
-// GetResult returns the first result or nil
-func (qr *QueryResponse) GetResult() *QueryResult {
+// Result returns the first result or nil
+func (qr *QueryResponse) Result() *QueryResult {
 	if qr.Results == nil || len(qr.Results) == 0 {
 		return nil
 	}

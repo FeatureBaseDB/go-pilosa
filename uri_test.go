@@ -55,7 +55,7 @@ func TestNormalizedAddress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Can't parse address")
 	}
-	if uri.GetNormalizedAddress() != "http://big-data.pilosa.com:6888" {
+	if uri.NormalizedAddress() != "http://big-data.pilosa.com:6888" {
 		t.Fatalf("Normalized address is not normal")
 	}
 }
@@ -71,13 +71,13 @@ func TestEquals(t *testing.T) {
 }
 
 func compare(t *testing.T, uri *URI, scheme string, host string, port uint16) {
-	if uri.GetScheme() != scheme {
+	if uri.Scheme() != scheme {
 		t.Fatalf("Scheme does not match: %s != %s", uri.scheme, scheme)
 	}
-	if uri.GetHost() != host {
+	if uri.Host() != host {
 		t.Fatalf("Host does not match: %s != %s", uri.host, host)
 	}
-	if uri.GetPort() != port {
+	if uri.Port() != port {
 		t.Fatalf("Port does not match: %d != %d", uri.port, port)
 	}
 }

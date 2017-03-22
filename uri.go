@@ -40,23 +40,23 @@ func NewURIFromAddress(address string) (*URI, error) {
 	return parseAddress(address)
 }
 
-// GetScheme returns the scheme of this URI
-func (u *URI) GetScheme() string {
+// Scheme returns the scheme of this URI
+func (u *URI) Scheme() string {
 	return u.scheme
 }
 
-// GetHost returns the host of this URI
-func (u *URI) GetHost() string {
+// Host returns the host of this URI
+func (u *URI) Host() string {
 	return u.host
 }
 
-// GetPort returns the port of this URI
-func (u *URI) GetPort() uint16 {
+// Port returns the port of this URI
+func (u *URI) Port() uint16 {
 	return u.port
 }
 
-// GetNormalizedAddress returns the address in a form usable by a HTTP client
-func (u *URI) GetNormalizedAddress() string {
+// NormalizedAddress returns the address in a form usable by a HTTP client
+func (u *URI) NormalizedAddress() string {
 	scheme := u.scheme
 	index := strings.Index(scheme, "+")
 	if index >= 0 {

@@ -4,7 +4,7 @@ import "testing"
 
 func TestNewClusterWithHost(t *testing.T) {
 	c := NewClusterWithHost(NewURI())
-	hosts := c.GetHosts()
+	hosts := c.Hosts()
 	if len(hosts) != 1 || !hosts[0].Equals(NewURI()) {
 		t.Fail()
 	}
@@ -13,8 +13,8 @@ func TestNewClusterWithHost(t *testing.T) {
 func TestAddHost(t *testing.T) {
 	const addr = "http://localhost:3000"
 	c := NewCluster()
-	if c.GetHosts() == nil {
-		t.Fatalf("GetHosts should not be nil")
+	if c.Hosts() == nil {
+		t.Fatalf("Hosts should not be nil")
 	}
 	uri, err := NewURIFromAddress(addr)
 	if err != nil {
@@ -25,19 +25,19 @@ func TestAddHost(t *testing.T) {
 		t.Fatalf("Cannot parse address")
 	}
 	c.AddHost(uri)
-	hosts := c.GetHosts()
+	hosts := c.Hosts()
 	if len(hosts) != 1 || !hosts[0].Equals(target) {
 		t.Fail()
 	}
 }
 
-func TestGetHosts(t *testing.T) {
+func TestHosts(t *testing.T) {
 	c := NewCluster()
-	if c.GetHost() != nil {
-		t.Fatalf("GetHosts with empty cluster should return nil")
+	if c.Host() != nil {
+		t.Fatalf("Hosts with empty cluster should return nil")
 	}
 	c = NewClusterWithHost(NewURI())
-	if !c.GetHost().Equals(NewURI()) {
-		t.Fatalf("GetHost should return a value if there are hosts in the cluster")
+	if !c.Host().Equals(NewURI()) {
+		t.Fatalf("Host should return a value if there are hosts in the cluster")
 	}
 }

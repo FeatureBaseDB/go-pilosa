@@ -2,37 +2,20 @@ package pilosa
 
 import "testing"
 
-func TestNewDatabase(t *testing.T) {
-	db, err := NewDatabase("db-name")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if db.GetName() != "db-name" {
-		t.Fatalf("database name was not set")
-	}
-}
-
-func TestNewDatabaseWithInvalidColumnLabel(t *testing.T) {
-	_, err := NewDatabaseWithColumnLabel("foo", "$$INVALID$$")
-	if err == nil {
-		t.Fatal()
-	}
-}
-
-func TestNewDatabaseWithInvalidName(t *testing.T) {
-	_, err := NewDatabase("$FOO")
-	if err == nil {
-		t.Fatal()
-	}
-}
-
-func TestNewFrameWithInvalidName(t *testing.T) {
+func TestQueryWithQueryWithError(t *testing.T) {
+	var err error
+	client := NewClient()
 	db, err := NewDatabase("foo")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.FrameWithRowLabel("$$INVALIDFRAME$$", "label")
-	if err == nil {
+	frame, err := db.Frame("foo")
+	if err != nil {
 		t.Fatal(err)
+	}
+	invalid := frame.FilterFieldTopN(12, frame.Bitmap(7), "$invalid$", 80, 81)
+	_, err = client.Query(invalid)
+	if err == nil {
+		t.Fatalf("Should have failed")
 	}
 }

@@ -68,7 +68,7 @@ func TestCreateDefaultClient(t *testing.T) {
 
 func TestClientReturnsResponse(t *testing.T) {
 	client := getClient()
-	response, err := client.Query(db, "Bitmap(id=1, frame='test-frame')")
+	response, err := client.Query(testFrame.Bitmap(1))
 	if err != nil {
 		t.Fatalf("Error querying: %s", err)
 	}
@@ -86,15 +86,15 @@ func TestQueryWithProfiles(t *testing.T) {
 		"registered": true,
 		"height":     1.83,
 	}
-	_, err := client.Query(db, "SetBit(id=1, frame='test-frame', profileID=100)")
+	_, err := client.Query(testFrame.SetBit(1, 100))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = client.Query(db, "SetProfileAttrs(id=100, name='some string', age=95, registered=true, height=1.83)")
+	_, err = client.QueryRaw(db, "SetProfileAttrs(id=100, name='some string', age=95, registered=true, height=1.83)")
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := client.QueryWithOptions(&QueryOptions{GetProfiles: true}, db, "Bitmap(id=1, frame='test-frame')")
+	response, err := client.QueryWithOptions(&QueryOptions{GetProfiles: true}, testFrame.Bitmap(1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +176,7 @@ func TestDatabaseAlreadyExists(t *testing.T) {
 
 func TestQueryWithEmptyClusterFails(t *testing.T) {
 	client := NewClientWithCluster(NewCluster())
-	_, err := client.Query(db, "won't run")
+	_, err := client.QueryRaw(db, "won't run")
 	if err != ErrorEmptyCluster {
 		t.Fatal()
 	}
@@ -185,7 +185,7 @@ func TestQueryWithEmptyClusterFails(t *testing.T) {
 func TestQueryFailsIfAddressNotResovled(t *testing.T) {
 	uri, _ := NewURIFromAddress("nonexisting.domain.pilosa.com:3456")
 	client := NewClientWithAddress(uri)
-	_, err := client.Query(db, "bar")
+	_, err := client.QueryRaw(db, "bar")
 	if err == nil {
 		t.Fatal()
 	}
@@ -193,7 +193,7 @@ func TestQueryFailsIfAddressNotResovled(t *testing.T) {
 
 func TestQueryFails(t *testing.T) {
 	client := getClient()
-	_, err := client.Query(db, "Invalid query")
+	_, err := client.QueryRaw(db, "Invalid query")
 	if err == nil {
 		t.Fatal()
 	}
@@ -215,7 +215,7 @@ func TestErrorResponseNotRead(t *testing.T) {
 		panic(err)
 	}
 	client := NewClientWithAddress(uri)
-	response, err := client.Query(db, "Bitmap(id=1, frame='test-frame')")
+	response, err := client.Query(testFrame.Bitmap(1))
 	if err == nil {
 		t.Fatalf("Got response: %s", response)
 	}
@@ -229,7 +229,7 @@ func TestResponseNotRead(t *testing.T) {
 		panic(err)
 	}
 	client := NewClientWithAddress(uri)
-	response, err := client.Query(db, "Bitmap(id=1, frame='test-frame')")
+	response, err := client.Query(testFrame.Bitmap(1))
 	if err == nil {
 		t.Fatalf("Got response: %s", response)
 	}
@@ -243,7 +243,7 @@ func TestInvalidResponse(t *testing.T) {
 		panic(err)
 	}
 	client := NewClientWithAddress(uri)
-	response, err := client.Query(db, "don't care")
+	response, err := client.QueryRaw(db, "don't care")
 	if err == nil {
 		t.Fatalf("Got response: %s", response)
 	}

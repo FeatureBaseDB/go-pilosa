@@ -37,13 +37,26 @@ func NewClientWithCluster(cluster *Cluster) *Client {
 	}
 }
 
-// Query sends a query to the Pilosa server with default options
-func (c *Client) Query(database *Database, query string) (*QueryResponse, error) {
-	return c.QueryWithOptions(&QueryOptions{}, database, query)
+// Query sends a query to the Pilosa server
+func (c *Client) Query(query PQLQuery) (*QueryResponse, error) {
+	return c.QueryWithOptions(&QueryOptions{}, query)
 }
 
 // QueryWithOptions sends a query to the Pilosa server with the given options
-func (c *Client) QueryWithOptions(options *QueryOptions, database *Database, query string) (*QueryResponse, error) {
+func (c *Client) QueryWithOptions(options *QueryOptions, query PQLQuery) (*QueryResponse, error) {
+	if err := query.Error(); err != nil {
+		return nil, err
+	}
+	return c.QueryRawWithOptions(options, query.Database(), query.String())
+}
+
+// QueryRaw sends a query to the Pilosa server with default options
+func (c *Client) QueryRaw(database *Database, query string) (*QueryResponse, error) {
+	return c.QueryRawWithOptions(&QueryOptions{}, database, query)
+}
+
+// QueryRawWithOptions sends a query to the Pilosa server with the given options
+func (c *Client) QueryRawWithOptions(options *QueryOptions, database *Database, query string) (*QueryResponse, error) {
 	data := makeRequestData(database.name, query, options)
 	buf, err := c.httpRequest("POST", "/query", data, true)
 	if err != nil {
@@ -124,12 +137,12 @@ func (c *Client) createOrDeleteFrame(method string, frame *Frame) error {
 }
 
 func (c *Client) httpRequest(method string, path string, data []byte, needsResponse bool) ([]byte, error) {
-	addr := c.cluster.GetHost()
+	addr := c.cluster.Host()
 	if addr == nil {
 		return nil, ErrorEmptyCluster
 	}
 	client := &http.Client{}
-	request, err := http.NewRequest(method, addr.GetNormalizedAddress()+path, bytes.NewReader(data))
+	request, err := http.NewRequest(method, addr.NormalizedAddress()+path, bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
@@ -183,84 +196,6 @@ type QueryOptions struct {
 	GetProfiles bool
 }
 
-type DatabaseOptions struct {
-	columnLabel string
-}
-
-func NewDatabaseOptionsWithColumnLabel(columnLabel string) (*DatabaseOptions, error) {
-	if err := validateLabel(columnLabel); err != nil {
-		return nil, err
-	}
-	return &DatabaseOptions{
-		columnLabel: columnLabel,
-	}, nil
-}
-
-// FrameOptions contains frame options
-type FrameOptions struct {
-	rowLabel string
-}
-
-// Frame is a Pilosa frame
-type Frame struct {
-	name     string
-	database *Database
-	options  FrameOptions
-}
-
-// Database is a Pilosa database
-type Database struct {
-	name    string
-	options DatabaseOptions
-}
-
-// NewDatabase creates the info for a Pilosa database with default options
-func NewDatabase(name string) (*Database, error) {
-	return NewDatabaseWithColumnLabel(name, "profileID")
-}
-
-// NewDatabaseWithColumnLabel creates the info for a Pilosa database with the given column label
-func NewDatabaseWithColumnLabel(name string, label string) (*Database, error) {
-	options, err := NewDatabaseOptionsWithColumnLabel(label)
-	if err != nil {
-		return nil, err
-	}
-	return NewDatabaseWithOptions(name, options)
-}
-
-// NewDatabaseWithOptions creates the info for a Pilosa database with the given options
-func NewDatabaseWithOptions(name string, options *DatabaseOptions) (*Database, error) {
-	if err := validateDatabaseName(name); err != nil {
-		return nil, err
-	}
-	return &Database{
-		name:    name,
-		options: *options,
-	}, nil
-}
-
-// GetName returns the name of this database
-func (d *Database) GetName() string {
-	return d.name
-}
-
-// Frame creates the info for a Pilosa frame with default options
-func (d *Database) Frame(name string) (*Frame, error) {
-	return d.FrameWithRowLabel(name, "id")
-}
-
-// FrameWithRowLabel creates the info for a Pilosa frame with the given label
-func (d *Database) FrameWithRowLabel(name string, label string) (*Frame, error) {
-	if err := validateFrameName(name); err != nil {
-		return nil, err
-	}
-	return &Frame{
-		name:     name,
-		database: d,
-		options:  FrameOptions{rowLabel: label},
-	}, nil
-}
-
 // Schema contains the database and frame metadata
 type Schema struct {
 	DBs []*DBInfo `json:"dbs"`
@@ -270,9 +205,4 @@ type Schema struct {
 type DBInfo struct {
 	Name   string       `json:"name"`
 	Frames []*FrameInfo `json:"frames"`
-}
-
-// FrameInfo represents schema information for a frame.
-type FrameInfo struct {
-	Name string `json:"name"`
 }

@@ -25,8 +25,8 @@ func (c *Cluster) AddHost(address *URI) {
 	c.hosts = append(c.hosts, address)
 }
 
-// GetHost returns the next address in the cluster
-func (c *Cluster) GetHost() *URI {
+// Host returns the next address in the cluster
+func (c *Cluster) Host() *URI {
 	if len(c.hosts) == 0 {
 		return nil
 	}
@@ -41,8 +41,8 @@ func (c *Cluster) RemoveHost(address *URI) {
 	// TODO:
 }
 
-// GetHosts returns all addresses in this cluster
-func (c *Cluster) GetHosts() []URI {
+// Hosts returns all addresses in this cluster
+func (c *Cluster) Hosts() []URI {
 	arr := make([]URI, 0, len(c.hosts))
 	for _, u := range c.hosts {
 		arr = append(arr, *u)

@@ -151,6 +151,7 @@ func (c *Client) httpRequest(method string, path string, data []byte, needsRespo
 	request.Header.Set("Accept", "application/x-protobuf")
 	response, err := client.Do(request)
 	if err != nil {
+		c.cluster.RemoveHost(addr)
 		return nil, err
 	}
 	defer response.Body.Close()

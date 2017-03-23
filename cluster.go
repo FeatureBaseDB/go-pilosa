@@ -38,7 +38,12 @@ func (c *Cluster) Host() *URI {
 
 // RemoveHost removes an address from the cluster
 func (c *Cluster) RemoveHost(address *URI) {
-	// TODO:
+	for i, uri := range c.hosts {
+		if uri.Equals(address) {
+			c.hosts = append(c.hosts[:i], c.hosts[i+1:]...)
+			break
+		}
+	}
 }
 
 // Hosts returns all addresses in this cluster

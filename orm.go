@@ -266,8 +266,8 @@ func (f *Frame) SetBitmapAttrs(rowID uint64, attrs map[string]interface{}) *PQLB
 }
 
 // Range creates a Range query
-func (f *Frame) Range(rowID uint64, start time.Time, end time.Time) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("Range(%s=%d, frame='%s', start='%s', end='%s')",
+func (f *Frame) Range(rowID uint64, start time.Time, end time.Time) *PQLBitmapQuery {
+	return NewPQLBitmapQuery(fmt.Sprintf("Range(%s=%d, frame='%s', start='%s', end='%s')",
 		f.options.rowLabel, rowID, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.database, nil)
 }
 

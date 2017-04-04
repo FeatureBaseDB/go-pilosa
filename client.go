@@ -16,48 +16,41 @@ import (
 // Client queries the Pilosa server
 type Client struct {
 	cluster *Cluster
+	options *ClientOptions
 }
 
-// NewClient creates the default client
-func NewClient() *Client {
+// DefaultClient creates the default client
+func DefaultClient() *Client {
 	return &Client{
-		cluster: NewClusterWithHost(NewURI()),
+		cluster: NewClusterWithHost(DefaultURI()),
 	}
 }
 
 // NewClientWithAddress creates a client with the given address
 func NewClientWithAddress(address *URI) *Client {
-	return NewClientWithCluster(NewClusterWithHost(address))
+	return NewClientWithCluster(NewClusterWithHost(address), nil)
 }
 
 // NewClientWithCluster creates a client with the given cluster
-func NewClientWithCluster(cluster *Cluster) *Client {
+func NewClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
+	if options == nil {
+		options = DefaultClientOptions()
+	}
 	return &Client{
 		cluster: cluster,
+		options: options,
 	}
 }
 
-// Query sends a query to the Pilosa server
-func (c *Client) Query(query PQLQuery) (*QueryResponse, error) {
-	return c.QueryWithOptions(&QueryOptions{}, query)
-}
-
-// QueryWithOptions sends a query to the Pilosa server with the given options
-func (c *Client) QueryWithOptions(options *QueryOptions, query PQLQuery) (*QueryResponse, error) {
+// Query sends a query to the Pilosa server with the given options
+func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, error) {
 	if err := query.Error(); err != nil {
 		return nil, err
 	}
-	return c.QueryRawWithOptions(options, query.Database(), query.String())
-}
-
-// QueryRaw sends a query to the Pilosa server with default options
-func (c *Client) QueryRaw(database *Database, query string) (*QueryResponse, error) {
-	return c.QueryRawWithOptions(&QueryOptions{}, database, query)
-}
-
-// QueryRawWithOptions sends a query to the Pilosa server with the given options
-func (c *Client) QueryRawWithOptions(options *QueryOptions, database *Database, query string) (*QueryResponse, error) {
-	data := makeRequestData(database.name, query, options)
+	if options == nil {
+		options = DefaultQueryOptions()
+	}
+	data := makeRequestData(query.Database().name, query.String(), options)
 	buf, err := c.httpRequest("POST", "/query", data, true)
 	if err != nil {
 		return nil, err
@@ -68,7 +61,6 @@ func (c *Client) QueryRawWithOptions(options *QueryOptions, database *Database, 
 		return nil, err
 	}
 	return newQueryResponseFromInternal(iqr)
-
 }
 
 // CreateDatabase creates a database with default options
@@ -109,6 +101,7 @@ func (c *Client) DeleteFrame(frame *Frame) error {
 	return c.createOrDeleteFrame("DELETE", frame)
 }
 
+// Schema returns the databases and frames of the server
 func (c *Client) Schema() (*Schema, error) {
 	response, err := c.httpRequest("GET", "/schema", nil, true)
 	if err != nil {
@@ -142,7 +135,7 @@ func (c *Client) httpRequest(method string, path string, data []byte, needsRespo
 		return nil, ErrorEmptyCluster
 	}
 	client := &http.Client{}
-	request, err := http.NewRequest(method, addr.NormalizedAddress()+path, bytes.NewReader(data))
+	request, err := http.NewRequest(method, addr.Normalize()+path, bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
@@ -185,16 +178,29 @@ func makeRequestData(databaseName string, query string, options *QueryOptions) [
 	request := &internal.QueryRequest{
 		DB:       databaseName,
 		Query:    query,
-		Profiles: options.GetProfiles,
+		Profiles: options.RetrieveProfiles,
 	}
 	r, _ := request.Marshal()
 	// request.Marshal never returns an error
 	return r
 }
 
+type ClientOptions struct {
+}
+
+// DefaultClientOptions creates ClientOptions with defaults
+func DefaultClientOptions() *ClientOptions {
+	return &ClientOptions{}
+}
+
 // QueryOptions contains options that can be sent with a query
 type QueryOptions struct {
-	GetProfiles bool
+	RetrieveProfiles bool
+}
+
+// DefaultQueryOptions creates QueryOptions with defaults
+func DefaultQueryOptions() *QueryOptions {
+	return &QueryOptions{}
 }
 
 // Schema contains the database and frame metadata

@@ -76,22 +76,24 @@ func TestNewQueryResponseFromInternal(t *testing.T) {
 	if qr.ErrorMessage != "" {
 		t.Fatalf("ErrorMessage should be empty")
 	}
-	if !qr.IsSuccess {
+	if !qr.Success {
 		t.Fatalf("IsSuccess should be true")
 	}
-	if len(qr.Results) != 2 {
+
+	results := qr.Results()
+	if len(results) != 2 {
 		t.Fatalf("Number of results should be 2")
 	}
-	if qr.Results[0] != qr.Result() {
+	if results[0] != qr.Result() {
 		t.Fatalf("Result() should return the first result")
 	}
-	if !reflect.DeepEqual(targetAttrs, qr.Results[0].BitmapResult.Attributes) {
+	if !reflect.DeepEqual(targetAttrs, results[0].BitmapResult.Attributes) {
 		t.Fatalf("The bitmap result should contain the attributes")
 	}
-	if !reflect.DeepEqual(targetBits, qr.Results[0].BitmapResult.Bits) {
+	if !reflect.DeepEqual(targetBits, results[0].BitmapResult.Bits) {
 		t.Fatalf("The bitmap result should contain the bits")
 	}
-	if !reflect.DeepEqual(targetCountItems, qr.Results[1].CountItems) {
+	if !reflect.DeepEqual(targetCountItems, results[1].CountItems) {
 		t.Fatalf("The response should include count items")
 	}
 }
@@ -107,7 +109,7 @@ func TestNewQueryResponseWithErrorFromInternal(t *testing.T) {
 	if qr.ErrorMessage != "some error" {
 		t.Fatalf("The response should include the error message")
 	}
-	if qr.IsSuccess {
+	if qr.Success {
 		t.Fatalf("IsSuccess should be false")
 	}
 	if qr.Result() != nil {

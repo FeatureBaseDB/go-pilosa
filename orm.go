@@ -70,9 +70,50 @@ func (q PQLBitmapQuery) Error() error {
 	return q.err
 }
 
+type PQLBatchQuery struct {
+	database *Database
+	queries  []string
+	err      error
+}
+
+// Database returns the database for this query
+func (q *PQLBatchQuery) Database() *Database {
+	return q.database
+}
+
+func (q *PQLBatchQuery) String() string {
+	return strings.Join(q.queries, "")
+}
+
+func (q *PQLBatchQuery) Error() error {
+	return q.err
+}
+
+// Add adds a query to the batch
+func (q *PQLBatchQuery) Add(query PQLQuery) {
+	err := query.Error()
+	if err != nil {
+		q.err = err
+	}
+	q.queries = append(q.queries, query.String())
+}
+
 // DatabaseOptions contains the options for a Pilosa database
 type DatabaseOptions struct {
 	columnLabel string
+}
+
+// DefaultDatabaseOptions returns database options with defaults
+func DefaultDatabaseOptions() *DatabaseOptions {
+	return &DatabaseOptions{columnLabel: "col_id"}
+}
+
+// ColumnLabelDatabaseOption creates database options with the given column label
+func ColumnLabelDatabaseOption(label string) (*DatabaseOptions, error) {
+	if err := validateLabel(label); err != nil {
+		return nil, err
+	}
+	return &DatabaseOptions{columnLabel: label}, nil
 }
 
 // NewPQLBitmapQuery creates a new PqlBitmapQuery
@@ -84,44 +125,23 @@ func NewPQLBitmapQuery(pql string, database *Database, err error) *PQLBitmapQuer
 	}
 }
 
-// NewDatabaseOptionsWithColumnLabel creates a DatabaseOptions struct with the given label
-func NewDatabaseOptionsWithColumnLabel(columnLabel string) (*DatabaseOptions, error) {
-	if err := validateLabel(columnLabel); err != nil {
-		return nil, err
-	}
-	return &DatabaseOptions{
-		columnLabel: columnLabel,
-	}, nil
-}
-
 // Database is a Pilosa database
 type Database struct {
 	name    string
-	options DatabaseOptions
+	options *DatabaseOptions
 }
 
-// NewDatabase creates the info for a Pilosa database with default options
-func NewDatabase(name string) (*Database, error) {
-	return NewDatabaseWithColumnLabel(name, "profileID")
-}
-
-// NewDatabaseWithColumnLabel creates the info for a Pilosa database with the given column label
-func NewDatabaseWithColumnLabel(name string, label string) (*Database, error) {
-	options, err := NewDatabaseOptionsWithColumnLabel(label)
-	if err != nil {
-		return nil, err
-	}
-	return NewDatabaseWithOptions(name, options)
-}
-
-// NewDatabaseWithOptions creates the info for a Pilosa database with the given options
-func NewDatabaseWithOptions(name string, options *DatabaseOptions) (*Database, error) {
+// NewDatabase creates the info for a Pilosa database with the given options
+func NewDatabase(name string, options *DatabaseOptions) (*Database, error) {
 	if err := validateDatabaseName(name); err != nil {
 		return nil, err
 	}
+	if options == nil {
+		options = DefaultDatabaseOptions()
+	}
 	return &Database{
 		name:    name,
-		options: *options,
+		options: options,
 	}, nil
 }
 
@@ -131,20 +151,31 @@ func (d *Database) Name() string {
 }
 
 // Frame creates the info for a Pilosa frame with default options
-func (d *Database) Frame(name string) (*Frame, error) {
-	return d.FrameWithRowLabel(name, "id")
-}
-
-// FrameWithRowLabel creates the info for a Pilosa frame with the given label
-func (d *Database) FrameWithRowLabel(name string, label string) (*Frame, error) {
+func (d *Database) Frame(name string, options *FrameOptions) (*Frame, error) {
+	if options == nil {
+		options = DefaultFrameOptions()
+	}
 	if err := validateFrameName(name); err != nil {
 		return nil, err
 	}
 	return &Frame{
 		name:     name,
 		database: d,
-		options:  FrameOptions{rowLabel: label},
+		options:  options,
 	}, nil
+}
+
+// BatchQuery creates a batch query
+func (d *Database) BatchQuery() *PQLBatchQuery {
+	return &PQLBatchQuery{
+		database: d,
+		queries:  make([]string, 0),
+	}
+}
+
+// RawQuery creates a query with the given string
+func (d *Database) RawQuery(query string) *PQLBaseQuery {
+	return NewPQLBaseQuery(query, d, nil)
 }
 
 // Union creates a Union query
@@ -206,11 +237,24 @@ type FrameOptions struct {
 	rowLabel string
 }
 
+// DefaultFrameOptions creates frame options with the defaults
+func DefaultFrameOptions() *FrameOptions {
+	return &FrameOptions{rowLabel: "id"}
+}
+
+// RowLabelFrameOption creates frame options with the given label
+func RowLabelFrameOption(label string) (*FrameOptions, error) {
+	if err := validateLabel(label); err != nil {
+		return nil, err
+	}
+	return &FrameOptions{rowLabel: label}, nil
+}
+
 // Frame is a Pilosa frame
 type Frame struct {
 	name     string
 	database *Database
-	options  FrameOptions
+	options  *FrameOptions
 }
 
 // Bitmap creates a bitmap query

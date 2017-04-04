@@ -6,8 +6,8 @@ type Cluster struct {
 	nextIndex int
 }
 
-// NewCluster creates a Cluster with no addresses
-func NewCluster() *Cluster {
+// DefaultCluster creates a Cluster with no addresses
+func DefaultCluster() *Cluster {
 	return &Cluster{
 		hosts: make([]*URI, 0),
 	}
@@ -15,7 +15,7 @@ func NewCluster() *Cluster {
 
 // NewClusterWithHost creates a Cluster with the given address
 func NewClusterWithHost(host *URI) *Cluster {
-	cluster := NewCluster()
+	cluster := DefaultCluster()
 	cluster.AddHost(host)
 	return cluster
 }

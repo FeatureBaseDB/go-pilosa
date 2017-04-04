@@ -178,7 +178,7 @@ func makeRequestData(databaseName string, query string, options *QueryOptions) [
 	request := &internal.QueryRequest{
 		DB:       databaseName,
 		Query:    query,
-		Profiles: options.RetrieveProfiles,
+		Profiles: options.Profiles,
 	}
 	r, _ := request.Marshal()
 	// request.Marshal never returns an error
@@ -195,7 +195,7 @@ func DefaultClientOptions() *ClientOptions {
 
 // QueryOptions contains options that can be sent with a query
 type QueryOptions struct {
-	RetrieveProfiles bool
+	Profiles bool
 }
 
 // DefaultQueryOptions creates QueryOptions with defaults

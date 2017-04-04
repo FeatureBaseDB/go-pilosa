@@ -97,7 +97,7 @@ func TestQueryWithProfiles(t *testing.T) {
 	if response.Profile() != nil {
 		t.Fatalf("No profiles should be returned if it wasn't explicitly requested")
 	}
-	response, err = client.Query(testFrame.Bitmap(1), &QueryOptions{RetrieveProfiles: true})
+	response, err = client.Query(testFrame.Bitmap(1), &QueryOptions{Profiles: true})
 	if err != nil {
 		t.Fatal(err)
 	}

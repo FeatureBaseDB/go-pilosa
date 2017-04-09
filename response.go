@@ -73,9 +73,9 @@ func (qr *QueryResponse) Profile() *ProfileItem {
 
 // QueryResult represent one of the results in the response
 type QueryResult struct {
-	BitmapResult *BitmapResult
-	CountItems   []*CountResultItem
-	Count        uint64
+	Bitmap     *BitmapResult
+	CountItems []*CountResultItem
+	Count      uint64
 }
 
 func newQueryResultFromInternal(result *internal.QueryResult) (*QueryResult, error) {
@@ -88,9 +88,9 @@ func newQueryResultFromInternal(result *internal.QueryResult) (*QueryResult, err
 		}
 	}
 	return &QueryResult{
-		BitmapResult: bitmapResult,
-		CountItems:   countItemsFromInternal(result.Pairs),
-		Count:        result.N,
+		Bitmap:     bitmapResult,
+		CountItems: countItemsFromInternal(result.Pairs),
+		Count:      result.N,
 	}, nil
 }
 

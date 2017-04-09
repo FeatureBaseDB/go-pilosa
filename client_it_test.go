@@ -190,7 +190,7 @@ func TestQueryWithEmptyClusterFails(t *testing.T) {
 	}
 }
 
-func TestQueryFailsIfAddressNotResovled(t *testing.T) {
+func TestQueryFailsIfAddressNotResolved(t *testing.T) {
 	uri, _ := NewURIFromAddress("nonexisting.domain.pilosa.com:3456")
 	client := NewClientWithAddress(uri)
 	_, err := client.Query(db.RawQuery("bar"), nil)
@@ -209,7 +209,7 @@ func TestQueryFails(t *testing.T) {
 
 func TestInvalidHttpRequest(t *testing.T) {
 	client := getClient()
-	_, err := client.httpRequest("INVALID METHOD", "/foo", nil, false)
+	_, err := client.httpRequest("INVALID METHOD", "/foo", nil, 0)
 	if err == nil {
 		t.Fatal()
 	}

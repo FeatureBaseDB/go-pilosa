@@ -51,7 +51,12 @@ func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, e
 		options = DefaultQueryOptions()
 	}
 	data := makeRequestData(query.Database().name, query.String(), options)
-	buf, err := c.httpRequest("POST", "/query", data, true)
+	response, err := c.httpRequest("POST", "/query", data, rawResponse)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	buf, err := ioutil.ReadAll(response.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -60,17 +65,32 @@ func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, e
 	if err != nil {
 		return nil, err
 	}
-	return newQueryResponseFromInternal(iqr)
+	queryResponse, err := newQueryResponseFromInternal(iqr)
+	if err != nil {
+		return nil, err
+	}
+	if !queryResponse.Success {
+		return nil, NewPilosaError(queryResponse.ErrorMessage)
+	}
+	return queryResponse, nil
 }
 
 // CreateDatabase creates a database with default options
 func (c *Client) CreateDatabase(database *Database) error {
-	return c.createOrDeleteDatabase("POST", database)
+	data := []byte(fmt.Sprintf(`{"db": "%s", "options": {"columnLabel": "%s"}}`,
+		database.name, database.options.columnLabel))
+	_, err := c.httpRequest("POST", "/db", data, noResponse)
+	return err
+
 }
 
 // CreateFrame creates a frame with default options
 func (c *Client) CreateFrame(frame *Frame) error {
-	return c.createOrDeleteFrame("POST", frame)
+	data := []byte(fmt.Sprintf(`{"db": "%s", "frame": "%s", "options": {"rowLabel": "%s"}}`,
+		frame.database.name, frame.name, frame.options.rowLabel))
+	_, err := c.httpRequest("POST", "/frame", data, noResponse)
+	return err
+
 }
 
 // EnsureDatabaseExists creates a database with default options if it doesn't already exist
@@ -93,43 +113,40 @@ func (c *Client) EnsureFrameExists(frame *Frame) error {
 
 // DeleteDatabase deletes a database
 func (c *Client) DeleteDatabase(database *Database) error {
-	return c.createOrDeleteDatabase("DELETE", database)
+	data := []byte(fmt.Sprintf(`{"db": "%s"}`, database.name))
+	_, err := c.httpRequest("DELETE", "/db", data, noResponse)
+	return err
+
 }
 
 // DeleteFrame deletes a frame with default options
 func (c *Client) DeleteFrame(frame *Frame) error {
-	return c.createOrDeleteFrame("DELETE", frame)
+	data := []byte(fmt.Sprintf(`{"db": "%s", "frame": "%s"}`,
+		frame.database.name, frame.name))
+	_, err := c.httpRequest("DELETE", "/frame", data, noResponse)
+	return err
 }
 
 // Schema returns the databases and frames of the server
 func (c *Client) Schema() (*Schema, error) {
-	response, err := c.httpRequest("GET", "/schema", nil, true)
+	response, err := c.httpRequest("GET", "/schema", nil, errorCheckedResponse)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	buf, err := ioutil.ReadAll(response.Body)
 	if err != nil {
 		return nil, err
 	}
 	var schema *Schema
-	err = json.NewDecoder(bytes.NewReader(response)).Decode(&schema)
+	err = json.NewDecoder(bytes.NewReader(buf)).Decode(&schema)
 	if err != nil {
 		return nil, err
 	}
 	return schema, nil
 }
 
-func (c *Client) createOrDeleteDatabase(method string, database *Database) error {
-	data := []byte(fmt.Sprintf(`{"db": "%s", "options": {"columnLabel": "%s"}}`,
-		database.name, database.options.columnLabel))
-	_, err := c.httpRequest(method, "/db", data, false)
-	return err
-}
-
-func (c *Client) createOrDeleteFrame(method string, frame *Frame) error {
-	data := []byte(fmt.Sprintf(`{"db": "%s", "frame": "%s", "options": {"rowLabel": "%s"}}`,
-		frame.database.name, frame.name, frame.options.rowLabel))
-	_, err := c.httpRequest(method, "/frame", data, false)
-	return err
-}
-
-func (c *Client) httpRequest(method string, path string, data []byte, needsResponse bool) ([]byte, error) {
+func (c *Client) httpRequest(method string, path string, data []byte, returnResponse returnClientInfo) (*http.Response, error) {
 	addr := c.cluster.Host()
 	if addr == nil {
 		return nil, ErrorEmptyCluster
@@ -147,31 +164,32 @@ func (c *Client) httpRequest(method string, path string, data []byte, needsRespo
 		c.cluster.RemoveHost(addr)
 		return nil, err
 	}
-	defer response.Body.Close()
+	if returnResponse == rawResponse {
+		return response, nil
+	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		defer response.Body.Close()
 		// TODO: Optimize buffer creation
 		buf, err := ioutil.ReadAll(response.Body)
 		if err != nil {
 			return nil, err
 		}
 		msg := string(buf)
-		switch msg {
-		case "database already exists\n":
-			return nil, ErrorDatabaseExists
-		case "frame already exists\n":
-			return nil, ErrorFrameExists
-		}
-		return nil, NewPilosaError(fmt.Sprintf("Server error (%d) %s: %s", response.StatusCode, response.Status, msg))
-	}
-	if needsResponse {
-		// TODO: Optimize buffer creation
-		buf, err := ioutil.ReadAll(response.Body)
+		err = matchError(msg)
 		if err != nil {
 			return nil, err
 		}
-		return buf, nil
+		return nil, NewPilosaError(fmt.Sprintf("Server error (%d) %s: %s", response.StatusCode, response.Status, msg))
 	}
-	return nil, nil
+	if returnResponse == noResponse {
+		defer response.Body.Close()
+		_, err := ioutil.ReadAll(response.Body)
+		if err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
+	return response, nil
 }
 
 func makeRequestData(databaseName string, query string, options *QueryOptions) []byte {
@@ -183,6 +201,16 @@ func makeRequestData(databaseName string, query string, options *QueryOptions) [
 	r, _ := request.Marshal()
 	// request.Marshal never returns an error
 	return r
+}
+
+func matchError(msg string) error {
+	switch msg {
+	case "database already exists\n":
+		return ErrorDatabaseExists
+	case "frame already exists\n":
+		return ErrorFrameExists
+	}
+	return nil
 }
 
 type ClientOptions struct {
@@ -213,3 +241,11 @@ type DBInfo struct {
 	Name   string       `json:"name"`
 	Frames []*FrameInfo `json:"frames"`
 }
+
+type returnClientInfo uint
+
+const (
+	noResponse returnClientInfo = iota
+	rawResponse
+	errorCheckedResponse
+)

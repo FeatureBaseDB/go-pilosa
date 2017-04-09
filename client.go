@@ -2,11 +2,10 @@ package pilosa
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
-
-	"encoding/json"
 
 	"github.com/pilosa/go-client-pilosa/internal"
 )
@@ -51,12 +50,7 @@ func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, e
 		options = DefaultQueryOptions()
 	}
 	data := makeRequestData(query.Database().name, query.String(), options)
-	response, err := c.httpRequest("POST", "/query", data, rawResponse)
-	if err != nil {
-		return nil, err
-	}
-	defer response.Body.Close()
-	buf, err := ioutil.ReadAll(response.Body)
+	_, buf, err := c.httpRequest("POST", "/query", data, rawResponse)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +73,7 @@ func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, e
 func (c *Client) CreateDatabase(database *Database) error {
 	data := []byte(fmt.Sprintf(`{"db": "%s", "options": {"columnLabel": "%s"}}`,
 		database.name, database.options.columnLabel))
-	_, err := c.httpRequest("POST", "/db", data, noResponse)
+	_, _, err := c.httpRequest("POST", "/db", data, noResponse)
 	return err
 
 }
@@ -88,7 +82,7 @@ func (c *Client) CreateDatabase(database *Database) error {
 func (c *Client) CreateFrame(frame *Frame) error {
 	data := []byte(fmt.Sprintf(`{"db": "%s", "frame": "%s", "options": {"rowLabel": "%s"}}`,
 		frame.database.name, frame.name, frame.options.rowLabel))
-	_, err := c.httpRequest("POST", "/frame", data, noResponse)
+	_, _, err := c.httpRequest("POST", "/frame", data, noResponse)
 	return err
 
 }
@@ -114,7 +108,7 @@ func (c *Client) EnsureFrameExists(frame *Frame) error {
 // DeleteDatabase deletes a database
 func (c *Client) DeleteDatabase(database *Database) error {
 	data := []byte(fmt.Sprintf(`{"db": "%s"}`, database.name))
-	_, err := c.httpRequest("DELETE", "/db", data, noResponse)
+	_, _, err := c.httpRequest("DELETE", "/db", data, noResponse)
 	return err
 
 }
@@ -123,18 +117,13 @@ func (c *Client) DeleteDatabase(database *Database) error {
 func (c *Client) DeleteFrame(frame *Frame) error {
 	data := []byte(fmt.Sprintf(`{"db": "%s", "frame": "%s"}`,
 		frame.database.name, frame.name))
-	_, err := c.httpRequest("DELETE", "/frame", data, noResponse)
+	_, _, err := c.httpRequest("DELETE", "/frame", data, noResponse)
 	return err
 }
 
 // Schema returns the databases and frames of the server
 func (c *Client) Schema() (*Schema, error) {
-	response, err := c.httpRequest("GET", "/schema", nil, errorCheckedResponse)
-	if err != nil {
-		return nil, err
-	}
-	defer response.Body.Close()
-	buf, err := ioutil.ReadAll(response.Body)
+	_, buf, err := c.httpRequest("GET", "/schema", nil, errorCheckedResponse)
 	if err != nil {
 		return nil, err
 	}
@@ -146,15 +135,15 @@ func (c *Client) Schema() (*Schema, error) {
 	return schema, nil
 }
 
-func (c *Client) httpRequest(method string, path string, data []byte, returnResponse returnClientInfo) (*http.Response, error) {
+func (c *Client) httpRequest(method string, path string, data []byte, returnResponse returnClientInfo) (*http.Response, []byte, error) {
 	addr := c.cluster.Host()
 	if addr == nil {
-		return nil, ErrorEmptyCluster
+		return nil, nil, ErrorEmptyCluster
 	}
 	client := &http.Client{}
 	request, err := http.NewRequest(method, addr.Normalize()+path, bytes.NewReader(data))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// both Content-Type and Accept headers must be set for protobuf content
 	request.Header.Set("Content-Type", "application/x-protobuf")
@@ -162,34 +151,29 @@ func (c *Client) httpRequest(method string, path string, data []byte, returnResp
 	response, err := client.Do(request)
 	if err != nil {
 		c.cluster.RemoveHost(addr)
-		return nil, err
+		return nil, nil, err
+	}
+	defer response.Body.Close()
+	// TODO: Optimize buffer creation
+	buf, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		return nil, nil, err
 	}
 	if returnResponse == rawResponse {
-		return response, nil
+		return response, buf, nil
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		defer response.Body.Close()
-		// TODO: Optimize buffer creation
-		buf, err := ioutil.ReadAll(response.Body)
-		if err != nil {
-			return nil, err
-		}
 		msg := string(buf)
 		err = matchError(msg)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return nil, NewPilosaError(fmt.Sprintf("Server error (%d) %s: %s", response.StatusCode, response.Status, msg))
+		return nil, nil, NewPilosaError(fmt.Sprintf("Server error (%d) %s: %s", response.StatusCode, response.Status, msg))
 	}
 	if returnResponse == noResponse {
-		defer response.Body.Close()
-		_, err := ioutil.ReadAll(response.Body)
-		if err != nil {
-			return nil, err
-		}
-		return nil, nil
+		return nil, nil, nil
 	}
-	return response, nil
+	return response, buf, nil
 }
 
 func makeRequestData(databaseName string, query string, options *QueryOptions) []byte {

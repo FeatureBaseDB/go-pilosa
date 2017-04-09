@@ -3,13 +3,16 @@
 package pilosa
 
 import (
-	"fmt"
+	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"reflect"
 	"strconv"
 	"testing"
+
+	"github.com/pilosa/go-client-pilosa/internal"
 )
 
 var db *Database
@@ -209,7 +212,7 @@ func TestQueryFails(t *testing.T) {
 
 func TestInvalidHttpRequest(t *testing.T) {
 	client := getClient()
-	_, err := client.httpRequest("INVALID METHOD", "/foo", nil, 0)
+	_, _, err := client.httpRequest("INVALID METHOD", "/foo", nil, 0)
 	if err == nil {
 		t.Fatal()
 	}
@@ -306,6 +309,39 @@ func TestInvalidSchema(t *testing.T) {
 	}
 }
 
+func TestResponseWithInvalidType(t *testing.T) {
+	qr := &internal.QueryResponse{
+		Err: "",
+		Profiles: []*internal.Profile{
+			&internal.Profile{
+				ID: 0,
+				Attrs: []*internal.Attr{
+					&internal.Attr{
+						Type:        9999,
+						StringValue: "NOVAL",
+					},
+				},
+			},
+		},
+		Results: []*internal.QueryResult{},
+	}
+	data, err := qr.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := getMockServer(200, data, -1)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithAddress(uri)
+	_, err = client.Query(testFrame.Bitmap(1), nil)
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
 func getClient() *Client {
 	uri, err := NewURIFromAddress(":10101")
 	if err != nil {
@@ -316,12 +352,13 @@ func getClient() *Client {
 
 func getMockServer(statusCode int, response []byte, contentLength int) *httptest.Server {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-protobuf")
 		if contentLength >= 0 {
 			w.Header().Set("Content-Length", strconv.Itoa(contentLength))
 		}
 		w.WriteHeader(statusCode)
 		if response != nil {
-			fmt.Fprintln(w, response)
+			io.Copy(w, bytes.NewReader(response))
 		}
 	})
 	return httptest.NewServer(handler)

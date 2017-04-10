@@ -25,9 +25,9 @@ func DefaultClient() *Client {
 	}
 }
 
-// NewClientWithAddress creates a client with the given address
-func NewClientWithAddress(address *URI) *Client {
-	return NewClientWithCluster(NewClusterWithHost(address), nil)
+// NewClientWithURI creates a client with the given address
+func NewClientWithURI(uri *URI) *Client {
+	return NewClientWithCluster(NewClusterWithHost(uri), nil)
 }
 
 // NewClientWithCluster creates a client with the given cluster

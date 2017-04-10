@@ -195,7 +195,7 @@ func TestQueryWithEmptyClusterFails(t *testing.T) {
 
 func TestQueryFailsIfAddressNotResolved(t *testing.T) {
 	uri, _ := NewURIFromAddress("nonexisting.domain.pilosa.com:3456")
-	client := NewClientWithAddress(uri)
+	client := NewClientWithURI(uri)
 	_, err := client.Query(db.RawQuery("bar"), nil)
 	if err == nil {
 		t.Fatal()
@@ -225,7 +225,7 @@ func TestErrorResponseNotRead(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	client := NewClientWithAddress(uri)
+	client := NewClientWithURI(uri)
 	response, err := client.Query(testFrame.Bitmap(1), nil)
 	if err == nil {
 		t.Fatalf("Got response: %s", response)
@@ -239,7 +239,7 @@ func TestResponseNotRead(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	client := NewClientWithAddress(uri)
+	client := NewClientWithURI(uri)
 	response, err := client.Query(testFrame.Bitmap(1), nil)
 	if err == nil {
 		t.Fatalf("Got response: %s", response)
@@ -253,7 +253,7 @@ func TestInvalidResponse(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	client := NewClientWithAddress(uri)
+	client := NewClientWithURI(uri)
 	response, err := client.Query(db.RawQuery("don't care"), nil)
 	if err == nil {
 		t.Fatalf("Got response: %s", response)
@@ -288,7 +288,7 @@ func TestErrorRetrievingSchema(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	client := NewClientWithAddress(uri)
+	client := NewClientWithURI(uri)
 	_, err = client.Schema()
 	if err == nil {
 		t.Fatal("should have failed")
@@ -302,7 +302,7 @@ func TestInvalidSchema(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	client := NewClientWithAddress(uri)
+	client := NewClientWithURI(uri)
 	_, err = client.Schema()
 	if err == nil {
 		t.Fatal("should have failed")
@@ -335,7 +335,7 @@ func TestResponseWithInvalidType(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := NewClientWithAddress(uri)
+	client := NewClientWithURI(uri)
 	_, err = client.Query(testFrame.Bitmap(1), nil)
 	if err == nil {
 		t.Fatalf("Should have failed")
@@ -347,7 +347,7 @@ func getClient() *Client {
 	if err != nil {
 		panic(err)
 	}
-	return NewClientWithAddress(uri)
+	return NewClientWithURI(uri)
 }
 
 func getMockServer(statusCode int, response []byte, contentLength int) *httptest.Server {

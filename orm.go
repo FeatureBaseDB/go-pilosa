@@ -101,19 +101,29 @@ func (q *PQLBatchQuery) Add(query PQLQuery) {
 // DatabaseOptions contains the options for a Pilosa database
 type DatabaseOptions struct {
 	columnLabel string
+	timeQuantum TimeQuantum
 }
 
 // DefaultDatabaseOptions returns database options with defaults
 func DefaultDatabaseOptions() *DatabaseOptions {
-	return &DatabaseOptions{columnLabel: "col_id"}
+	return &DatabaseOptions{
+		columnLabel: "col_id",
+		timeQuantum: TimeQuantumNone,
+	}
 }
 
-// ColumnLabelDatabaseOption creates database options with the given column label
-func ColumnLabelDatabaseOption(label string) (*DatabaseOptions, error) {
+// SetColumnLabel sets the column label of a Database
+func (opt *DatabaseOptions) SetColumnLabel(label string) error {
 	if err := validateLabel(label); err != nil {
-		return nil, err
+		return err
 	}
-	return &DatabaseOptions{columnLabel: label}, nil
+	opt.columnLabel = label
+	return nil
+}
+
+// SetTimeQuantum sets the time quantum of a Database
+func (opt *DatabaseOptions) SetTimeQuantum(quantum TimeQuantum) {
+	opt.timeQuantum = quantum
 }
 
 // NewPQLBitmapQuery creates a new PqlBitmapQuery
@@ -234,20 +244,30 @@ type FrameInfo struct {
 
 // FrameOptions contains frame options
 type FrameOptions struct {
-	rowLabel string
+	rowLabel    string
+	timeQuantum TimeQuantum
 }
 
 // DefaultFrameOptions creates frame options with the defaults
 func DefaultFrameOptions() *FrameOptions {
-	return &FrameOptions{rowLabel: "id"}
+	return &FrameOptions{
+		rowLabel:    "id",
+		timeQuantum: TimeQuantumNone,
+	}
 }
 
-// RowLabelFrameOption creates frame options with the given label
-func RowLabelFrameOption(label string) (*FrameOptions, error) {
+// SetRowLabel sets the row label of the Frame
+func (opt *FrameOptions) SetRowLabel(label string) error {
 	if err := validateLabel(label); err != nil {
-		return nil, err
+		return err
 	}
-	return &FrameOptions{rowLabel: label}, nil
+	opt.rowLabel = label
+	return nil
+}
+
+// SetTimeQuantum sets the time quantum of the Frame
+func (opt *FrameOptions) SetTimeQuantum(quantum TimeQuantum) {
+	opt.timeQuantum = quantum
 }
 
 // Frame is a Pilosa frame
@@ -331,3 +351,21 @@ func createAttributesString(attrs map[string]interface{}) (string, error) {
 	sort.Strings(attrsList)
 	return strings.Join(attrsList, ", "), nil
 }
+
+// TimeQuantum is the time resolution
+type TimeQuantum string
+
+// TimeQuantum resolution constants
+const (
+	TimeQuantumNone             TimeQuantum = ""
+	TimeQuantumYear             TimeQuantum = "Y"
+	TimeQuantumMonth            TimeQuantum = "M"
+	TimeQuantumDay              TimeQuantum = "D"
+	TimeQuantumHour             TimeQuantum = "H"
+	TimeQuantumYearMonth        TimeQuantum = "YM"
+	TimeQuantumMonthDay         TimeQuantum = "MD"
+	TimeQuantumDayHour          TimeQuantum = "DH"
+	TimeQuantumYearMonthDay     TimeQuantum = "YMD"
+	TimeQuantumMonthDayHour     TimeQuantum = "MDH"
+	TimeQuantumYearMonthDayHour TimeQuantum = "YMDH"
+)

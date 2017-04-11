@@ -74,6 +74,12 @@ func (c *Client) CreateDatabase(database *Database) error {
 	data := []byte(fmt.Sprintf(`{"db": "%s", "options": {"columnLabel": "%s"}}`,
 		database.name, database.options.columnLabel))
 	_, _, err := c.httpRequest("POST", "/db", data, noResponse)
+	if err != nil {
+		return err
+	}
+	if database.options.timeQuantum != TimeQuantumNone {
+		err = c.patchDatabaseTimeQuantum(database)
+	}
 	return err
 
 }
@@ -83,12 +89,18 @@ func (c *Client) CreateFrame(frame *Frame) error {
 	data := []byte(fmt.Sprintf(`{"db": "%s", "frame": "%s", "options": {"rowLabel": "%s"}}`,
 		frame.database.name, frame.name, frame.options.rowLabel))
 	_, _, err := c.httpRequest("POST", "/frame", data, noResponse)
+	if err != nil {
+		return err
+	}
+	if frame.options.timeQuantum != TimeQuantumNone {
+		err = c.patchFrameTimeQuantum(frame)
+	}
 	return err
 
 }
 
-// EnsureDatabaseExists creates a database with default options if it doesn't already exist
-func (c *Client) EnsureDatabaseExists(database *Database) error {
+// EnsureDatabase creates a database with default options if it doesn't already exist
+func (c *Client) EnsureDatabase(database *Database) error {
 	err := c.CreateDatabase(database)
 	if err == ErrorDatabaseExists {
 		return nil
@@ -96,8 +108,8 @@ func (c *Client) EnsureDatabaseExists(database *Database) error {
 	return err
 }
 
-// EnsureFrameExists creates a frame with default options if it doesn't already exists
-func (c *Client) EnsureFrameExists(frame *Frame) error {
+// EnsureFrame creates a frame with default options if it doesn't already exists
+func (c *Client) EnsureFrame(frame *Frame) error {
 	err := c.CreateFrame(frame)
 	if err == ErrorFrameExists {
 		return nil
@@ -133,6 +145,19 @@ func (c *Client) Schema() (*Schema, error) {
 		return nil, err
 	}
 	return schema, nil
+}
+
+func (c *Client) patchDatabaseTimeQuantum(database *Database) error {
+	data := []byte(fmt.Sprintf(`{"db": "%s", "time_quantum": "%s"}`, database.name, database.options.timeQuantum))
+	_, _, err := c.httpRequest("PATCH", "/db/time_quantum", data, noResponse)
+	return err
+}
+
+func (c *Client) patchFrameTimeQuantum(frame *Frame) error {
+	data := []byte(fmt.Sprintf(`{"db": "%s", "frame": "%s", "time_quantum": "%s"}`,
+		frame.database.name, frame.name, frame.options.timeQuantum))
+	_, _, err := c.httpRequest("PATCH", "/frame/time_quantum", data, noResponse)
+	return err
 }
 
 func (c *Client) httpRequest(method string, path string, data []byte, returnResponse returnClientInfo) (*http.Response, []byte, error) {

@@ -37,11 +37,11 @@ func TestMain(m *testing.M) {
 
 func Setup() {
 	client := getClient()
-	err := client.EnsureDatabaseExists(db)
+	err := client.EnsureDatabase(db)
 	if err != nil {
 		panic(err)
 	}
-	err = client.EnsureFrameExists(testFrame)
+	err = client.EnsureFrame(testFrame)
 	if err != nil {
 		panic(err)
 	}
@@ -147,17 +147,46 @@ func TestCreateDeleteDatabaseFrame(t *testing.T) {
 
 func TestEnsureDatabaseExists(t *testing.T) {
 	client := getClient()
-	err := client.EnsureDatabaseExists(db)
+	err := client.EnsureDatabase(db)
 	if err != nil {
-		t.Fatal()
+		t.Fatal(err)
+	}
+}
+
+func TestCreateDatabaseWithTimeQuantum(t *testing.T) {
+	client := getClient()
+	options := DefaultDatabaseOptions()
+	options.SetTimeQuantum(TimeQuantumYear)
+	db, err := NewDatabase("db-with-timequantum", options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.CreateDatabase(db)
+	defer client.DeleteDatabase(db)
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
 func TestEnsureFrameExists(t *testing.T) {
 	client := getClient()
-	err := client.EnsureFrameExists(testFrame)
+	err := client.EnsureFrame(testFrame)
 	if err != nil {
-		t.Fatal()
+		t.Fatal(err)
+	}
+}
+
+func TestCreateFrameWithTimeQuantum(t *testing.T) {
+	client := getClient()
+	options := DefaultFrameOptions()
+	options.SetTimeQuantum(TimeQuantumYear)
+	frame, err := db.Frame("frame-with-timequantum", options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.CreateFrame(frame)
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -181,7 +210,7 @@ func TestDatabaseAlreadyExists(t *testing.T) {
 	client := getClient()
 	err := client.CreateDatabase(db)
 	if err != ErrorDatabaseExists {
-		t.Fail()
+		t.Fatal(err)
 	}
 }
 
@@ -189,7 +218,7 @@ func TestQueryWithEmptyClusterFails(t *testing.T) {
 	client := NewClientWithCluster(DefaultCluster(), nil)
 	_, err := client.Query(db.RawQuery("won't run"), nil)
 	if err != ErrorEmptyCluster {
-		t.Fatal()
+		t.Fatal(err)
 	}
 }
 
@@ -223,7 +252,7 @@ func TestErrorResponseNotRead(t *testing.T) {
 	defer server.Close()
 	uri, err := NewURIFromAddress(server.URL)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 	client := NewClientWithURI(uri)
 	response, err := client.Query(testFrame.Bitmap(1), nil)
@@ -237,7 +266,7 @@ func TestResponseNotRead(t *testing.T) {
 	defer server.Close()
 	uri, err := NewURIFromAddress(server.URL)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 	client := NewClientWithURI(uri)
 	response, err := client.Query(testFrame.Bitmap(1), nil)

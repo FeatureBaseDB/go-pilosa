@@ -226,15 +226,17 @@ func TestRange(t *testing.T) {
 }
 
 func TestInvalidColumnLabelFails(t *testing.T) {
-	_, err := ColumnLabelDatabaseOption("$$INVALID$$")
+	options := DefaultDatabaseOptions()
+	err := options.SetColumnLabel("$$INVALID$$")
 	if err == nil {
-		t.Fatalf("Creating database options with invalid column label should fail")
+		t.Fatalf("Setting invalid column label should fail")
 	}
 
 }
 
 func TestInvalidRowLabelFails(t *testing.T) {
-	_, err := RowLabelFrameOption("$INVALID$")
+	options := DefaultFrameOptions()
+	err := options.SetRowLabel("$INVALID$")
 	if err == nil {
 		t.Fatalf("Creating frame options with invalid row label should fail")
 	}
@@ -251,7 +253,8 @@ func mustNewDatabase(name string, columnLabel string) (db *Database) {
 	var err error
 	var options *DatabaseOptions
 	if columnLabel != "" {
-		options, err = ColumnLabelDatabaseOption(columnLabel)
+		options = DefaultDatabaseOptions()
+		err = options.SetColumnLabel(columnLabel)
 		if err != nil {
 			panic(err)
 		}
@@ -269,7 +272,8 @@ func mustNewFrame(db *Database, name string, rowLabel string) (frame *Frame) {
 	var err error
 	var options *FrameOptions
 	if rowLabel != "" {
-		options, err = RowLabelFrameOption(rowLabel)
+		options = DefaultFrameOptions()
+		err = options.SetRowLabel(rowLabel)
 		if err != nil {
 			panic(err)
 		}

@@ -6,7 +6,7 @@ all: test
 test:
 	go test
 
-integration-test:
+test-all:
 	go test -tags=integration
 
 cover:

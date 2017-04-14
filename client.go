@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
+	"time"
 
 	"github.com/pilosa/go-client-pilosa/internal"
 )
@@ -15,14 +17,12 @@ import (
 // Client queries the Pilosa server
 type Client struct {
 	cluster *Cluster
-	options *ClientOptions
+	client  *http.Client
 }
 
 // DefaultClient creates the default client
 func DefaultClient() *Client {
-	return &Client{
-		cluster: NewClusterWithHost(DefaultURI()),
-	}
+	return NewClientWithURI(DefaultURI())
 }
 
 // NewClientWithURI creates a client with the given address
@@ -33,11 +33,11 @@ func NewClientWithURI(uri *URI) *Client {
 // NewClientWithCluster creates a client with the given cluster
 func NewClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 	if options == nil {
-		options = DefaultClientOptions()
+		options = &ClientOptions{}
 	}
 	return &Client{
 		cluster: cluster,
-		options: options,
+		client:  newHTTPClient(options.withDefaults()),
 	}
 }
 
@@ -165,7 +165,6 @@ func (c *Client) httpRequest(method string, path string, data []byte, returnResp
 	if addr == nil {
 		return nil, nil, ErrorEmptyCluster
 	}
-	client := &http.Client{}
 	request, err := http.NewRequest(method, addr.Normalize()+path, bytes.NewReader(data))
 	if err != nil {
 		return nil, nil, err
@@ -173,7 +172,7 @@ func (c *Client) httpRequest(method string, path string, data []byte, returnResp
 	// both Content-Type and Accept headers must be set for protobuf content
 	request.Header.Set("Content-Type", "application/x-protobuf")
 	request.Header.Set("Accept", "application/x-protobuf")
-	response, err := client.Do(request)
+	response, err := c.client.Do(request)
 	if err != nil {
 		c.cluster.RemoveHost(addr)
 		return nil, nil, err
@@ -201,6 +200,20 @@ func (c *Client) httpRequest(method string, path string, data []byte, returnResp
 	return response, buf, nil
 }
 
+func newHTTPClient(options *ClientOptions) *http.Client {
+	transport := &http.Transport{
+		Dial: (&net.Dialer{
+			Timeout: options.ConnectTimeout,
+		}).Dial,
+		MaxIdleConnsPerHost: options.PoolSizePerRoute,
+		MaxIdleConns:        options.TotalPoolSize,
+	}
+	return &http.Client{
+		Transport: transport,
+		Timeout:   options.SocketTimeout,
+	}
+}
+
 func makeRequestData(databaseName string, query string, options *QueryOptions) []byte {
 	request := &internal.QueryRequest{
 		DB:       databaseName,
@@ -222,12 +235,37 @@ func matchError(msg string) error {
 	return nil
 }
 
+// ClientOptions control the properties of client connection to the server
 type ClientOptions struct {
+	SocketTimeout    time.Duration
+	ConnectTimeout   time.Duration
+	PoolSizePerRoute int
+	TotalPoolSize    int
 }
 
 // DefaultClientOptions creates ClientOptions with defaults
 func DefaultClientOptions() *ClientOptions {
-	return &ClientOptions{}
+	return (&ClientOptions{}).withDefaults()
+}
+
+func (options *ClientOptions) withDefaults() (updated *ClientOptions) {
+	// copy options so the original is not updated
+	updated = &ClientOptions{}
+	*updated = *options
+	// impose defaults
+	if updated.SocketTimeout <= 0 {
+		updated.SocketTimeout = time.Second * 300
+	}
+	if updated.ConnectTimeout <= 0 {
+		updated.ConnectTimeout = time.Second * 30
+	}
+	if updated.PoolSizePerRoute <= 0 {
+		updated.PoolSizePerRoute = 10
+	}
+	if updated.TotalPoolSize <= 100 {
+		updated.TotalPoolSize = 100
+	}
+	return
 }
 
 // QueryOptions contains options that can be sent with a query

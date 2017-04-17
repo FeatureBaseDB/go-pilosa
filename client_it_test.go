@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/pilosa/go-client-pilosa/internal"
 )
 
@@ -354,7 +355,7 @@ func TestResponseWithInvalidType(t *testing.T) {
 		},
 		Results: []*internal.QueryResult{},
 	}
-	data, err := qr.Marshal()
+	data, err := proto.Marshal(qr)
 	if err != nil {
 		t.Fatal(err)
 	}

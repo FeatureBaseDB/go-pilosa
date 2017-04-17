@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/pilosa/go-client-pilosa/internal"
 )
 
@@ -55,7 +56,7 @@ func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, e
 		return nil, err
 	}
 	iqr := &internal.QueryResponse{}
-	err = iqr.Unmarshal(buf)
+	err = proto.Unmarshal(buf, iqr)
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +221,7 @@ func makeRequestData(databaseName string, query string, options *QueryOptions) [
 		Query:    query,
 		Profiles: options.Profiles,
 	}
-	r, _ := request.Marshal()
+	r, _ := proto.Marshal(request)
 	// request.Marshal never returns an error
 	return r
 }

@@ -8,17 +8,17 @@ import (
 
 // QueryResponse represents the response from a Pilosa query
 type QueryResponse struct {
-	Results      []*QueryResult
-	Profiles     []*ProfileItem
+	results      []*QueryResult
+	profiles     []*ProfileItem
 	ErrorMessage string
-	IsSuccess    bool
+	Success      bool
 }
 
 func newQueryResponseFromInternal(response *internal.QueryResponse) (*QueryResponse, error) {
 	if response.Err != "" {
 		return &QueryResponse{
 			ErrorMessage: response.Err,
-			IsSuccess:    false,
+			Success:      false,
 		}, nil
 	}
 	results := make([]*QueryResult, 0, len(response.Results))
@@ -39,25 +39,43 @@ func newQueryResponseFromInternal(response *internal.QueryResponse) (*QueryRespo
 	}
 
 	return &QueryResponse{
-		Results:   results,
-		Profiles:  profiles,
-		IsSuccess: true,
+		results:  results,
+		profiles: profiles,
+		Success:  true,
 	}, nil
+}
+
+// Results returns all results in the response
+func (qr *QueryResponse) Results() []*QueryResult {
+	return qr.results
 }
 
 // Result returns the first result or nil
 func (qr *QueryResponse) Result() *QueryResult {
-	if qr.Results == nil || len(qr.Results) == 0 {
+	if len(qr.results) == 0 {
 		return nil
 	}
-	return qr.Results[0]
+	return qr.results[0]
+}
+
+// Profiles returns all profiles in the response
+func (qr *QueryResponse) Profiles() []*ProfileItem {
+	return qr.profiles
+}
+
+// Profile returns the first profile or nil
+func (qr *QueryResponse) Profile() *ProfileItem {
+	if len(qr.profiles) == 0 {
+		return nil
+	}
+	return qr.profiles[0]
 }
 
 // QueryResult represent one of the results in the response
 type QueryResult struct {
-	BitmapResult *BitmapResult
-	CountItems   []*CountResultItem
-	Count        uint64
+	Bitmap     *BitmapResult
+	CountItems []*CountResultItem
+	Count      uint64
 }
 
 func newQueryResultFromInternal(result *internal.QueryResult) (*QueryResult, error) {
@@ -70,9 +88,9 @@ func newQueryResultFromInternal(result *internal.QueryResult) (*QueryResult, err
 		}
 	}
 	return &QueryResult{
-		BitmapResult: bitmapResult,
-		CountItems:   countItemsFromInternal(result.Pairs),
-		Count:        result.N,
+		Bitmap:     bitmapResult,
+		CountItems: countItemsFromInternal(result.Pairs),
+		Count:      result.N,
 	}, nil
 }
 

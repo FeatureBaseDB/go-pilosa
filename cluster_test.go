@@ -3,16 +3,16 @@ package pilosa
 import "testing"
 
 func TestNewClusterWithHost(t *testing.T) {
-	c := NewClusterWithHost(NewURI())
+	c := NewClusterWithHost(DefaultURI())
 	hosts := c.Hosts()
-	if len(hosts) != 1 || !hosts[0].Equals(NewURI()) {
+	if len(hosts) != 1 || !hosts[0].Equals(DefaultURI()) {
 		t.Fail()
 	}
 }
 
 func TestAddHost(t *testing.T) {
 	const addr = "http://localhost:3000"
-	c := NewCluster()
+	c := DefaultCluster()
 	if c.Hosts() == nil {
 		t.Fatalf("Hosts should not be nil")
 	}
@@ -32,12 +32,28 @@ func TestAddHost(t *testing.T) {
 }
 
 func TestHosts(t *testing.T) {
-	c := NewCluster()
+	c := DefaultCluster()
 	if c.Host() != nil {
 		t.Fatalf("Hosts with empty cluster should return nil")
 	}
-	c = NewClusterWithHost(NewURI())
-	if !c.Host().Equals(NewURI()) {
+	c = NewClusterWithHost(DefaultURI())
+	if !c.Host().Equals(DefaultURI()) {
 		t.Fatalf("Host should return a value if there are hosts in the cluster")
+	}
+}
+
+func TestRemoveHost(t *testing.T) {
+	uri, err := NewURIFromAddress("db1.pilosa.com:9999")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := NewClusterWithHost(uri)
+	if len(c.hosts) != 1 {
+		t.Fatalf("The cluster should contain the host")
+	}
+	uri, err = NewURIFromAddress("db1.pilosa.com:9999")
+	c.RemoveHost(uri)
+	if len(c.hosts) != 0 {
+		t.Fatalf("The cluster should not contain the host")
 	}
 }

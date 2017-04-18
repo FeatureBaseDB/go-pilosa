@@ -15,7 +15,7 @@ var b3 = sampleFrame.Bitmap(42)
 var b4 = collabFrame.Bitmap(2)
 
 func TestNewDatabase(t *testing.T) {
-	db, err := NewDatabase("db-name")
+	db, err := NewDatabase("db-name", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,26 +24,19 @@ func TestNewDatabase(t *testing.T) {
 	}
 }
 
-func TestNewDatabaseWithInvalidColumnLabel(t *testing.T) {
-	_, err := NewDatabaseWithColumnLabel("foo", "$$INVALID$$")
-	if err == nil {
-		t.Fatal()
-	}
-}
-
 func TestNewDatabaseWithInvalidName(t *testing.T) {
-	_, err := NewDatabase("$FOO")
+	_, err := NewDatabase("$FOO", nil)
 	if err == nil {
 		t.Fatal()
 	}
 }
 
 func TestNewFrameWithInvalidName(t *testing.T) {
-	db, err := NewDatabase("foo")
+	db, err := NewDatabase("foo", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.FrameWithRowLabel("$$INVALIDFRAME$$", "label")
+	_, err = db.Frame("$$INVALIDFRAME$$", nil)
 	if err == nil {
 		t.Fatal(err)
 	}
@@ -60,7 +53,7 @@ func TestBitmap(t *testing.T) {
 
 func TestSetBit(t *testing.T) {
 	comparePQL(t,
-		"SetBit(id=5, frame='sample-frame', profileID=10)",
+		"SetBit(id=5, frame='sample-frame', col_id=10)",
 		sampleFrame.SetBit(5, 10))
 	comparePQL(t,
 		"SetBit(project=10, frame='collaboration', user=20)",
@@ -69,7 +62,7 @@ func TestSetBit(t *testing.T) {
 
 func TestClearBit(t *testing.T) {
 	comparePQL(t,
-		"ClearBit(id=5, frame='sample-frame', profileID=10)",
+		"ClearBit(id=5, frame='sample-frame', col_id=10)",
 		sampleFrame.ClearBit(5, 10))
 	comparePQL(t,
 		"ClearBit(project=10, frame='collaboration', user=20)",
@@ -198,6 +191,27 @@ func TestSetBitmapAttrsInvalidAttr(t *testing.T) {
 	}
 }
 
+func TestBatchQuery(t *testing.T) {
+	q := sampleDb.BatchQuery()
+	if q.Database() != sampleDb {
+		t.Fatalf("The correct database should be assigned")
+	}
+	q.Add(sampleFrame.Bitmap(44))
+	q.Add(sampleFrame.Bitmap(10101))
+	if q.Error() != nil {
+		t.Fatalf("Error should be nil")
+	}
+	comparePQL(t, "Bitmap(id=44, frame='sample-frame')Bitmap(id=10101, frame='sample-frame')", q)
+}
+
+func TestBatchQueryWithError(t *testing.T) {
+	q := sampleDb.BatchQuery()
+	q.Add(sampleFrame.FilterFieldTopN(12, collabFrame.Bitmap(7), "$invalid$", 80, 81))
+	if q.Error() == nil {
+		t.Fatalf("The error must be set")
+	}
+}
+
 func TestCount(t *testing.T) {
 	q := projectDb.Count(collabFrame.Bitmap(42))
 	comparePQL(t, "Count(Bitmap(project=42, frame='collaboration'))", q)
@@ -211,6 +225,23 @@ func TestRange(t *testing.T) {
 		collabFrame.Range(10, start, end))
 }
 
+func TestInvalidColumnLabelFails(t *testing.T) {
+	options := DefaultDatabaseOptions()
+	err := options.SetColumnLabel("$$INVALID$$")
+	if err == nil {
+		t.Fatalf("Setting invalid column label should fail")
+	}
+
+}
+
+func TestInvalidRowLabelFails(t *testing.T) {
+	options := DefaultFrameOptions()
+	err := options.SetRowLabel("$INVALID$")
+	if err == nil {
+		t.Fatalf("Creating frame options with invalid row label should fail")
+	}
+}
+
 func comparePQL(t *testing.T, target string, q PQLQuery) {
 	pql := q.String()
 	if pql != target {
@@ -220,10 +251,16 @@ func comparePQL(t *testing.T, target string, q PQLQuery) {
 
 func mustNewDatabase(name string, columnLabel string) (db *Database) {
 	var err error
+	var options *DatabaseOptions
 	if columnLabel != "" {
-		db, err = NewDatabaseWithColumnLabel(name, columnLabel)
+		options = DefaultDatabaseOptions()
+		err = options.SetColumnLabel(columnLabel)
+		if err != nil {
+			panic(err)
+		}
+		db, err = NewDatabase(name, options)
 	} else {
-		db, err = NewDatabase(name)
+		db, err = NewDatabase(name, nil)
 	}
 	if err != nil {
 		panic(err)
@@ -233,10 +270,16 @@ func mustNewDatabase(name string, columnLabel string) (db *Database) {
 
 func mustNewFrame(db *Database, name string, rowLabel string) (frame *Frame) {
 	var err error
+	var options *FrameOptions
 	if rowLabel != "" {
-		frame, err = db.FrameWithRowLabel(name, rowLabel)
+		options = DefaultFrameOptions()
+		err = options.SetRowLabel(rowLabel)
+		if err != nil {
+			panic(err)
+		}
+		frame, err = db.Frame(name, options)
 	} else {
-		frame, err = db.Frame(name)
+		frame, err = db.Frame(name, nil)
 	}
 	if err != nil {
 		panic(err)

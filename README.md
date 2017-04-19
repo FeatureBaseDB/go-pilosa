@@ -160,6 +160,7 @@ query := repository.RawQuery("Bitmap(frame='stargazer', stargazer_id=5)")
 Please check [Pilosa documentation](https://www.pilosa.com/docs) for PQL details. Here is a list of methods corresponding to PQL calls:
 
 Database:
+
 * `Union(bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, ...) *PQLBitmapQuery`
 * `Intersect(bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, ...) *PQLBitmapQuery`
 * `Difference(bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, ...) *PQLBitmapQuery`
@@ -167,6 +168,7 @@ Database:
 * `SetProfileAttrs(columnID uint64, attrs map[string]interface{}) *PQLBaseQuery`
 
 Frame:
+
 * `Bitmap(rowID uint64) *PQLBitmapQuery`
 * `SetBit(rowID uint64, columnID uint64) *PQLBaseQuery`
 * `ClearBit(rowID uint64, columnID uint64) *PQLBaseQuery`
@@ -184,6 +186,7 @@ A Pilosa URI has the `${SCHEME}://${HOST}:${PORT}` format:
 * **Port**: Port number. Default: `10101`.
 
 All parts of the URI are optional, but at least one of them must be specified. The following are equivalent:
+
 * `http://localhost:10101`
 * `http://localhost`
 * `http://:10101`
@@ -254,14 +257,14 @@ Once you create a client, you can create databases, frames and start sending que
 Here is how you would create a database and frame:
 
 ```go
-// repository database was created before
+// materialize repository database instance initialized before
 err := client.CreateDatabase(repository)
 
-// stargazer frame was created before
+// materialize stargazer frame instance initialized before
 err :=client.CreateFrame(stargazer)
 ```
 
-If the database or frame was created before, non-nil errors would be returned. You can use `EnsureDatabase` and `EnsureFrame` functions to ignore existing databases and frames.
+If the database or frame exists on the server, non-nil errors would be returned. You can use `EnsureDatabase` and `EnsureFrame` functions to ignore existing databases and frames.
 
 You can send queries to a Pilosa server using the `Query` function of the `Client` struct:
 
@@ -321,6 +324,7 @@ for profile = range response.Profiles() {
 ```
 
 `QueryResult` objects contain
+
 * `Bitmap` field to retrieve a bitmap result,
 * `CountItems` fied to retrieve column count per row ID entries returned from `TopN` queries,
 * `Count` field to retrieve the number of rows per the given row ID returned from `Count` queries.

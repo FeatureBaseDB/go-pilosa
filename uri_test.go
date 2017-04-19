@@ -10,7 +10,10 @@ func TestDefaultURI(t *testing.T) {
 }
 
 func TestURIWithHostPort(t *testing.T) {
-	uri := NewURIFromHostPort("db1.pilosa.com", 3333)
+	uri, err := NewURIFromHostPort("db1.pilosa.com", 3333)
+	if err != nil {
+		t.Fatal(err)
+	}
 	compare(t, uri, "http", "db1.pilosa.com", 3333)
 }
 

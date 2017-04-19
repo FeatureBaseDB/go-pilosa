@@ -48,7 +48,7 @@ func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, e
 		return nil, err
 	}
 	if options == nil {
-		options = DefaultQueryOptions()
+		options = &QueryOptions{}
 	}
 	data := makeRequestData(query.Database().name, query.String(), options)
 	_, buf, err := c.httpRequest("POST", "/query", data, rawResponse)
@@ -73,12 +73,12 @@ func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, e
 // CreateDatabase creates a database with default options
 func (c *Client) CreateDatabase(database *Database) error {
 	data := []byte(fmt.Sprintf(`{"db": "%s", "options": {"columnLabel": "%s"}}`,
-		database.name, database.options.columnLabel))
+		database.name, database.options.ColumnLabel))
 	_, _, err := c.httpRequest("POST", "/db", data, noResponse)
 	if err != nil {
 		return err
 	}
-	if database.options.timeQuantum != TimeQuantumNone {
+	if database.options.TimeQuantum != TimeQuantumNone {
 		err = c.patchDatabaseTimeQuantum(database)
 	}
 	return err
@@ -88,12 +88,12 @@ func (c *Client) CreateDatabase(database *Database) error {
 // CreateFrame creates a frame with default options
 func (c *Client) CreateFrame(frame *Frame) error {
 	data := []byte(fmt.Sprintf(`{"db": "%s", "frame": "%s", "options": {"rowLabel": "%s"}}`,
-		frame.database.name, frame.name, frame.options.rowLabel))
+		frame.database.name, frame.name, frame.options.RowLabel))
 	_, _, err := c.httpRequest("POST", "/frame", data, noResponse)
 	if err != nil {
 		return err
 	}
-	if frame.options.timeQuantum != TimeQuantumNone {
+	if frame.options.TimeQuantum != TimeQuantumNone {
 		err = c.patchFrameTimeQuantum(frame)
 	}
 	return err
@@ -149,14 +149,14 @@ func (c *Client) Schema() (*Schema, error) {
 }
 
 func (c *Client) patchDatabaseTimeQuantum(database *Database) error {
-	data := []byte(fmt.Sprintf(`{"db": "%s", "time_quantum": "%s"}`, database.name, database.options.timeQuantum))
+	data := []byte(fmt.Sprintf(`{"db": "%s", "time_quantum": "%s"}`, database.name, database.options.TimeQuantum))
 	_, _, err := c.httpRequest("PATCH", "/db/time_quantum", data, noResponse)
 	return err
 }
 
 func (c *Client) patchFrameTimeQuantum(frame *Frame) error {
 	data := []byte(fmt.Sprintf(`{"db": "%s", "frame": "%s", "time_quantum": "%s"}`,
-		frame.database.name, frame.name, frame.options.timeQuantum))
+		frame.database.name, frame.name, frame.options.TimeQuantum))
 	_, _, err := c.httpRequest("PATCH", "/frame/time_quantum", data, noResponse)
 	return err
 }
@@ -244,11 +244,6 @@ type ClientOptions struct {
 	TotalPoolSize    int
 }
 
-// DefaultClientOptions creates ClientOptions with defaults
-func DefaultClientOptions() *ClientOptions {
-	return (&ClientOptions{}).withDefaults()
-}
-
 func (options *ClientOptions) withDefaults() (updated *ClientOptions) {
 	// copy options so the original is not updated
 	updated = &ClientOptions{}
@@ -272,11 +267,6 @@ func (options *ClientOptions) withDefaults() (updated *ClientOptions) {
 // QueryOptions contains options that can be sent with a query
 type QueryOptions struct {
 	Profiles bool
-}
-
-// DefaultQueryOptions creates QueryOptions with defaults
-func DefaultQueryOptions() *QueryOptions {
-	return &QueryOptions{}
 }
 
 // Schema contains the database and frame metadata

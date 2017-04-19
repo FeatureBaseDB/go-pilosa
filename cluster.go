@@ -13,10 +13,12 @@ func DefaultCluster() *Cluster {
 	}
 }
 
-// NewClusterWithHost creates a Cluster with the given address
-func NewClusterWithHost(host *URI) *Cluster {
+// NewClusterWithHost creates a Cluster with the given URIs
+func NewClusterWithHost(hosts ...*URI) *Cluster {
 	cluster := DefaultCluster()
-	cluster.AddHost(host)
+	for _, host := range hosts {
+		cluster.AddHost(host)
+	}
 	return cluster
 }
 

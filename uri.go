@@ -27,12 +27,13 @@ func DefaultURI() *URI {
 }
 
 // NewURIFromHostPort returns a URI with specified host and port
-func NewURIFromHostPort(host string, port uint16) *URI {
+func NewURIFromHostPort(host string, port uint16) (*URI, error) {
+	// TODO: validate host
 	return &URI{
 		scheme: "http",
 		host:   host,
 		port:   port,
-	}
+	}, nil
 }
 
 // NewURIFromAddress parses the passed address and returns a URI

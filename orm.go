@@ -100,30 +100,19 @@ func (q *PQLBatchQuery) Add(query PQLQuery) {
 
 // DatabaseOptions contains the options for a Pilosa database
 type DatabaseOptions struct {
-	columnLabel string
-	timeQuantum TimeQuantum
+	ColumnLabel string
+	TimeQuantum TimeQuantum
 }
 
-// DefaultDatabaseOptions returns database options with defaults
-func DefaultDatabaseOptions() *DatabaseOptions {
-	return &DatabaseOptions{
-		columnLabel: "col_id",
-		timeQuantum: TimeQuantumNone,
+func (options *DatabaseOptions) withDefaults() (updated *DatabaseOptions) {
+	// copy options so the original is not updated
+	updated = &DatabaseOptions{}
+	*updated = *options
+	// impose defaults
+	if updated.ColumnLabel == "" {
+		updated.ColumnLabel = "col_id"
 	}
-}
-
-// SetColumnLabel sets the column label of a Database
-func (opt *DatabaseOptions) SetColumnLabel(label string) error {
-	if err := validateLabel(label); err != nil {
-		return err
-	}
-	opt.columnLabel = label
-	return nil
-}
-
-// SetTimeQuantum sets the time quantum of a Database
-func (opt *DatabaseOptions) SetTimeQuantum(quantum TimeQuantum) {
-	opt.timeQuantum = quantum
+	return
 }
 
 // NewPQLBitmapQuery creates a new PqlBitmapQuery
@@ -147,7 +136,11 @@ func NewDatabase(name string, options *DatabaseOptions) (*Database, error) {
 		return nil, err
 	}
 	if options == nil {
-		options = DefaultDatabaseOptions()
+		options = &DatabaseOptions{}
+	}
+	options = options.withDefaults()
+	if err := validateLabel(options.ColumnLabel); err != nil {
+		return nil, err
 	}
 	return &Database{
 		name:    name,
@@ -163,9 +156,13 @@ func (d *Database) Name() string {
 // Frame creates the info for a Pilosa frame with default options
 func (d *Database) Frame(name string, options *FrameOptions) (*Frame, error) {
 	if options == nil {
-		options = DefaultFrameOptions()
+		options = &FrameOptions{}
 	}
 	if err := validateFrameName(name); err != nil {
+		return nil, err
+	}
+	options = options.withDefaults()
+	if err := validateLabel(options.RowLabel); err != nil {
 		return nil, err
 	}
 	return &Frame{
@@ -215,7 +212,7 @@ func (d *Database) SetProfileAttrs(columnID uint64, attrs map[string]interface{}
 		return NewPQLBaseQuery("", d, err)
 	}
 	return NewPQLBaseQuery(fmt.Sprintf("SetProfileAttrs(%s=%d, %s)",
-		d.options.columnLabel, columnID, attrsString), d, nil)
+		d.options.ColumnLabel, columnID, attrsString), d, nil)
 }
 
 func (d *Database) bitmapOperation(name string, bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
@@ -244,30 +241,19 @@ type FrameInfo struct {
 
 // FrameOptions contains frame options
 type FrameOptions struct {
-	rowLabel    string
-	timeQuantum TimeQuantum
+	RowLabel    string
+	TimeQuantum TimeQuantum
 }
 
-// DefaultFrameOptions creates frame options with the defaults
-func DefaultFrameOptions() *FrameOptions {
-	return &FrameOptions{
-		rowLabel:    "id",
-		timeQuantum: TimeQuantumNone,
+func (options *FrameOptions) withDefaults() (updated *FrameOptions) {
+	// copy options so the original is not updated
+	updated = &FrameOptions{}
+	*updated = *options
+	// impose defaults
+	if updated.RowLabel == "" {
+		updated.RowLabel = "id"
 	}
-}
-
-// SetRowLabel sets the row label of the Frame
-func (opt *FrameOptions) SetRowLabel(label string) error {
-	if err := validateLabel(label); err != nil {
-		return err
-	}
-	opt.rowLabel = label
-	return nil
-}
-
-// SetTimeQuantum sets the time quantum of the Frame
-func (opt *FrameOptions) SetTimeQuantum(quantum TimeQuantum) {
-	opt.timeQuantum = quantum
+	return
 }
 
 // Frame is a Pilosa frame
@@ -280,19 +266,19 @@ type Frame struct {
 // Bitmap creates a bitmap query
 func (f *Frame) Bitmap(rowID uint64) *PQLBitmapQuery {
 	return NewPQLBitmapQuery(fmt.Sprintf("Bitmap(%s=%d, frame='%s')",
-		f.options.rowLabel, rowID, f.name), f.database, nil)
+		f.options.RowLabel, rowID, f.name), f.database, nil)
 }
 
 // SetBit creates a SetBit query
 func (f *Frame) SetBit(rowID uint64, columnID uint64) *PQLBaseQuery {
 	return NewPQLBaseQuery(fmt.Sprintf("SetBit(%s=%d, frame='%s', %s=%d)",
-		f.options.rowLabel, rowID, f.name, f.database.options.columnLabel, columnID), f.database, nil)
+		f.options.RowLabel, rowID, f.name, f.database.options.ColumnLabel, columnID), f.database, nil)
 }
 
 // ClearBit creates a ClearBit query
 func (f *Frame) ClearBit(rowID uint64, columnID uint64) *PQLBaseQuery {
 	return NewPQLBaseQuery(fmt.Sprintf("ClearBit(%s=%d, frame='%s', %s=%d)",
-		f.options.rowLabel, rowID, f.name, f.database.options.columnLabel, columnID), f.database, nil)
+		f.options.RowLabel, rowID, f.name, f.database.options.ColumnLabel, columnID), f.database, nil)
 }
 
 // TopN creates a TopN query with the given item count
@@ -319,6 +305,12 @@ func (f *Frame) FilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, 
 		bitmap, f.name, n, field, string(b)), f.database, nil)
 }
 
+// Range creates a Range query
+func (f *Frame) Range(rowID uint64, start time.Time, end time.Time) *PQLBitmapQuery {
+	return NewPQLBitmapQuery(fmt.Sprintf("Range(%s=%d, frame='%s', start='%s', end='%s')",
+		f.options.RowLabel, rowID, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.database, nil)
+}
+
 // SetBitmapAttrs creates a SetBitmapAttrs query
 func (f *Frame) SetBitmapAttrs(rowID uint64, attrs map[string]interface{}) *PQLBaseQuery {
 	attrsString, err := createAttributesString(attrs)
@@ -326,13 +318,7 @@ func (f *Frame) SetBitmapAttrs(rowID uint64, attrs map[string]interface{}) *PQLB
 		return NewPQLBaseQuery("", f.database, err)
 	}
 	return NewPQLBaseQuery(fmt.Sprintf("SetBitmapAttrs(%s=%d, frame='%s', %s)",
-		f.options.rowLabel, rowID, f.name, attrsString), f.database, nil)
-}
-
-// Range creates a Range query
-func (f *Frame) Range(rowID uint64, start time.Time, end time.Time) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("Range(%s=%d, frame='%s', start='%s', end='%s')",
-		f.options.rowLabel, rowID, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.database, nil)
+		f.options.RowLabel, rowID, f.name, attrsString), f.database, nil)
 }
 
 func createAttributesString(attrs map[string]interface{}) (string, error) {

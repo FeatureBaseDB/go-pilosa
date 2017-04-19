@@ -38,7 +38,7 @@ func TestNewFrameWithInvalidName(t *testing.T) {
 	}
 	_, err = db.Frame("$$INVALIDFRAME$$", nil)
 	if err == nil {
-		t.Fatal(err)
+		t.Fatal("Creating frames with invalid row labels should fail")
 	}
 }
 
@@ -226,8 +226,10 @@ func TestRange(t *testing.T) {
 }
 
 func TestInvalidColumnLabelFails(t *testing.T) {
-	options := DefaultDatabaseOptions()
-	err := options.SetColumnLabel("$$INVALID$$")
+	options := &DatabaseOptions{
+		ColumnLabel: "$$INVALID$$",
+	}
+	_, err := NewDatabase("foo", options)
 	if err == nil {
 		t.Fatalf("Setting invalid column label should fail")
 	}
@@ -235,10 +237,10 @@ func TestInvalidColumnLabelFails(t *testing.T) {
 }
 
 func TestInvalidRowLabelFails(t *testing.T) {
-	options := DefaultFrameOptions()
-	err := options.SetRowLabel("$INVALID$")
+	options := &FrameOptions{RowLabel: "$INVALID$"}
+	_, err := sampleDb.Frame("foo", options)
 	if err == nil {
-		t.Fatalf("Creating frame options with invalid row label should fail")
+		t.Fatalf("Creating frames with invalid row label should fail")
 	}
 }
 
@@ -253,8 +255,7 @@ func mustNewDatabase(name string, columnLabel string) (db *Database) {
 	var err error
 	var options *DatabaseOptions
 	if columnLabel != "" {
-		options = DefaultDatabaseOptions()
-		err = options.SetColumnLabel(columnLabel)
+		options = &DatabaseOptions{ColumnLabel: columnLabel}
 		if err != nil {
 			panic(err)
 		}
@@ -272,8 +273,7 @@ func mustNewFrame(db *Database, name string, rowLabel string) (frame *Frame) {
 	var err error
 	var options *FrameOptions
 	if rowLabel != "" {
-		options = DefaultFrameOptions()
-		err = options.SetRowLabel(rowLabel)
+		options = &FrameOptions{RowLabel: rowLabel}
 		if err != nil {
 			panic(err)
 		}

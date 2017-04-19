@@ -156,8 +156,7 @@ func TestEnsureDatabaseExists(t *testing.T) {
 
 func TestCreateDatabaseWithTimeQuantum(t *testing.T) {
 	client := getClient()
-	options := DefaultDatabaseOptions()
-	options.SetTimeQuantum(TimeQuantumYear)
+	options := &DatabaseOptions{TimeQuantum: TimeQuantumYear}
 	db, err := NewDatabase("db-with-timequantum", options)
 	if err != nil {
 		t.Fatal(err)
@@ -179,8 +178,7 @@ func TestEnsureFrameExists(t *testing.T) {
 
 func TestCreateFrameWithTimeQuantum(t *testing.T) {
 	client := getClient()
-	options := DefaultFrameOptions()
-	options.SetTimeQuantum(TimeQuantumYear)
+	options := &FrameOptions{TimeQuantum: TimeQuantumYear}
 	frame, err := db.Frame("frame-with-timequantum", options)
 	if err != nil {
 		t.Fatal(err)

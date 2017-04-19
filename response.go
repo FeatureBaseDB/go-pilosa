@@ -128,7 +128,7 @@ func newBitmapResultFromInternal(bitmap *internal.Bitmap) (*BitmapResult, error)
 
 const (
 	stringType = 1
-	uintType   = 2
+	intType    = 2
 	boolType   = 3
 	floatType  = 4
 )
@@ -139,8 +139,8 @@ func convertInternalAttrsToMap(attrs []*internal.Attr) (attrsMap map[string]inte
 		switch attr.Type {
 		case stringType:
 			attrsMap[attr.Key] = attr.StringValue
-		case uintType:
-			attrsMap[attr.Key] = attr.UintValue
+		case intType:
+			attrsMap[attr.Key] = attr.IntValue
 		case boolType:
 			attrsMap[attr.Key] = attr.BoolValue
 		case floatType:

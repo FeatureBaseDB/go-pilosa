@@ -50,8 +50,9 @@ func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, e
 	if options == nil {
 		options = &QueryOptions{}
 	}
-	data := makeRequestData(query.Database().name, query.String(), options)
-	_, buf, err := c.httpRequest("POST", "/query", data, rawResponse)
+	data := makeRequestData(query.String(), options)
+	path := fmt.Sprintf("/db/%s/query", query.Database().name)
+	_, buf, err := c.httpRequest("POST", path, data, rawResponse)
 	if err != nil {
 		return nil, err
 	}
@@ -72,9 +73,11 @@ func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, e
 
 // CreateDatabase creates a database with default options
 func (c *Client) CreateDatabase(database *Database) error {
-	data := []byte(fmt.Sprintf(`{"db": "%s", "options": {"columnLabel": "%s"}}`,
-		database.name, database.options.ColumnLabel))
-	_, _, err := c.httpRequest("POST", "/db", data, noResponse)
+	data := []byte(fmt.Sprintf(`{"options": {"columnLabel": "%s"}}`,
+		database.options.ColumnLabel))
+	path := fmt.Sprintf("/db/%s", database.name)
+	_, _, err := c.httpRequest("POST", path,
+		data, noResponse)
 	if err != nil {
 		return err
 	}
@@ -87,9 +90,10 @@ func (c *Client) CreateDatabase(database *Database) error {
 
 // CreateFrame creates a frame with default options
 func (c *Client) CreateFrame(frame *Frame) error {
-	data := []byte(fmt.Sprintf(`{"db": "%s", "frame": "%s", "options": {"rowLabel": "%s"}}`,
-		frame.database.name, frame.name, frame.options.RowLabel))
-	_, _, err := c.httpRequest("POST", "/frame", data, noResponse)
+	data := []byte(fmt.Sprintf(`{"options": {"rowLabel": "%s"}}`,
+		frame.options.RowLabel))
+	path := fmt.Sprintf("/db/%s/frame/%s", frame.database.name, frame.name)
+	_, _, err := c.httpRequest("POST", path, data, noResponse)
 	if err != nil {
 		return err
 	}
@@ -120,17 +124,16 @@ func (c *Client) EnsureFrame(frame *Frame) error {
 
 // DeleteDatabase deletes a database
 func (c *Client) DeleteDatabase(database *Database) error {
-	data := []byte(fmt.Sprintf(`{"db": "%s"}`, database.name))
-	_, _, err := c.httpRequest("DELETE", "/db", data, noResponse)
+	path := fmt.Sprintf("/db/%s", database.name)
+	_, _, err := c.httpRequest("DELETE", path, nil, noResponse)
 	return err
 
 }
 
 // DeleteFrame deletes a frame with default options
 func (c *Client) DeleteFrame(frame *Frame) error {
-	data := []byte(fmt.Sprintf(`{"db": "%s", "frame": "%s"}`,
-		frame.database.name, frame.name))
-	_, _, err := c.httpRequest("DELETE", "/frame", data, noResponse)
+	path := fmt.Sprintf("/db/%s/frame/%s", frame.database.name, frame.name)
+	_, _, err := c.httpRequest("DELETE", path, nil, noResponse)
 	return err
 }
 
@@ -149,15 +152,17 @@ func (c *Client) Schema() (*Schema, error) {
 }
 
 func (c *Client) patchDatabaseTimeQuantum(database *Database) error {
-	data := []byte(fmt.Sprintf(`{"db": "%s", "time_quantum": "%s"}`, database.name, database.options.TimeQuantum))
-	_, _, err := c.httpRequest("PATCH", "/db/time_quantum", data, noResponse)
+	data := []byte(fmt.Sprintf(`{"time_quantum": "%s"}`, database.options.TimeQuantum))
+	path := fmt.Sprintf("/db/%s/time-quantum", database.name)
+	_, _, err := c.httpRequest("PATCH", path, data, noResponse)
 	return err
 }
 
 func (c *Client) patchFrameTimeQuantum(frame *Frame) error {
 	data := []byte(fmt.Sprintf(`{"db": "%s", "frame": "%s", "time_quantum": "%s"}`,
 		frame.database.name, frame.name, frame.options.TimeQuantum))
-	_, _, err := c.httpRequest("PATCH", "/frame/time_quantum", data, noResponse)
+	path := fmt.Sprintf("/db/%s/frame/%s/time-quantum", frame.database.name, frame.name)
+	_, _, err := c.httpRequest("PATCH", path, data, noResponse)
 	return err
 }
 
@@ -165,6 +170,9 @@ func (c *Client) httpRequest(method string, path string, data []byte, returnResp
 	addr := c.cluster.Host()
 	if addr == nil {
 		return nil, nil, ErrorEmptyCluster
+	}
+	if data == nil {
+		data = []byte{}
 	}
 	request, err := http.NewRequest(method, addr.Normalize()+path, bytes.NewReader(data))
 	if err != nil {
@@ -215,9 +223,8 @@ func newHTTPClient(options *ClientOptions) *http.Client {
 	}
 }
 
-func makeRequestData(databaseName string, query string, options *QueryOptions) []byte {
+func makeRequestData(query string, options *QueryOptions) []byte {
 	request := &internal.QueryRequest{
-		DB:       databaseName,
 		Query:    query,
 		Profiles: options.Profiles,
 	}

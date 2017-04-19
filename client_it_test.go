@@ -86,7 +86,7 @@ func TestQueryWithProfiles(t *testing.T) {
 	client := getClient()
 	targetAttrs := map[string]interface{}{
 		"name":       "some string",
-		"age":        uint64(95),
+		"age":        int64(95),
 		"registered": true,
 		"height":     1.83,
 	}

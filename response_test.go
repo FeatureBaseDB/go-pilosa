@@ -10,14 +10,14 @@ import (
 func TestNewBitmapResultFromInternal(t *testing.T) {
 	targetAttrs := map[string]interface{}{
 		"name":       "some string",
-		"age":        uint64(95),
+		"age":        int64(95),
 		"registered": true,
 		"height":     1.83,
 	}
 	targetBits := []uint64{5, 10}
 	attrs := []*internal.Attr{
 		&internal.Attr{Key: "name", StringValue: "some string", Type: 1},
-		&internal.Attr{Key: "age", UintValue: 95, Type: 2},
+		&internal.Attr{Key: "age", IntValue: 95, Type: 2},
 		&internal.Attr{Key: "registered", BoolValue: true, Type: 3},
 		&internal.Attr{Key: "height", FloatValue: 1.83, Type: 4},
 	}
@@ -41,7 +41,7 @@ func TestNewBitmapResultFromInternal(t *testing.T) {
 func TestNewQueryResponseFromInternal(t *testing.T) {
 	targetAttrs := map[string]interface{}{
 		"name":       "some string",
-		"age":        uint64(95),
+		"age":        int64(95),
 		"registered": true,
 		"height":     1.83,
 	}
@@ -51,7 +51,7 @@ func TestNewQueryResponseFromInternal(t *testing.T) {
 	}
 	attrs := []*internal.Attr{
 		&internal.Attr{Key: "name", StringValue: "some string", Type: 1},
-		&internal.Attr{Key: "age", UintValue: 95, Type: 2},
+		&internal.Attr{Key: "age", IntValue: 95, Type: 2},
 		&internal.Attr{Key: "registered", BoolValue: true, Type: 3},
 		&internal.Attr{Key: "height", FloatValue: 1.83, Type: 4},
 	}

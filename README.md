@@ -12,7 +12,7 @@ Go client for Pilosa high performance database.
 
 ## Requirements
 
-* Go 1.8
+* Go 1.7 and higher
 
 ## Install
 

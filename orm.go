@@ -115,6 +115,10 @@ func (options *DatabaseOptions) withDefaults() (updated *DatabaseOptions) {
 	return
 }
 
+func (options DatabaseOptions) String() string {
+	return fmt.Sprintf(`{"options": {"columnLabel": "%s"}}`, options.ColumnLabel)
+}
+
 // NewPQLBitmapQuery creates a new PqlBitmapQuery
 func NewPQLBitmapQuery(pql string, database *Database, err error) *PQLBitmapQuery {
 	return &PQLBitmapQuery{
@@ -173,10 +177,14 @@ func (d *Database) Frame(name string, options *FrameOptions) (*Frame, error) {
 }
 
 // BatchQuery creates a batch query
-func (d *Database) BatchQuery() *PQLBatchQuery {
+func (d *Database) BatchQuery(queries ...PQLQuery) *PQLBatchQuery {
+	stringQueries := make([]string, 0, len(queries))
+	for _, query := range queries {
+		stringQueries = append(stringQueries, query.String())
+	}
 	return &PQLBatchQuery{
 		database: d,
-		queries:  make([]string, 0),
+		queries:  stringQueries,
 	}
 }
 
@@ -241,8 +249,9 @@ type FrameInfo struct {
 
 // FrameOptions contains frame options
 type FrameOptions struct {
-	RowLabel    string
-	TimeQuantum TimeQuantum
+	RowLabel       string
+	TimeQuantum    TimeQuantum
+	InverseEnabled bool
 }
 
 func (options *FrameOptions) withDefaults() (updated *FrameOptions) {
@@ -256,6 +265,11 @@ func (options *FrameOptions) withDefaults() (updated *FrameOptions) {
 	return
 }
 
+func (options FrameOptions) String() string {
+	return fmt.Sprintf(`{"options": {"rowLabel": "%s", "inverseEnabled": %v}}`,
+		options.RowLabel, options.InverseEnabled)
+}
+
 // Frame is a Pilosa frame
 type Frame struct {
 	name     string
@@ -267,6 +281,15 @@ type Frame struct {
 func (f *Frame) Bitmap(rowID uint64) *PQLBitmapQuery {
 	return NewPQLBitmapQuery(fmt.Sprintf("Bitmap(%s=%d, frame='%s')",
 		f.options.RowLabel, rowID, f.name), f.database, nil)
+}
+
+// InverseBitmap creates an inverse bitmap query
+func (f *Frame) InverseBitmap(columnID uint64) *PQLBaseQuery {
+	if !f.options.InverseEnabled {
+		return NewPQLBaseQuery("", f.database, ErrorInverseBitmapsNotEnabled)
+	}
+	return NewPQLBaseQuery(fmt.Sprintf("Bitmap(%s=%d, frame='%s')",
+		f.database.options.ColumnLabel, columnID, f.name), f.database, nil)
 }
 
 // SetBit creates a SetBit query

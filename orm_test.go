@@ -51,6 +51,20 @@ func TestBitmap(t *testing.T) {
 		collabFrame.Bitmap(10))
 }
 
+func TestInverseBitmap(t *testing.T) {
+	options := &FrameOptions{
+		RowLabel:       "row_label",
+		InverseEnabled: true,
+	}
+	f1, err := projectDb.Frame("f1-inversable", options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	comparePQL(t,
+		"Bitmap(user=5, frame='f1-inversable')",
+		f1.InverseBitmap(5))
+}
+
 func TestSetBit(t *testing.T) {
 	comparePQL(t,
 		"SetBit(id=5, frame='sample-frame', col_id=10)",
@@ -241,6 +255,17 @@ func TestInvalidRowLabelFails(t *testing.T) {
 	_, err := sampleDb.Frame("foo", options)
 	if err == nil {
 		t.Fatalf("Creating frames with invalid row label should fail")
+	}
+}
+
+func TestInverseBitmapFailsIfNotEnabled(t *testing.T) {
+	frame, err := sampleDb.Frame("inverse-not-enabled", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	qry := frame.InverseBitmap(5)
+	if qry.Error == nil {
+		t.Fatalf("Creating InverseBitmap query for a frame without inverse frame enabled should fail")
 	}
 }
 

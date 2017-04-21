@@ -221,6 +221,50 @@ func TestQueryWithEmptyClusterFails(t *testing.T) {
 	}
 }
 
+func TestQueryInverseBitmap(t *testing.T) {
+	client := getClient()
+	options := &FrameOptions{
+		RowLabel:       "row_label",
+		InverseEnabled: true,
+	}
+	f1, err := db.Frame("f1-inversable", options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureFrame(f1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.Query(
+		db.BatchQuery(
+			f1.SetBit(1000, 5000),
+			f1.SetBit(1000, 6000),
+			f1.SetBit(3000, 5000)), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := client.Query(
+		db.BatchQuery(
+			f1.Bitmap(1000),
+			f1.InverseBitmap(5000)), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Results()) != 2 {
+		t.Fatalf("Response should contain 2 results")
+	}
+	bits1 := response.Results()[0].Bitmap.Bits
+	targetBits1 := []uint64{5000, 6000}
+	if !reflect.DeepEqual(targetBits1, bits1) {
+		t.Fatalf("bits should be: %v, but it is: %v", targetBits1, bits1)
+	}
+	bits2 := response.Results()[1].Bitmap.Bits
+	targetBits2 := []uint64{1000, 3000}
+	if !reflect.DeepEqual(targetBits2, bits2) {
+		t.Fatalf("bits should be: %v, but it is: %v", targetBits2, bits2)
+	}
+}
+
 func TestQueryFailsIfAddressNotResolved(t *testing.T) {
 	uri, _ := NewURIFromAddress("nonexisting.domain.pilosa.com:3456")
 	client := NewClientWithURI(uri)

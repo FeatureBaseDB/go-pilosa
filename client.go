@@ -73,8 +73,7 @@ func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, e
 
 // CreateDatabase creates a database with default options
 func (c *Client) CreateDatabase(database *Database) error {
-	data := []byte(fmt.Sprintf(`{"options": {"columnLabel": "%s"}}`,
-		database.options.ColumnLabel))
+	data := []byte(database.options.String())
 	path := fmt.Sprintf("/db/%s", database.name)
 	_, _, err := c.httpRequest("POST", path,
 		data, noResponse)
@@ -90,8 +89,7 @@ func (c *Client) CreateDatabase(database *Database) error {
 
 // CreateFrame creates a frame with default options
 func (c *Client) CreateFrame(frame *Frame) error {
-	data := []byte(fmt.Sprintf(`{"options": {"rowLabel": "%s"}}`,
-		frame.options.RowLabel))
+	data := []byte(frame.options.String())
 	path := fmt.Sprintf("/db/%s/frame/%s", frame.database.name, frame.name)
 	_, _, err := c.httpRequest("POST", path, data, noResponse)
 	if err != nil {

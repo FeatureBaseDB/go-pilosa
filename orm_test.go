@@ -270,7 +270,7 @@ func TestInverseBitmapFailsIfNotEnabled(t *testing.T) {
 }
 
 func comparePQL(t *testing.T, target string, q PQLQuery) {
-	pql := q.String()
+	pql := q.serialize()
 	if pql != target {
 		t.Fatalf("%s != %s", pql, target)
 	}

@@ -50,7 +50,7 @@ func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, e
 	if options == nil {
 		options = &QueryOptions{}
 	}
-	data := makeRequestData(query.String(), options)
+	data := makeRequestData(query.serialize(), options)
 	path := fmt.Sprintf("/db/%s/query", query.Database().name)
 	_, buf, err := c.httpRequest("POST", path, data, rawResponse)
 	if err != nil {

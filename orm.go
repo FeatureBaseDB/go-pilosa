@@ -13,7 +13,7 @@ const timeFormat = "2006-01-02T15:04"
 // PQLQuery is a interface for PQL queries
 type PQLQuery interface {
 	Database() *Database
-	String() string
+	serialize() string
 	Error() error
 }
 
@@ -38,8 +38,8 @@ func (q *PQLBaseQuery) Database() *Database {
 	return q.database
 }
 
-// String converts this query to string
-func (q *PQLBaseQuery) String() string {
+// serialize converts this query to string
+func (q *PQLBaseQuery) serialize() string {
 	return q.pql
 }
 
@@ -60,8 +60,8 @@ func (q *PQLBitmapQuery) Database() *Database {
 	return q.database
 }
 
-// String converts this query to string
-func (q *PQLBitmapQuery) String() string {
+// serialize converts this query to string
+func (q *PQLBitmapQuery) serialize() string {
 	return q.pql
 }
 
@@ -81,7 +81,7 @@ func (q *PQLBatchQuery) Database() *Database {
 	return q.database
 }
 
-func (q *PQLBatchQuery) String() string {
+func (q *PQLBatchQuery) serialize() string {
 	return strings.Join(q.queries, "")
 }
 
@@ -95,7 +95,7 @@ func (q *PQLBatchQuery) Add(query PQLQuery) {
 	if err != nil {
 		q.err = err
 	}
-	q.queries = append(q.queries, query.String())
+	q.queries = append(q.queries, query.serialize())
 }
 
 // DatabaseOptions contains the options for a Pilosa database
@@ -180,7 +180,7 @@ func (d *Database) Frame(name string, options *FrameOptions) (*Frame, error) {
 func (d *Database) BatchQuery(queries ...PQLQuery) *PQLBatchQuery {
 	stringQueries := make([]string, 0, len(queries))
 	for _, query := range queries {
-		stringQueries = append(stringQueries, query.String())
+		stringQueries = append(stringQueries, query.serialize())
 	}
 	return &PQLBatchQuery{
 		database: d,
@@ -210,7 +210,7 @@ func (d *Database) Difference(bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, 
 
 // Count creates a Count query
 func (d *Database) Count(bitmap *PQLBitmapQuery) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("Count(%s)", bitmap.String()), d, nil)
+	return NewPQLBaseQuery(fmt.Sprintf("Count(%s)", bitmap.serialize()), d, nil)
 }
 
 // SetProfileAttrs creates a SetProfileAttrs query
@@ -232,12 +232,12 @@ func (d *Database) bitmapOperation(name string, bitmap1 *PQLBitmapQuery, bitmap2
 		return NewPQLBitmapQuery("", d, err)
 	}
 	args := make([]string, 0, 2+len(bitmaps))
-	args = append(args, bitmap1.String(), bitmap2.String())
+	args = append(args, bitmap1.serialize(), bitmap2.serialize())
 	for _, bitmap := range bitmaps {
 		if err = bitmap.Error(); err != nil {
 			return NewPQLBitmapQuery("", d, err)
 		}
-		args = append(args, bitmap.String())
+		args = append(args, bitmap.serialize())
 	}
 	return NewPQLBitmapQuery(fmt.Sprintf("%s(%s)", name, strings.Join(args, ", ")), d, nil)
 }
@@ -312,7 +312,7 @@ func (f *Frame) TopN(n uint64) *PQLBitmapQuery {
 // BitmapTopN creates a TopN query with the given item count and bitmap
 func (f *Frame) BitmapTopN(n uint64, bitmap *PQLBitmapQuery) *PQLBitmapQuery {
 	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d)",
-		bitmap, f.name, n), f.database, nil)
+		bitmap.serialize(), f.name, n), f.database, nil)
 }
 
 // FilterFieldTopN creates a TopN query with the given item count, bitmap, field and the filter for that field
@@ -325,7 +325,7 @@ func (f *Frame) FilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, 
 		return NewPQLBitmapQuery("", f.database, err)
 	}
 	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d, field='%s', %s)",
-		bitmap, f.name, n, field, string(b)), f.database, nil)
+		bitmap.serialize(), f.name, n, field, string(b)), f.database, nil)
 }
 
 // Range creates a Range query

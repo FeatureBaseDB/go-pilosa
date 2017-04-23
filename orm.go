@@ -213,13 +213,13 @@ func (d *Database) Count(bitmap *PQLBitmapQuery) *PQLBaseQuery {
 	return NewPQLBaseQuery(fmt.Sprintf("Count(%s)", bitmap.serialize()), d, nil)
 }
 
-// SetProfileAttrs creates a SetProfileAttrs query
-func (d *Database) SetProfileAttrs(columnID uint64, attrs map[string]interface{}) *PQLBaseQuery {
+// SetColumnAttrs creates a SetColumnAttrs query
+func (d *Database) SetColumnAttrs(columnID uint64, attrs map[string]interface{}) *PQLBaseQuery {
 	attrsString, err := createAttributesString(attrs)
 	if err != nil {
 		return NewPQLBaseQuery("", d, err)
 	}
-	return NewPQLBaseQuery(fmt.Sprintf("SetProfileAttrs(%s=%d, %s)",
+	return NewPQLBaseQuery(fmt.Sprintf("SetColumnAttrs(%s=%d, %s)",
 		d.options.ColumnLabel, columnID, attrsString), d, nil)
 }
 
@@ -334,13 +334,13 @@ func (f *Frame) Range(rowID uint64, start time.Time, end time.Time) *PQLBitmapQu
 		f.options.RowLabel, rowID, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.database, nil)
 }
 
-// SetBitmapAttrs creates a SetBitmapAttrs query
-func (f *Frame) SetBitmapAttrs(rowID uint64, attrs map[string]interface{}) *PQLBaseQuery {
+// SetRowAttrs creates a SetRowAttrs query
+func (f *Frame) SetRowAttrs(rowID uint64, attrs map[string]interface{}) *PQLBaseQuery {
 	attrsString, err := createAttributesString(attrs)
 	if err != nil {
 		return NewPQLBaseQuery("", f.database, err)
 	}
-	return NewPQLBaseQuery(fmt.Sprintf("SetBitmapAttrs(%s=%d, frame='%s', %s)",
+	return NewPQLBaseQuery(fmt.Sprintf("SetRowAttrs(%s=%d, frame='%s', %s)",
 		f.options.RowLabel, rowID, f.name, attrsString), f.database, nil)
 }
 

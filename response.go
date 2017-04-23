@@ -9,7 +9,7 @@ import (
 // QueryResponse represents the response from a Pilosa query
 type QueryResponse struct {
 	results      []*QueryResult
-	profiles     []*ProfileItem
+	columns      []*ColumnItem
 	ErrorMessage string
 	Success      bool
 }
@@ -29,19 +29,19 @@ func newQueryResponseFromInternal(response *internal.QueryResponse) (*QueryRespo
 		}
 		results = append(results, result)
 	}
-	profiles := make([]*ProfileItem, 0, len(response.Profiles))
-	for _, p := range response.Profiles {
-		profileItem, err := newProfileItemFromInternal(p)
+	columns := make([]*ColumnItem, 0, len(response.ColumnAttrSets))
+	for _, p := range response.ColumnAttrSets {
+		columnItem, err := newColumnItemFromInternal(p)
 		if err != nil {
 			return nil, err
 		}
-		profiles = append(profiles, profileItem)
+		columns = append(columns, columnItem)
 	}
 
 	return &QueryResponse{
-		results:  results,
-		profiles: profiles,
-		Success:  true,
+		results: results,
+		columns: columns,
+		Success: true,
 	}, nil
 }
 
@@ -58,17 +58,17 @@ func (qr *QueryResponse) Result() *QueryResult {
 	return qr.results[0]
 }
 
-// Profiles returns all profiles in the response
-func (qr *QueryResponse) Profiles() []*ProfileItem {
-	return qr.profiles
+// Columns returns all columns in the response
+func (qr *QueryResponse) Columns() []*ColumnItem {
+	return qr.columns
 }
 
-// Profile returns the first profile or nil
-func (qr *QueryResponse) Profile() *ProfileItem {
-	if len(qr.profiles) == 0 {
+// Column returns the first column or nil
+func (qr *QueryResponse) Column() *ColumnItem {
+	if len(qr.columns) == 0 {
 		return nil
 	}
-	return qr.profiles[0]
+	return qr.columns[0]
 }
 
 // QueryResult represent one of the results in the response
@@ -153,19 +153,19 @@ func convertInternalAttrsToMap(attrs []*internal.Attr) (attrsMap map[string]inte
 	return attrsMap, nil
 }
 
-// ProfileItem representes a column in the database
-type ProfileItem struct {
+// ColumnItem representes a column in the database
+type ColumnItem struct {
 	ID         uint64
 	Attributes map[string]interface{}
 }
 
-func newProfileItemFromInternal(profile *internal.Profile) (*ProfileItem, error) {
-	attrs, err := convertInternalAttrsToMap(profile.Attrs)
+func newColumnItemFromInternal(column *internal.ColumnAttrSet) (*ColumnItem, error) {
+	attrs, err := convertInternalAttrsToMap(column.Attrs)
 	if err != nil {
 		return nil, err
 	}
-	return &ProfileItem{
-		ID:         profile.ID,
+	return &ColumnItem{
+		ID:         column.ID,
 		Attributes: attrs,
 	}, nil
 }

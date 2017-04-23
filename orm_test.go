@@ -164,43 +164,43 @@ func TestBitmapOperationInvalidArg(t *testing.T) {
 	}
 }
 
-func TestSetProfileAttrsTest(t *testing.T) {
+func TestSetColumnAttrsTest(t *testing.T) {
 	attrs := map[string]interface{}{
 		"quote": "\"Don't worry, be happy\"",
 		"happy": true,
 	}
 	comparePQL(t,
-		"SetProfileAttrs(user=5, happy=true, quote=\"\\\"Don't worry, be happy\\\"\")",
-		projectDb.SetProfileAttrs(5, attrs))
+		"SetColumnAttrs(user=5, happy=true, quote=\"\\\"Don't worry, be happy\\\"\")",
+		projectDb.SetColumnAttrs(5, attrs))
 }
 
-func TestSetProfileAttrsInvalidAttr(t *testing.T) {
+func TestSetColumnAttrsInvalidAttr(t *testing.T) {
 	attrs := map[string]interface{}{
 		"color":     "blue",
 		"$invalid$": true,
 	}
-	if projectDb.SetProfileAttrs(5, attrs).Error() == nil {
+	if projectDb.SetColumnAttrs(5, attrs).Error() == nil {
 		t.Fatalf("Should have failed")
 	}
 }
 
-func TestSetBitmapAttrsTest(t *testing.T) {
+func TestSetRowAttrsTest(t *testing.T) {
 	attrs := map[string]interface{}{
 		"quote":  "\"Don't worry, be happy\"",
 		"active": true,
 	}
 
 	comparePQL(t,
-		"SetBitmapAttrs(project=5, frame='collaboration', active=true, quote=\"\\\"Don't worry, be happy\\\"\")",
-		collabFrame.SetBitmapAttrs(5, attrs))
+		"SetRowAttrs(project=5, frame='collaboration', active=true, quote=\"\\\"Don't worry, be happy\\\"\")",
+		collabFrame.SetRowAttrs(5, attrs))
 }
 
-func TestSetBitmapAttrsInvalidAttr(t *testing.T) {
+func TestSetRowAttrsInvalidAttr(t *testing.T) {
 	attrs := map[string]interface{}{
 		"color":     "blue",
 		"$invalid$": true,
 	}
-	if collabFrame.SetBitmapAttrs(5, attrs).Error() == nil {
+	if collabFrame.SetRowAttrs(5, attrs).Error() == nil {
 		t.Fatalf("Should have failed")
 	}
 }

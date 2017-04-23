@@ -223,8 +223,8 @@ func newHTTPClient(options *ClientOptions) *http.Client {
 
 func makeRequestData(query string, options *QueryOptions) []byte {
 	request := &internal.QueryRequest{
-		Query:    query,
-		Profiles: options.Profiles,
+		Query:       query,
+		ColumnAttrs: options.Columns,
 	}
 	r, _ := proto.Marshal(request)
 	// request.Marshal never returns an error
@@ -271,7 +271,7 @@ func (options *ClientOptions) withDefaults() (updated *ClientOptions) {
 
 // QueryOptions contains options that can be sent with a query
 type QueryOptions struct {
-	Profiles bool
+	Columns bool
 }
 
 // Schema contains the database and frame metadata

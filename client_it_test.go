@@ -81,7 +81,7 @@ func TestClientReturnsResponse(t *testing.T) {
 	}
 }
 
-func TestQueryWithProfiles(t *testing.T) {
+func TestQueryWithColumns(t *testing.T) {
 	Reset()
 	client := getClient()
 	targetAttrs := map[string]interface{}{
@@ -94,30 +94,56 @@ func TestQueryWithProfiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := client.Query(db.RawQuery("SetProfileAttrs(id=100, name='some string', age=95, registered=true, height=1.83)"), nil)
+	response, err := client.Query(db.SetColumnAttrs(100, targetAttrs), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response.Profile() != nil {
-		t.Fatalf("No profiles should be returned if it wasn't explicitly requested")
+	if response.Column() != nil {
+		t.Fatalf("No columns should be returned if it wasn't explicitly requested")
 	}
-	response, err = client.Query(testFrame.Bitmap(1), &QueryOptions{Profiles: true})
+	response, err = client.Query(testFrame.Bitmap(1), &QueryOptions{Columns: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	profiles := response.Profiles()
-	if len(profiles) != 1 {
-		t.Fatalf("Profile count should be == 1")
+	columns := response.Columns()
+	if len(columns) != 1 {
+		t.Fatalf("Column count should be == 1")
 	}
-	if profiles[0].ID != 100 {
-		t.Fatalf("Profile ID should be == 100")
+	if columns[0].ID != 100 {
+		t.Fatalf("Column ID should be == 100")
 	}
-	if !reflect.DeepEqual(profiles[0].Attributes, targetAttrs) {
-		t.Fatalf("Protile attrs does not match")
+	if !reflect.DeepEqual(columns[0].Attributes, targetAttrs) {
+		t.Fatalf("Column attrs does not match")
 	}
 
-	if !reflect.DeepEqual(response.Profile(), profiles[0]) {
-		t.Fatalf("Profile() should be equivalent to first profile in the response")
+	if !reflect.DeepEqual(response.Column(), columns[0]) {
+		t.Fatalf("Columns() should be equivalent to first column in the response")
+	}
+}
+
+func TestSetRowAttrs(t *testing.T) {
+	Reset()
+	client := getClient()
+	targetAttrs := map[string]interface{}{
+		"name":       "some string",
+		"age":        int64(95),
+		"registered": true,
+		"height":     1.83,
+	}
+	_, err := client.Query(testFrame.SetBit(1, 100), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.Query(testFrame.SetRowAttrs(1, targetAttrs), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := client.Query(testFrame.Bitmap(1), &QueryOptions{Columns: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(targetAttrs, response.Result().Bitmap.Attributes) {
+		t.Fatalf("Bitmap attributes should be set")
 	}
 }
 
@@ -384,8 +410,8 @@ func TestInvalidSchema(t *testing.T) {
 func TestResponseWithInvalidType(t *testing.T) {
 	qr := &internal.QueryResponse{
 		Err: "",
-		Profiles: []*internal.Profile{
-			&internal.Profile{
+		ColumnAttrSets: []*internal.ColumnAttrSet{
+			&internal.ColumnAttrSet{
 				ID: 0,
 				Attrs: []*internal.Attr{
 					&internal.Attr{

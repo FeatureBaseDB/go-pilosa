@@ -132,7 +132,7 @@ func TestNewQueryResponseFromInternalFailure(t *testing.T) {
 		t.Fatalf("Should have failed")
 	}
 	response = &internal.QueryResponse{
-		Profiles: []*internal.Profile{&internal.Profile{ID: 1, Attrs: attrs}},
+		ColumnAttrSets: []*internal.ColumnAttrSet{&internal.ColumnAttrSet{ID: 1, Attrs: attrs}},
 	}
 	qr, err = newQueryResponseFromInternal(response)
 	if qr != nil && err == nil {

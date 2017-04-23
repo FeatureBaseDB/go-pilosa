@@ -5,34 +5,34 @@ import (
 	"time"
 )
 
-var sampleDb = mustNewDatabase("sample-db", "")
+var sampleDb = mustNewIndex("sample-db", "")
 var sampleFrame = mustNewFrame(sampleDb, "sample-frame", "")
-var projectDb = mustNewDatabase("project-db", "user")
+var projectDb = mustNewIndex("project-db", "user")
 var collabFrame = mustNewFrame(projectDb, "collaboration", "project")
 var b1 = sampleFrame.Bitmap(10)
 var b2 = sampleFrame.Bitmap(20)
 var b3 = sampleFrame.Bitmap(42)
 var b4 = collabFrame.Bitmap(2)
 
-func TestNewDatabase(t *testing.T) {
-	db, err := NewDatabase("db-name", nil)
+func TestNewIndex(t *testing.T) {
+	db, err := NewIndex("db-name", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if db.Name() != "db-name" {
-		t.Fatalf("database name was not set")
+		t.Fatalf("index name was not set")
 	}
 }
 
-func TestNewDatabaseWithInvalidName(t *testing.T) {
-	_, err := NewDatabase("$FOO", nil)
+func TestNewIndexWithInvalidName(t *testing.T) {
+	_, err := NewIndex("$FOO", nil)
 	if err == nil {
 		t.Fatal()
 	}
 }
 
 func TestNewFrameWithInvalidName(t *testing.T) {
-	db, err := NewDatabase("foo", nil)
+	db, err := NewIndex("foo", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,8 +207,8 @@ func TestSetRowAttrsInvalidAttr(t *testing.T) {
 
 func TestBatchQuery(t *testing.T) {
 	q := sampleDb.BatchQuery()
-	if q.Database() != sampleDb {
-		t.Fatalf("The correct database should be assigned")
+	if q.Index() != sampleDb {
+		t.Fatalf("The correct index should be assigned")
 	}
 	q.Add(sampleFrame.Bitmap(44))
 	q.Add(sampleFrame.Bitmap(10101))
@@ -240,10 +240,10 @@ func TestRange(t *testing.T) {
 }
 
 func TestInvalidColumnLabelFails(t *testing.T) {
-	options := &DatabaseOptions{
+	options := &IndexOptions{
 		ColumnLabel: "$$INVALID$$",
 	}
-	_, err := NewDatabase("foo", options)
+	_, err := NewIndex("foo", options)
 	if err == nil {
 		t.Fatalf("Setting invalid column label should fail")
 	}
@@ -276,17 +276,17 @@ func comparePQL(t *testing.T, target string, q PQLQuery) {
 	}
 }
 
-func mustNewDatabase(name string, columnLabel string) (db *Database) {
+func mustNewIndex(name string, columnLabel string) (db *Index) {
 	var err error
-	var options *DatabaseOptions
+	var options *IndexOptions
 	if columnLabel != "" {
-		options = &DatabaseOptions{ColumnLabel: columnLabel}
+		options = &IndexOptions{ColumnLabel: columnLabel}
 		if err != nil {
 			panic(err)
 		}
-		db, err = NewDatabase(name, options)
+		db, err = NewIndex(name, options)
 	} else {
-		db, err = NewDatabase(name, nil)
+		db, err = NewIndex(name, nil)
 	}
 	if err != nil {
 		panic(err)
@@ -294,7 +294,7 @@ func mustNewDatabase(name string, columnLabel string) (db *Database) {
 	return
 }
 
-func mustNewFrame(db *Database, name string, rowLabel string) (frame *Frame) {
+func mustNewFrame(db *Index, name string, rowLabel string) (frame *Frame) {
 	var err error
 	var options *FrameOptions
 	if rowLabel != "" {

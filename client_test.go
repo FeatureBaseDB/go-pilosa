@@ -9,7 +9,7 @@ import (
 func TestQueryWithError(t *testing.T) {
 	var err error
 	client := pilosa.DefaultClient()
-	db, err := pilosa.NewDatabase("foo", nil)
+	db, err := pilosa.NewIndex("foo", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

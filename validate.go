@@ -5,18 +5,18 @@ import (
 )
 
 const (
-	maxDatabaseName = 64
-	maxFrameName    = 64
-	maxLabel        = 64
+	maxIndexName = 64
+	maxFrameName = 64
+	maxLabel     = 64
 )
 
-var databaseNameRegex = regexp.MustCompile("^[a-z0-9_-]+$")
+var indexNameRegex = regexp.MustCompile("^[a-z0-9_-]+$")
 var frameNameRegex = regexp.MustCompile("^[a-z0-9][.a-z0-9_-]*$")
 var labelRegex = regexp.MustCompile("^[a-zA-Z][a-zA-Z0-9_]*$")
 
-// ValidDatabaseName returns true if the given database name is valid, otherwise false
-func ValidDatabaseName(name string) bool {
-	return len(name) <= maxDatabaseName && databaseNameRegex.Match([]byte(name))
+// ValidIndexName returns true if the given index name is valid, otherwise false
+func ValidIndexName(name string) bool {
+	return len(name) <= maxIndexName && indexNameRegex.Match([]byte(name))
 }
 
 // ValidFrameName returns true if the given frame name is valid, otherwise false
@@ -29,11 +29,11 @@ func ValidLabel(label string) bool {
 	return len(label) <= maxLabel && labelRegex.Match([]byte(label))
 }
 
-func validateDatabaseName(name string) error {
-	if ValidDatabaseName(name) {
+func validateIndexName(name string) error {
+	if ValidIndexName(name) {
 		return nil
 	}
-	return ErrorInvalidDatabaseName
+	return ErrorInvalidIndexName
 }
 
 func validateFrameName(name string) error {

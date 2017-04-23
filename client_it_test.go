@@ -16,16 +16,16 @@ import (
 	"github.com/pilosa/go-client-pilosa/internal"
 )
 
-var db *Database
+var index *Index
 var testFrame *Frame
 
 func TestMain(m *testing.M) {
 	var err error
-	db, err = NewDatabase("go-testdb", nil)
+	index, err = NewIndex("go-testdb", nil)
 	if err != nil {
 		panic(err)
 	}
-	testFrame, err = db.Frame("test-frame", nil)
+	testFrame, err = index.Frame("test-frame", nil)
 	if err != nil {
 		panic(err)
 	}
@@ -38,7 +38,7 @@ func TestMain(m *testing.M) {
 
 func Setup() {
 	client := getClient()
-	err := client.EnsureDatabase(db)
+	err := client.EnsureIndex(index)
 	if err != nil {
 		panic(err)
 	}
@@ -50,7 +50,7 @@ func Setup() {
 
 func TearDown() {
 	client := getClient()
-	err := client.DeleteDatabase(db)
+	err := client.DeleteIndex(index)
 	if err != nil {
 		panic(err)
 	}
@@ -58,8 +58,8 @@ func TearDown() {
 
 func Reset() {
 	client := getClient()
-	client.DeleteDatabase(db)
-	client.CreateDatabase(db)
+	client.DeleteIndex(index)
+	client.CreateIndex(index)
 	client.CreateFrame(testFrame)
 }
 
@@ -94,7 +94,7 @@ func TestQueryWithColumns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := client.Query(db.SetColumnAttrs(100, targetAttrs), nil)
+	response, err := client.Query(index.SetColumnAttrs(100, targetAttrs), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,14 +147,14 @@ func TestSetRowAttrs(t *testing.T) {
 	}
 }
 
-func TestCreateDeleteDatabaseFrame(t *testing.T) {
+func TestCreateDeleteIndexFrame(t *testing.T) {
 	client := getClient()
-	db1, err := NewDatabase("to-be-deleted", nil)
+	index1, err := NewIndex("to-be-deleted", nil)
 	if err != nil {
 		panic(err)
 	}
-	frame1, err := db1.Frame("foo", nil)
-	err = client.CreateDatabase(db1)
+	frame1, err := index1.Frame("foo", nil)
+	err = client.CreateIndex(index1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,29 +166,29 @@ func TestCreateDeleteDatabaseFrame(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.DeleteDatabase(db1)
+	err = client.DeleteIndex(index1)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestEnsureDatabaseExists(t *testing.T) {
+func TestEnsureIndexExists(t *testing.T) {
 	client := getClient()
-	err := client.EnsureDatabase(db)
+	err := client.EnsureIndex(index)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestCreateDatabaseWithTimeQuantum(t *testing.T) {
+func TestCreateIndexWithTimeQuantum(t *testing.T) {
 	client := getClient()
-	options := &DatabaseOptions{TimeQuantum: TimeQuantumYear}
-	db, err := NewDatabase("db-with-timequantum", options)
+	options := &IndexOptions{TimeQuantum: TimeQuantumYear}
+	index, err := NewIndex("db-with-timequantum", options)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.CreateDatabase(db)
-	defer client.DeleteDatabase(db)
+	err = client.CreateIndex(index)
+	defer client.DeleteIndex(index)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +205,7 @@ func TestEnsureFrameExists(t *testing.T) {
 func TestCreateFrameWithTimeQuantum(t *testing.T) {
 	client := getClient()
 	options := &FrameOptions{TimeQuantum: TimeQuantumYear}
-	frame, err := db.Frame("frame-with-timequantum", options)
+	frame, err := index.Frame("frame-with-timequantum", options)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,9 +215,9 @@ func TestCreateFrameWithTimeQuantum(t *testing.T) {
 	}
 }
 
-func TestErrorCreatingDatabase(t *testing.T) {
+func TestErrorCreatingIndex(t *testing.T) {
 	client := getClient()
-	err := client.CreateDatabase(db)
+	err := client.CreateIndex(index)
 	if err == nil {
 		t.Fatal()
 	}
@@ -231,17 +231,17 @@ func TestErrorCreatingFrame(t *testing.T) {
 	}
 }
 
-func TestDatabaseAlreadyExists(t *testing.T) {
+func TestIndexAlreadyExists(t *testing.T) {
 	client := getClient()
-	err := client.CreateDatabase(db)
-	if err != ErrorDatabaseExists {
+	err := client.CreateIndex(index)
+	if err != ErrorIndexExists {
 		t.Fatal(err)
 	}
 }
 
 func TestQueryWithEmptyClusterFails(t *testing.T) {
 	client := NewClientWithCluster(DefaultCluster(), nil)
-	_, err := client.Query(db.RawQuery("won't run"), nil)
+	_, err := client.Query(index.RawQuery("won't run"), nil)
 	if err != ErrorEmptyCluster {
 		t.Fatal(err)
 	}
@@ -253,7 +253,7 @@ func TestQueryInverseBitmap(t *testing.T) {
 		RowLabel:       "row_label",
 		InverseEnabled: true,
 	}
-	f1, err := db.Frame("f1-inversable", options)
+	f1, err := index.Frame("f1-inversable", options)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +262,7 @@ func TestQueryInverseBitmap(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = client.Query(
-		db.BatchQuery(
+		index.BatchQuery(
 			f1.SetBit(1000, 5000),
 			f1.SetBit(1000, 6000),
 			f1.SetBit(3000, 5000)), nil)
@@ -270,7 +270,7 @@ func TestQueryInverseBitmap(t *testing.T) {
 		t.Fatal(err)
 	}
 	response, err := client.Query(
-		db.BatchQuery(
+		index.BatchQuery(
 			f1.Bitmap(1000),
 			f1.InverseBitmap(5000)), nil)
 	if err != nil {
@@ -294,7 +294,7 @@ func TestQueryInverseBitmap(t *testing.T) {
 func TestQueryFailsIfAddressNotResolved(t *testing.T) {
 	uri, _ := NewURIFromAddress("nonexisting.domain.pilosa.com:3456")
 	client := NewClientWithURI(uri)
-	_, err := client.Query(db.RawQuery("bar"), nil)
+	_, err := client.Query(index.RawQuery("bar"), nil)
 	if err == nil {
 		t.Fatal()
 	}
@@ -302,7 +302,7 @@ func TestQueryFailsIfAddressNotResolved(t *testing.T) {
 
 func TestQueryFails(t *testing.T) {
 	client := getClient()
-	_, err := client.Query(db.RawQuery("Invalid query"), nil)
+	_, err := client.Query(index.RawQuery("Invalid query"), nil)
 	if err == nil {
 		t.Fatal()
 	}
@@ -352,7 +352,7 @@ func TestInvalidResponse(t *testing.T) {
 		panic(err)
 	}
 	client := NewClientWithURI(uri)
-	response, err := client.Query(db.RawQuery("don't care"), nil)
+	response, err := client.Query(index.RawQuery("don't care"), nil)
 	if err == nil {
 		t.Fatalf("Got response: %s", response)
 	}
@@ -365,10 +365,10 @@ func TestSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	// go-testdb should be in the schema
-	for _, db := range schema.DBs {
-		if db.Name == "go-testdb" {
+	for _, index := range schema.Indexes {
+		if index.Name == "go-testdb" {
 			// test-frame should be in the schema
-			for _, frame := range db.Frames {
+			for _, frame := range index.Frames {
 				if frame.Name == "test-frame" {
 					// OK!
 					return

@@ -4,7 +4,7 @@
 
 <img src="https://dc3kpxyuw05cb.cloudfront.net/img/ce.svg" style="float: right" align="right" height="301">
 
-Go client for Pilosa high performance database.
+Go client for Pilosa high performance index.
 
 ## Changelog
 
@@ -46,11 +46,11 @@ var err error
 // Create the default client
 client := pilosa.DefaultClient()
 
-// Create a Database object
-mydb, err := pilosa.NewDatabase("mydb", nil)
+// Create an Index object
+mydb, err := pilosa.NewIndex("mydb", nil)
 
-// Make sure the database exists on the server
-err = client.EnsureDatabase(mydb)
+// Make sure the index exists on the server
+err = client.EnsureIndex(mydb)
 
 // Create a Frame object
 myframe, err := mydb.Frame("myframe", nil)
@@ -66,7 +66,7 @@ response, err = client.Query(myframe.Bitmap(5), nil)
 
 // Get the result
 result := response.Result()
-// Deal with the result
+// Act on the result
 if result != nil {
     bits := result.Bitmap.Bits
     fmt.Println("Got bits: %v", bits)
@@ -81,41 +81,41 @@ response, err = client.Query(
 )
 
 for _, result := range reponse.Results() {
-    // Deal with the result
+    // Act on the result
 }
 
 ```
 
 ### Data Model and Queries
 
-#### Databases and Frames
+#### Indexes and Frames
 
-*Database* and *frame*s are the main data models of Pilosa. You can check the [Pilosa documentation](https://www.pilosa.com/docs) for more detail about the data model.
+*Index* and *frame*s are the main data models of Pilosa. You can check the [Pilosa documentation](https://www.pilosa.com/docs) for more detail about the data model.
 
-`NewDatabase` function is used to create a database object. Note that, this does not create a database on the server, the database object just defines the schema.
+`NewIndex` function is used to create an index object. Note that this does not create an index on the server; the index object simply defines the schema.
 
 ```go
-repository, err := NewDatabase("repository", nil)
+repository, err := NewIndex("repository", nil)
 ```
 
-Databases support changing the column label and time quantum (*resolution*). `DatabaseOptions` structs store that kind of data. In order to attach a `DatabaseOptions` struct to a `Database` struct, just pass it as the second argument to `NewDatabase`:
+Indexes support changing the column label and time quantum. In order to apply these custom options, pass an `IndexOptions` struct as the second argument to `NewIndex`:
 
 ```go
-options := &pilosa.DatabaseOptions{
+options := &pilosa.IndexOptions{
     ColumnLabel: "repo_id",
     TimeQuantum: TimeQuantumYearMonth,
 }
 
-repository, err := pilosa.NewDatabase("repository", options);
+repository, err := pilosa.NewIndex("repository", options);
 ```
 
-Frames are created with a call to `Frame` function of a database:
+Frames are created with a call to `Frame` function of an index:
 
 ```go
 stargazer, err := repository.Frame("stargazer", nil)
 ```
 
-Similar to database objects, you can pass custom options to frames:
+Similar to index objects, you can pass custom options to frames:
 
 ```go
 stargazerOptions, err := &pilosa.FrameOptions{
@@ -128,7 +128,7 @@ stargazer, err := repository.Frame("stargazer", stargazerOptions);
 
 #### Queries
 
-Once you have database and frame structs created, you can create queries for those. Some of the queries work on the columns; corresponding methods are attached to the database. Other queries work on rows, with related methods attached to frames.
+Once you have indexes and frame structs created, you can create queries for them. Some of the queries work on the columns; corresponding methods are attached to the index. Other queries work on rows with related methods attached to frames.
 
 For instance, `Bitmap` queries work on rows; use a frame object to create those queries:
 
@@ -136,13 +136,13 @@ For instance, `Bitmap` queries work on rows; use a frame object to create those 
 bitmapQuery := stargazer.Bitmap(1, 100)  // corresponds to PQL: Bitmap(frame='stargazer', stargazer_id=1)
 ```
 
-`Union` queries work on columns; use the database object to create them:
+`Union` queries work on columns; use the index object to create them:
 
 ```go
 query := repository.Union(bitmapQuery1, bitmapQuery2)
 ```
 
-In order to increase througput, you may want to batch queries sent to the Pilosa server. `database.BatchQuery` function is used for that purpose:
+In order to increase througput, you may want to batch queries sent to the Pilosa server. The `index.BatchQuery` function is used for that purpose:
 
 ```go
 query := repository.BatchQuery(
@@ -151,7 +151,7 @@ query := repository.BatchQuery(
 )
 ```
 
-The recommended way of creating query structs is, using dedicated methods attached to database and frame objects. But sometimes it would be desirable to send raw queries to Pilosa. You can use `database.RawQuery` method for that. Note that, query string is not validated before sending to the server:
+The recommended way of creating query structs is, using dedicated methods attached to index and frame objects. But sometimes it would be desirable to send raw queries to Pilosa. You can use `index.RawQuery` method for that. Note that query string is not validated before sending to the server:
 
 ```go
 query := repository.RawQuery("Bitmap(frame='stargazer', stargazer_id=5)")
@@ -159,13 +159,13 @@ query := repository.RawQuery("Bitmap(frame='stargazer', stargazer_id=5)")
 
 Please check [Pilosa documentation](https://www.pilosa.com/docs) for PQL details. Here is a list of methods corresponding to PQL calls:
 
-Database:
+Index:
 
 * `Union(bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, ...) *PQLBitmapQuery`
 * `Intersect(bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, ...) *PQLBitmapQuery`
 * `Difference(bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, ...) *PQLBitmapQuery`
 * `Count(bitmap *PQLBitmapQuery) *PQLBaseQuery`
-* `SetProfileAttrs(columnID uint64, attrs map[string]interface{}) *PQLBaseQuery`
+* `SetColumnAttrs(columnID uint64, attrs map[string]interface{}) *PQLBaseQuery`
 
 Frame:
 
@@ -194,7 +194,7 @@ All parts of the URI are optional, but at least one of them must be specified. T
 * `localhost`
 * `:10101`
 
-A Pilosa URI is represented by `pilosa.URI` struct. Below is a few ways to create `URI` objects:
+A Pilosa URI is represented by the `pilosa.URI` struct. Below are a few ways to create `URI` objects:
 
 ```go
 // create the default URI: http://localhost:10101
@@ -211,23 +211,23 @@ uri3, err := pilosa.NewURIFromHostPort("db1.pilosa.com", 20202);
 
 In order to interact with a Pilosa server, an instance of `pilosa.Client` should be created. The client is thread-safe and uses a pool of connections to the server, so we recommend creating a single instance of the client and sharing it when necessary.
 
-If the Pilosa server is running at the default address (`http://localhost:10101`) you can create the default client with default options using:
+If the Pilosa server is running at the default address (`http://localhost:10101`) you can create the client with default options using:
 
 ```go
 client := pilosa.DefaultClient()
 ```
 
-To use a a custom server address, you can use the `NewClientWithURI` function:
+To use a custom server address, use the `NewClientWithURI` function:
 
 ```go
 uri, err := pilosa.NewURIFromAddress("http://db1.pilosa.com:15000")
 if err != nil {
-    // Deal with the error
+    // Act on the error
 }
 client := pilosa.NewClientWithURI(uri)
 ```
 
-If you are running a cluster of Pilosa servers, you can create a `Cluster` struct that keeps addresses of those servers for increased robustness:
+If you are running a cluster of Pilosa servers, you can create a `Cluster` struct that keeps addresses of those servers:
 
 ```go
 uri1, err := pilosa.NewURIFromAddress(":10101")
@@ -252,19 +252,19 @@ options = &pilosa.ClientOptions{
 client := pilosa.NewClientWithCluster(cluster, options)
 ```
 
-Once you create a client, you can create databases, frames and start sending queries.
+Once you create a client, you can create indexes, frames and then start sending queries.
 
-Here is how you would create a database and frame:
+Here is how you would create a index and frame:
 
 ```go
-// materialize repository database instance initialized before
-err := client.CreateDatabase(repository)
+// materialize repository index instance initialized before
+err := client.CreateIndex(repository)
 
 // materialize stargazer frame instance initialized before
 err :=client.CreateFrame(stargazer)
 ```
 
-If the database or frame exists on the server, non-nil errors would be returned. You can use `EnsureDatabase` and `EnsureFrame` functions to ignore existing databases and frames.
+If the index or frame exists on the server, non-nil errors will be returned. You can use `EnsureIndex` and `EnsureFrame` functions to ignore existing indexes and frames.
 
 You can send queries to a Pilosa server using the `Query` function of the `Client` struct:
 
@@ -276,7 +276,7 @@ The second argument of `Query` function is of type `QueryOptions`:
 
 ```go
 options = &pilosa.QueryOptions{
-    Profiles: true,  // return column data in the response
+    Columns: true,  // return column data in the response
 }
 
 response := client.Query(frame.Bitmap(5), options)
@@ -284,46 +284,46 @@ response := client.Query(frame.Bitmap(5), options)
 
 ### Server Response
 
-When a query is sent to a Pilosa server, the server fulfills the query or sends an error message. In the latter case, a `PilosaError` struct is returned, otherwise a `QueryResponse` struct is returned.
+When a query is sent to a Pilosa server, the server either fulfills the query or sends an error message. In the case of an error, a `PilosaError` struct is returned, otherwise a `QueryResponse` struct is returned.
 
-A `QueryResponse` struct may contain zero or more results of `QueryResult` type. You can access all results using `Results` function of `QueryResponse`, which returns a list of `QueryResult` objects. Or, using `Result` method, which returns the first result if there are any or `nil` otherwise:
+A `QueryResponse` struct may contain zero or more results of `QueryResult` type. You can access all results using the `Results` function of `QueryResponse` (which returns a list of `QueryResult` objects), or you can use the `Result` method (which returns either the first result or `nil` if there are no results):
 
 ```go
 response, err := client.Query(frame.Bitmap(5). nil)
 if err != nil {
-    // deal with the error
+    // Act on the error
 }
 
 // check that there's a result and act on it
 result := response.Result()
 if result != nil {
-    // act on the result
+    // Act on the result
 }
 
-// iterate on all results
+// iterate over all results
 for result := range response.Results() {
-    // act on the result
+    // Act on the result
 }
 ```
 
-Similarly, a `QueryResponse` struct may include a number of profiles (column objects), if `Profiles` query option was set to `true`:
+Similarly, a `QueryResponse` struct may include a number of columns (column objects) if `Columns` query option was set to `true`:
 
 ```go
-var profile *pilosa.ProfileItem
+var column *pilosa.ColumnItem
 
-// check that there's a profile and act on it
-profile = response.Profile()
-if (profile != null) {
-    // act on the profile
+// check that there's a column and act on it
+column = response.Column()
+if (column != null) {
+    // Act on the column
 }
 
-// iterate on all profiles
-for profile = range response.Profiles() {
-    // act on the profile
+// iterate over all columns
+for column = range response.Columns() {
+    // Act on the column
 }
 ```
 
-`QueryResult` objects contain
+`QueryResult` objects contain:
 
 * `Bitmap` field to retrieve a bitmap result,
 * `CountItems` fied to retrieve column count per row ID entries returned from `TopN` queries,

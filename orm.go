@@ -298,6 +298,13 @@ func (f *Frame) SetBit(rowID uint64, columnID uint64) *PQLBaseQuery {
 		f.options.RowLabel, rowID, f.name, f.index.options.ColumnLabel, columnID), f.index, nil)
 }
 
+// SetBitTimestamp creates a SetBit query with timestamp
+func (f *Frame) SetBitTimestamp(rowID uint64, columnID uint64, timestamp time.Time) *PQLBaseQuery {
+	return NewPQLBaseQuery(fmt.Sprintf("SetBit(%s=%d, frame='%s', %s=%d, timestamp='%s')",
+		f.options.RowLabel, rowID, f.name, f.index.options.ColumnLabel, columnID, timestamp.Format(timeFormat)),
+		f.index, nil)
+}
+
 // ClearBit creates a ClearBit query
 func (f *Frame) ClearBit(rowID uint64, columnID uint64) *PQLBaseQuery {
 	return NewPQLBaseQuery(fmt.Sprintf("ClearBit(%s=%d, frame='%s', %s=%d)",

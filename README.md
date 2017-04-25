@@ -171,6 +171,7 @@ Frame:
 
 * `Bitmap(rowID uint64) *PQLBitmapQuery`
 * `SetBit(rowID uint64, columnID uint64) *PQLBaseQuery`
+* `SetBitTimestamp(rowID uint64, columnID uint64, timestamp time.Time) *PQLBaseQuery`
 * `ClearBit(rowID uint64, columnID uint64) *PQLBaseQuery`
 * `TopN(n uint64) *PQLBitmapQuery`
 * `BitmapTopN(n uint64, bitmap *PQLBitmapQuery) *PQLBitmapQuery`

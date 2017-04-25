@@ -51,7 +51,7 @@ func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, e
 		options = &QueryOptions{}
 	}
 	data := makeRequestData(query.serialize(), options)
-	path := fmt.Sprintf("/db/%s/query", query.Index().name)
+	path := fmt.Sprintf("/index/%s/query", query.Index().name)
 	_, buf, err := c.httpRequest("POST", path, data, rawResponse)
 	if err != nil {
 		return nil, err
@@ -74,7 +74,7 @@ func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, e
 // CreateIndex creates an index with default options
 func (c *Client) CreateIndex(index *Index) error {
 	data := []byte(index.options.String())
-	path := fmt.Sprintf("/db/%s", index.name)
+	path := fmt.Sprintf("/index/%s", index.name)
 	_, _, err := c.httpRequest("POST", path,
 		data, noResponse)
 	if err != nil {
@@ -90,7 +90,7 @@ func (c *Client) CreateIndex(index *Index) error {
 // CreateFrame creates a frame with default options
 func (c *Client) CreateFrame(frame *Frame) error {
 	data := []byte(frame.options.String())
-	path := fmt.Sprintf("/db/%s/frame/%s", frame.index.name, frame.name)
+	path := fmt.Sprintf("/index/%s/frame/%s", frame.index.name, frame.name)
 	_, _, err := c.httpRequest("POST", path, data, noResponse)
 	if err != nil {
 		return err
@@ -122,7 +122,7 @@ func (c *Client) EnsureFrame(frame *Frame) error {
 
 // DeleteIndex deletes an index
 func (c *Client) DeleteIndex(index *Index) error {
-	path := fmt.Sprintf("/db/%s", index.name)
+	path := fmt.Sprintf("/index/%s", index.name)
 	_, _, err := c.httpRequest("DELETE", path, nil, noResponse)
 	return err
 
@@ -130,14 +130,14 @@ func (c *Client) DeleteIndex(index *Index) error {
 
 // DeleteFrame deletes a frame with default options
 func (c *Client) DeleteFrame(frame *Frame) error {
-	path := fmt.Sprintf("/db/%s/frame/%s", frame.index.name, frame.name)
+	path := fmt.Sprintf("/index/%s/frame/%s", frame.index.name, frame.name)
 	_, _, err := c.httpRequest("DELETE", path, nil, noResponse)
 	return err
 }
 
 // Schema returns the indexes and frames of the server
 func (c *Client) Schema() (*Schema, error) {
-	_, buf, err := c.httpRequest("GET", "/schema", nil, errorCheckedResponse)
+	_, buf, err := c.httpRequest("GET", "/index", nil, errorCheckedResponse)
 	if err != nil {
 		return nil, err
 	}
@@ -150,16 +150,16 @@ func (c *Client) Schema() (*Schema, error) {
 }
 
 func (c *Client) patchIndexTimeQuantum(index *Index) error {
-	data := []byte(fmt.Sprintf(`{"time_quantum": "%s"}`, index.options.TimeQuantum))
-	path := fmt.Sprintf("/db/%s/time-quantum", index.name)
+	data := []byte(fmt.Sprintf(`{"timeQuantum": "%s"}`, index.options.TimeQuantum))
+	path := fmt.Sprintf("/index/%s/time-quantum", index.name)
 	_, _, err := c.httpRequest("PATCH", path, data, noResponse)
 	return err
 }
 
 func (c *Client) patchFrameTimeQuantum(frame *Frame) error {
-	data := []byte(fmt.Sprintf(`{"db": "%s", "frame": "%s", "time_quantum": "%s"}`,
+	data := []byte(fmt.Sprintf(`{"index": "%s", "frame": "%s", "timeQuantum": "%s"}`,
 		frame.index.name, frame.name, frame.options.TimeQuantum))
-	path := fmt.Sprintf("/db/%s/frame/%s/time-quantum", frame.index.name, frame.name)
+	path := fmt.Sprintf("/index/%s/frame/%s/time-quantum", frame.index.name, frame.name)
 	_, _, err := c.httpRequest("PATCH", path, data, noResponse)
 	return err
 }
@@ -233,7 +233,7 @@ func makeRequestData(query string, options *QueryOptions) []byte {
 
 func matchError(msg string) error {
 	switch msg {
-	case "database already exists\n":
+	case "index already exists\n":
 		return ErrorIndexExists
 	case "frame already exists\n":
 		return ErrorFrameExists
@@ -276,7 +276,7 @@ type QueryOptions struct {
 
 // Schema contains the index and frame metadata
 type Schema struct {
-	Indexes []*IndexInfo `json:"dbs"`
+	Indexes []*IndexInfo `json:"indexes"`
 }
 
 // IndexInfo represents schema information for an index

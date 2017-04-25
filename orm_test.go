@@ -74,6 +74,13 @@ func TestSetBit(t *testing.T) {
 		collabFrame.SetBit(10, 20))
 }
 
+func TestSetBitTimestamp(t *testing.T) {
+	timestamp := time.Date(2017, time.April, 24, 12, 14, 0, 0, time.UTC)
+	comparePQL(t,
+		"SetBit(project=10, frame='collaboration', user=20, timestamp='2017-04-24T12:14')",
+		collabFrame.SetBitTimestamp(10, 20, timestamp))
+}
+
 func TestClearBit(t *testing.T) {
 	comparePQL(t,
 		"ClearBit(id=5, frame='sample-frame', col_id=10)",

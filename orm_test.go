@@ -5,47 +5,40 @@ import (
 	"time"
 )
 
-var sampleDb = mustNewDatabase("sample-db", "")
+var sampleDb = mustNewIndex("sample-db", "")
 var sampleFrame = mustNewFrame(sampleDb, "sample-frame", "")
-var projectDb = mustNewDatabase("project-db", "user")
+var projectDb = mustNewIndex("project-db", "user")
 var collabFrame = mustNewFrame(projectDb, "collaboration", "project")
 var b1 = sampleFrame.Bitmap(10)
 var b2 = sampleFrame.Bitmap(20)
 var b3 = sampleFrame.Bitmap(42)
 var b4 = collabFrame.Bitmap(2)
 
-func TestNewDatabase(t *testing.T) {
-	db, err := NewDatabase("db-name")
+func TestNewIndex(t *testing.T) {
+	db, err := NewIndex("db-name", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if db.Name() != "db-name" {
-		t.Fatalf("database name was not set")
+		t.Fatalf("index name was not set")
 	}
 }
 
-func TestNewDatabaseWithInvalidColumnLabel(t *testing.T) {
-	_, err := NewDatabaseWithColumnLabel("foo", "$$INVALID$$")
-	if err == nil {
-		t.Fatal()
-	}
-}
-
-func TestNewDatabaseWithInvalidName(t *testing.T) {
-	_, err := NewDatabase("$FOO")
+func TestNewIndexWithInvalidName(t *testing.T) {
+	_, err := NewIndex("$FOO", nil)
 	if err == nil {
 		t.Fatal()
 	}
 }
 
 func TestNewFrameWithInvalidName(t *testing.T) {
-	db, err := NewDatabase("foo")
+	db, err := NewIndex("foo", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.FrameWithRowLabel("$$INVALIDFRAME$$", "label")
+	_, err = db.Frame("$$INVALIDFRAME$$", nil)
 	if err == nil {
-		t.Fatal(err)
+		t.Fatal("Creating frames with invalid row labels should fail")
 	}
 }
 
@@ -58,9 +51,23 @@ func TestBitmap(t *testing.T) {
 		collabFrame.Bitmap(10))
 }
 
+func TestInverseBitmap(t *testing.T) {
+	options := &FrameOptions{
+		RowLabel:       "row_label",
+		InverseEnabled: true,
+	}
+	f1, err := projectDb.Frame("f1-inversable", options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	comparePQL(t,
+		"Bitmap(user=5, frame='f1-inversable')",
+		f1.InverseBitmap(5))
+}
+
 func TestSetBit(t *testing.T) {
 	comparePQL(t,
-		"SetBit(id=5, frame='sample-frame', profileID=10)",
+		"SetBit(id=5, frame='sample-frame', col_id=10)",
 		sampleFrame.SetBit(5, 10))
 	comparePQL(t,
 		"SetBit(project=10, frame='collaboration', user=20)",
@@ -69,7 +76,7 @@ func TestSetBit(t *testing.T) {
 
 func TestClearBit(t *testing.T) {
 	comparePQL(t,
-		"ClearBit(id=5, frame='sample-frame', profileID=10)",
+		"ClearBit(id=5, frame='sample-frame', col_id=10)",
 		sampleFrame.ClearBit(5, 10))
 	comparePQL(t,
 		"ClearBit(project=10, frame='collaboration', user=20)",
@@ -157,44 +164,65 @@ func TestBitmapOperationInvalidArg(t *testing.T) {
 	}
 }
 
-func TestSetProfileAttrsTest(t *testing.T) {
+func TestSetColumnAttrsTest(t *testing.T) {
 	attrs := map[string]interface{}{
 		"quote": "\"Don't worry, be happy\"",
 		"happy": true,
 	}
 	comparePQL(t,
-		"SetProfileAttrs(user=5, happy=true, quote=\"\\\"Don't worry, be happy\\\"\")",
-		projectDb.SetProfileAttrs(5, attrs))
+		"SetColumnAttrs(user=5, happy=true, quote=\"\\\"Don't worry, be happy\\\"\")",
+		projectDb.SetColumnAttrs(5, attrs))
 }
 
-func TestSetProfileAttrsInvalidAttr(t *testing.T) {
+func TestSetColumnAttrsInvalidAttr(t *testing.T) {
 	attrs := map[string]interface{}{
 		"color":     "blue",
 		"$invalid$": true,
 	}
-	if projectDb.SetProfileAttrs(5, attrs).Error() == nil {
+	if projectDb.SetColumnAttrs(5, attrs).Error() == nil {
 		t.Fatalf("Should have failed")
 	}
 }
 
-func TestSetBitmapAttrsTest(t *testing.T) {
+func TestSetRowAttrsTest(t *testing.T) {
 	attrs := map[string]interface{}{
 		"quote":  "\"Don't worry, be happy\"",
 		"active": true,
 	}
 
 	comparePQL(t,
-		"SetBitmapAttrs(project=5, frame='collaboration', active=true, quote=\"\\\"Don't worry, be happy\\\"\")",
-		collabFrame.SetBitmapAttrs(5, attrs))
+		"SetRowAttrs(project=5, frame='collaboration', active=true, quote=\"\\\"Don't worry, be happy\\\"\")",
+		collabFrame.SetRowAttrs(5, attrs))
 }
 
-func TestSetBitmapAttrsInvalidAttr(t *testing.T) {
+func TestSetRowAttrsInvalidAttr(t *testing.T) {
 	attrs := map[string]interface{}{
 		"color":     "blue",
 		"$invalid$": true,
 	}
-	if collabFrame.SetBitmapAttrs(5, attrs).Error() == nil {
+	if collabFrame.SetRowAttrs(5, attrs).Error() == nil {
 		t.Fatalf("Should have failed")
+	}
+}
+
+func TestBatchQuery(t *testing.T) {
+	q := sampleDb.BatchQuery()
+	if q.Index() != sampleDb {
+		t.Fatalf("The correct index should be assigned")
+	}
+	q.Add(sampleFrame.Bitmap(44))
+	q.Add(sampleFrame.Bitmap(10101))
+	if q.Error() != nil {
+		t.Fatalf("Error should be nil")
+	}
+	comparePQL(t, "Bitmap(id=44, frame='sample-frame')Bitmap(id=10101, frame='sample-frame')", q)
+}
+
+func TestBatchQueryWithError(t *testing.T) {
+	q := sampleDb.BatchQuery()
+	q.Add(sampleFrame.FilterFieldTopN(12, collabFrame.Bitmap(7), "$invalid$", 80, 81))
+	if q.Error() == nil {
+		t.Fatalf("The error must be set")
 	}
 }
 
@@ -211,19 +239,54 @@ func TestRange(t *testing.T) {
 		collabFrame.Range(10, start, end))
 }
 
+func TestInvalidColumnLabelFails(t *testing.T) {
+	options := &IndexOptions{
+		ColumnLabel: "$$INVALID$$",
+	}
+	_, err := NewIndex("foo", options)
+	if err == nil {
+		t.Fatalf("Setting invalid column label should fail")
+	}
+
+}
+
+func TestInvalidRowLabelFails(t *testing.T) {
+	options := &FrameOptions{RowLabel: "$INVALID$"}
+	_, err := sampleDb.Frame("foo", options)
+	if err == nil {
+		t.Fatalf("Creating frames with invalid row label should fail")
+	}
+}
+
+func TestInverseBitmapFailsIfNotEnabled(t *testing.T) {
+	frame, err := sampleDb.Frame("inverse-not-enabled", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	qry := frame.InverseBitmap(5)
+	if qry.Error == nil {
+		t.Fatalf("Creating InverseBitmap query for a frame without inverse frame enabled should fail")
+	}
+}
+
 func comparePQL(t *testing.T, target string, q PQLQuery) {
-	pql := q.String()
+	pql := q.serialize()
 	if pql != target {
 		t.Fatalf("%s != %s", pql, target)
 	}
 }
 
-func mustNewDatabase(name string, columnLabel string) (db *Database) {
+func mustNewIndex(name string, columnLabel string) (db *Index) {
 	var err error
+	var options *IndexOptions
 	if columnLabel != "" {
-		db, err = NewDatabaseWithColumnLabel(name, columnLabel)
+		options = &IndexOptions{ColumnLabel: columnLabel}
+		if err != nil {
+			panic(err)
+		}
+		db, err = NewIndex(name, options)
 	} else {
-		db, err = NewDatabase(name)
+		db, err = NewIndex(name, nil)
 	}
 	if err != nil {
 		panic(err)
@@ -231,12 +294,17 @@ func mustNewDatabase(name string, columnLabel string) (db *Database) {
 	return
 }
 
-func mustNewFrame(db *Database, name string, rowLabel string) (frame *Frame) {
+func mustNewFrame(db *Index, name string, rowLabel string) (frame *Frame) {
 	var err error
+	var options *FrameOptions
 	if rowLabel != "" {
-		frame, err = db.FrameWithRowLabel(name, rowLabel)
+		options = &FrameOptions{RowLabel: rowLabel}
+		if err != nil {
+			panic(err)
+		}
+		frame, err = db.Frame(name, options)
 	} else {
-		frame, err = db.Frame(name)
+		frame, err = db.Frame(name, nil)
 	}
 	if err != nil {
 		panic(err)

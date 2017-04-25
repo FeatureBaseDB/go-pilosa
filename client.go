@@ -2,12 +2,14 @@ package pilosa
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
+	"time"
 
-	"encoding/json"
-
+	"github.com/golang/protobuf/proto"
 	"github.com/pilosa/go-client-pilosa/internal"
 )
 
@@ -16,82 +18,101 @@ import (
 // Client queries the Pilosa server
 type Client struct {
 	cluster *Cluster
+	client  *http.Client
 }
 
-// NewClient creates the default client
-func NewClient() *Client {
-	return &Client{
-		cluster: NewClusterWithHost(NewURI()),
-	}
+// DefaultClient creates the default client
+func DefaultClient() *Client {
+	return NewClientWithURI(DefaultURI())
 }
 
-// NewClientWithAddress creates a client with the given address
-func NewClientWithAddress(address *URI) *Client {
-	return NewClientWithCluster(NewClusterWithHost(address))
+// NewClientWithURI creates a client with the given address
+func NewClientWithURI(uri *URI) *Client {
+	return NewClientWithCluster(NewClusterWithHost(uri), nil)
 }
 
 // NewClientWithCluster creates a client with the given cluster
-func NewClientWithCluster(cluster *Cluster) *Client {
+func NewClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
+	if options == nil {
+		options = &ClientOptions{}
+	}
 	return &Client{
 		cluster: cluster,
+		client:  newHTTPClient(options.withDefaults()),
 	}
 }
 
-// Query sends a query to the Pilosa server
-func (c *Client) Query(query PQLQuery) (*QueryResponse, error) {
-	return c.QueryWithOptions(&QueryOptions{}, query)
-}
-
-// QueryWithOptions sends a query to the Pilosa server with the given options
-func (c *Client) QueryWithOptions(options *QueryOptions, query PQLQuery) (*QueryResponse, error) {
+// Query sends a query to the Pilosa server with the given options
+func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, error) {
 	if err := query.Error(); err != nil {
 		return nil, err
 	}
-	return c.QueryRawWithOptions(options, query.Database(), query.String())
-}
-
-// QueryRaw sends a query to the Pilosa server with default options
-func (c *Client) QueryRaw(database *Database, query string) (*QueryResponse, error) {
-	return c.QueryRawWithOptions(&QueryOptions{}, database, query)
-}
-
-// QueryRawWithOptions sends a query to the Pilosa server with the given options
-func (c *Client) QueryRawWithOptions(options *QueryOptions, database *Database, query string) (*QueryResponse, error) {
-	data := makeRequestData(database.name, query, options)
-	buf, err := c.httpRequest("POST", "/query", data, true)
+	if options == nil {
+		options = &QueryOptions{}
+	}
+	data := makeRequestData(query.serialize(), options)
+	path := fmt.Sprintf("/db/%s/query", query.Index().name)
+	_, buf, err := c.httpRequest("POST", path, data, rawResponse)
 	if err != nil {
 		return nil, err
 	}
 	iqr := &internal.QueryResponse{}
-	err = iqr.Unmarshal(buf)
+	err = proto.Unmarshal(buf, iqr)
 	if err != nil {
 		return nil, err
 	}
-	return newQueryResponseFromInternal(iqr)
-
+	queryResponse, err := newQueryResponseFromInternal(iqr)
+	if err != nil {
+		return nil, err
+	}
+	if !queryResponse.Success {
+		return nil, NewPilosaError(queryResponse.ErrorMessage)
+	}
+	return queryResponse, nil
 }
 
-// CreateDatabase creates a database with default options
-func (c *Client) CreateDatabase(database *Database) error {
-	return c.createOrDeleteDatabase("POST", database)
+// CreateIndex creates an index with default options
+func (c *Client) CreateIndex(index *Index) error {
+	data := []byte(index.options.String())
+	path := fmt.Sprintf("/db/%s", index.name)
+	_, _, err := c.httpRequest("POST", path,
+		data, noResponse)
+	if err != nil {
+		return err
+	}
+	if index.options.TimeQuantum != TimeQuantumNone {
+		err = c.patchIndexTimeQuantum(index)
+	}
+	return err
+
 }
 
 // CreateFrame creates a frame with default options
 func (c *Client) CreateFrame(frame *Frame) error {
-	return c.createOrDeleteFrame("POST", frame)
+	data := []byte(frame.options.String())
+	path := fmt.Sprintf("/db/%s/frame/%s", frame.index.name, frame.name)
+	_, _, err := c.httpRequest("POST", path, data, noResponse)
+	if err != nil {
+		return err
+	}
+	if frame.options.TimeQuantum != TimeQuantumNone {
+		err = c.patchFrameTimeQuantum(frame)
+	}
+	return err
+
 }
 
-// EnsureDatabaseExists creates a database with default options if it doesn't already exist
-func (c *Client) EnsureDatabaseExists(database *Database) error {
-	err := c.CreateDatabase(database)
-	if err == ErrorDatabaseExists {
+// EnsureIndex creates an index with default options if it doesn't already exist
+func (c *Client) EnsureIndex(index *Index) error {
+	err := c.CreateIndex(index)
+	if err == ErrorIndexExists {
 		return nil
 	}
 	return err
 }
 
-// EnsureFrameExists creates a frame with default options if it doesn't already exists
-func (c *Client) EnsureFrameExists(frame *Frame) error {
+// EnsureFrame creates a frame with default options if it doesn't already exists
+func (c *Client) EnsureFrame(frame *Frame) error {
 	err := c.CreateFrame(frame)
 	if err == ErrorFrameExists {
 		return nil
@@ -99,110 +120,175 @@ func (c *Client) EnsureFrameExists(frame *Frame) error {
 	return err
 }
 
-// DeleteDatabase deletes a database
-func (c *Client) DeleteDatabase(database *Database) error {
-	return c.createOrDeleteDatabase("DELETE", database)
+// DeleteIndex deletes an index
+func (c *Client) DeleteIndex(index *Index) error {
+	path := fmt.Sprintf("/db/%s", index.name)
+	_, _, err := c.httpRequest("DELETE", path, nil, noResponse)
+	return err
+
 }
 
 // DeleteFrame deletes a frame with default options
 func (c *Client) DeleteFrame(frame *Frame) error {
-	return c.createOrDeleteFrame("DELETE", frame)
+	path := fmt.Sprintf("/db/%s/frame/%s", frame.index.name, frame.name)
+	_, _, err := c.httpRequest("DELETE", path, nil, noResponse)
+	return err
 }
 
+// Schema returns the indexes and frames of the server
 func (c *Client) Schema() (*Schema, error) {
-	response, err := c.httpRequest("GET", "/schema", nil, true)
+	_, buf, err := c.httpRequest("GET", "/schema", nil, errorCheckedResponse)
 	if err != nil {
 		return nil, err
 	}
 	var schema *Schema
-	err = json.NewDecoder(bytes.NewReader(response)).Decode(&schema)
+	err = json.NewDecoder(bytes.NewReader(buf)).Decode(&schema)
 	if err != nil {
 		return nil, err
 	}
 	return schema, nil
 }
 
-func (c *Client) createOrDeleteDatabase(method string, database *Database) error {
-	data := []byte(fmt.Sprintf(`{"db": "%s", "options": {"columnLabel": "%s"}}`,
-		database.name, database.options.columnLabel))
-	_, err := c.httpRequest(method, "/db", data, false)
+func (c *Client) patchIndexTimeQuantum(index *Index) error {
+	data := []byte(fmt.Sprintf(`{"time_quantum": "%s"}`, index.options.TimeQuantum))
+	path := fmt.Sprintf("/db/%s/time-quantum", index.name)
+	_, _, err := c.httpRequest("PATCH", path, data, noResponse)
 	return err
 }
 
-func (c *Client) createOrDeleteFrame(method string, frame *Frame) error {
-	data := []byte(fmt.Sprintf(`{"db": "%s", "frame": "%s", "options": {"rowLabel": "%s"}}`,
-		frame.database.name, frame.name, frame.options.rowLabel))
-	_, err := c.httpRequest(method, "/frame", data, false)
+func (c *Client) patchFrameTimeQuantum(frame *Frame) error {
+	data := []byte(fmt.Sprintf(`{"db": "%s", "frame": "%s", "time_quantum": "%s"}`,
+		frame.index.name, frame.name, frame.options.TimeQuantum))
+	path := fmt.Sprintf("/db/%s/frame/%s/time-quantum", frame.index.name, frame.name)
+	_, _, err := c.httpRequest("PATCH", path, data, noResponse)
 	return err
 }
 
-func (c *Client) httpRequest(method string, path string, data []byte, needsResponse bool) ([]byte, error) {
+func (c *Client) httpRequest(method string, path string, data []byte, returnResponse returnClientInfo) (*http.Response, []byte, error) {
 	addr := c.cluster.Host()
 	if addr == nil {
-		return nil, ErrorEmptyCluster
+		return nil, nil, ErrorEmptyCluster
 	}
-	client := &http.Client{}
-	request, err := http.NewRequest(method, addr.NormalizedAddress()+path, bytes.NewReader(data))
+	if data == nil {
+		data = []byte{}
+	}
+	request, err := http.NewRequest(method, addr.Normalize()+path, bytes.NewReader(data))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// both Content-Type and Accept headers must be set for protobuf content
 	request.Header.Set("Content-Type", "application/x-protobuf")
 	request.Header.Set("Accept", "application/x-protobuf")
-	response, err := client.Do(request)
+	response, err := c.client.Do(request)
 	if err != nil {
-		return nil, err
+		c.cluster.RemoveHost(addr)
+		return nil, nil, err
 	}
 	defer response.Body.Close()
+	// TODO: Optimize buffer creation
+	buf, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		return nil, nil, err
+	}
+	if returnResponse == rawResponse {
+		return response, buf, nil
+	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		// TODO: Optimize buffer creation
-		buf, err := ioutil.ReadAll(response.Body)
-		if err != nil {
-			return nil, err
-		}
 		msg := string(buf)
-		switch msg {
-		case "database already exists\n":
-			return nil, ErrorDatabaseExists
-		case "frame already exists\n":
-			return nil, ErrorFrameExists
-		}
-		return nil, NewPilosaError(fmt.Sprintf("Server error (%d) %s: %s", response.StatusCode, response.Status, msg))
-	}
-	if needsResponse {
-		// TODO: Optimize buffer creation
-		buf, err := ioutil.ReadAll(response.Body)
+		err = matchError(msg)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return buf, nil
+		return nil, nil, NewPilosaError(fmt.Sprintf("Server error (%d) %s: %s", response.StatusCode, response.Status, msg))
 	}
-	return nil, nil
+	if returnResponse == noResponse {
+		return nil, nil, nil
+	}
+	return response, buf, nil
 }
 
-func makeRequestData(databaseName string, query string, options *QueryOptions) []byte {
-	request := &internal.QueryRequest{
-		DB:       databaseName,
-		Query:    query,
-		Profiles: options.GetProfiles,
+func newHTTPClient(options *ClientOptions) *http.Client {
+	transport := &http.Transport{
+		Dial: (&net.Dialer{
+			Timeout: options.ConnectTimeout,
+		}).Dial,
+		MaxIdleConnsPerHost: options.PoolSizePerRoute,
+		MaxIdleConns:        options.TotalPoolSize,
 	}
-	r, _ := request.Marshal()
+	return &http.Client{
+		Transport: transport,
+		Timeout:   options.SocketTimeout,
+	}
+}
+
+func makeRequestData(query string, options *QueryOptions) []byte {
+	request := &internal.QueryRequest{
+		Query:       query,
+		ColumnAttrs: options.Columns,
+	}
+	r, _ := proto.Marshal(request)
 	// request.Marshal never returns an error
 	return r
 }
 
+func matchError(msg string) error {
+	switch msg {
+	case "database already exists\n":
+		return ErrorIndexExists
+	case "frame already exists\n":
+		return ErrorFrameExists
+	}
+	return nil
+}
+
+// ClientOptions control the properties of client connection to the server
+type ClientOptions struct {
+	SocketTimeout    time.Duration
+	ConnectTimeout   time.Duration
+	PoolSizePerRoute int
+	TotalPoolSize    int
+}
+
+func (options *ClientOptions) withDefaults() (updated *ClientOptions) {
+	// copy options so the original is not updated
+	updated = &ClientOptions{}
+	*updated = *options
+	// impose defaults
+	if updated.SocketTimeout <= 0 {
+		updated.SocketTimeout = time.Second * 300
+	}
+	if updated.ConnectTimeout <= 0 {
+		updated.ConnectTimeout = time.Second * 30
+	}
+	if updated.PoolSizePerRoute <= 0 {
+		updated.PoolSizePerRoute = 10
+	}
+	if updated.TotalPoolSize <= 100 {
+		updated.TotalPoolSize = 100
+	}
+	return
+}
+
 // QueryOptions contains options that can be sent with a query
 type QueryOptions struct {
-	GetProfiles bool
+	Columns bool
 }
 
-// Schema contains the database and frame metadata
+// Schema contains the index and frame metadata
 type Schema struct {
-	DBs []*DBInfo `json:"dbs"`
+	Indexes []*IndexInfo `json:"dbs"`
 }
 
-// DBInfo represents schema information for a database.
-type DBInfo struct {
+// IndexInfo represents schema information for an index
+type IndexInfo struct {
 	Name   string       `json:"name"`
 	Frames []*FrameInfo `json:"frames"`
 }
+
+type returnClientInfo uint
+
+const (
+	noResponse returnClientInfo = iota
+	rawResponse
+	errorCheckedResponse
+)

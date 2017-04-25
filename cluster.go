@@ -6,17 +6,19 @@ type Cluster struct {
 	nextIndex int
 }
 
-// NewCluster creates a Cluster with no addresses
-func NewCluster() *Cluster {
+// DefaultCluster creates a Cluster with no addresses
+func DefaultCluster() *Cluster {
 	return &Cluster{
 		hosts: make([]*URI, 0),
 	}
 }
 
-// NewClusterWithHost creates a Cluster with the given address
-func NewClusterWithHost(host *URI) *Cluster {
-	cluster := NewCluster()
-	cluster.AddHost(host)
+// NewClusterWithHost creates a Cluster with the given URIs
+func NewClusterWithHost(hosts ...*URI) *Cluster {
+	cluster := DefaultCluster()
+	for _, host := range hosts {
+		cluster.AddHost(host)
+	}
 	return cluster
 }
 
@@ -38,7 +40,12 @@ func (c *Cluster) Host() *URI {
 
 // RemoveHost removes an address from the cluster
 func (c *Cluster) RemoveHost(address *URI) {
-	// TODO:
+	for i, uri := range c.hosts {
+		if uri.Equals(address) {
+			c.hosts = append(c.hosts[:i], c.hosts[i+1:]...)
+			break
+		}
+	}
 }
 
 // Hosts returns all addresses in this cluster

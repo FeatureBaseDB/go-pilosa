@@ -8,17 +8,17 @@ import (
 
 // QueryResponse represents the response from a Pilosa query
 type QueryResponse struct {
-	Results      []*QueryResult
-	Profiles     []*ProfileItem
+	results      []*QueryResult
+	columns      []*ColumnItem
 	ErrorMessage string
-	IsSuccess    bool
+	Success      bool
 }
 
 func newQueryResponseFromInternal(response *internal.QueryResponse) (*QueryResponse, error) {
 	if response.Err != "" {
 		return &QueryResponse{
 			ErrorMessage: response.Err,
-			IsSuccess:    false,
+			Success:      false,
 		}, nil
 	}
 	results := make([]*QueryResult, 0, len(response.Results))
@@ -29,35 +29,53 @@ func newQueryResponseFromInternal(response *internal.QueryResponse) (*QueryRespo
 		}
 		results = append(results, result)
 	}
-	profiles := make([]*ProfileItem, 0, len(response.Profiles))
-	for _, p := range response.Profiles {
-		profileItem, err := newProfileItemFromInternal(p)
+	columns := make([]*ColumnItem, 0, len(response.ColumnAttrSets))
+	for _, p := range response.ColumnAttrSets {
+		columnItem, err := newColumnItemFromInternal(p)
 		if err != nil {
 			return nil, err
 		}
-		profiles = append(profiles, profileItem)
+		columns = append(columns, columnItem)
 	}
 
 	return &QueryResponse{
-		Results:   results,
-		Profiles:  profiles,
-		IsSuccess: true,
+		results: results,
+		columns: columns,
+		Success: true,
 	}, nil
+}
+
+// Results returns all results in the response
+func (qr *QueryResponse) Results() []*QueryResult {
+	return qr.results
 }
 
 // Result returns the first result or nil
 func (qr *QueryResponse) Result() *QueryResult {
-	if qr.Results == nil || len(qr.Results) == 0 {
+	if len(qr.results) == 0 {
 		return nil
 	}
-	return qr.Results[0]
+	return qr.results[0]
+}
+
+// Columns returns all columns in the response
+func (qr *QueryResponse) Columns() []*ColumnItem {
+	return qr.columns
+}
+
+// Column returns the first column or nil
+func (qr *QueryResponse) Column() *ColumnItem {
+	if len(qr.columns) == 0 {
+		return nil
+	}
+	return qr.columns[0]
 }
 
 // QueryResult represent one of the results in the response
 type QueryResult struct {
-	BitmapResult *BitmapResult
-	CountItems   []*CountResultItem
-	Count        uint64
+	Bitmap     *BitmapResult
+	CountItems []*CountResultItem
+	Count      uint64
 }
 
 func newQueryResultFromInternal(result *internal.QueryResult) (*QueryResult, error) {
@@ -70,9 +88,9 @@ func newQueryResultFromInternal(result *internal.QueryResult) (*QueryResult, err
 		}
 	}
 	return &QueryResult{
-		BitmapResult: bitmapResult,
-		CountItems:   countItemsFromInternal(result.Pairs),
-		Count:        result.N,
+		Bitmap:     bitmapResult,
+		CountItems: countItemsFromInternal(result.Pairs),
+		Count:      result.N,
 	}, nil
 }
 
@@ -110,7 +128,7 @@ func newBitmapResultFromInternal(bitmap *internal.Bitmap) (*BitmapResult, error)
 
 const (
 	stringType = 1
-	uintType   = 2
+	intType    = 2
 	boolType   = 3
 	floatType  = 4
 )
@@ -121,8 +139,8 @@ func convertInternalAttrsToMap(attrs []*internal.Attr) (attrsMap map[string]inte
 		switch attr.Type {
 		case stringType:
 			attrsMap[attr.Key] = attr.StringValue
-		case uintType:
-			attrsMap[attr.Key] = attr.UintValue
+		case intType:
+			attrsMap[attr.Key] = attr.IntValue
 		case boolType:
 			attrsMap[attr.Key] = attr.BoolValue
 		case floatType:
@@ -135,19 +153,19 @@ func convertInternalAttrsToMap(attrs []*internal.Attr) (attrsMap map[string]inte
 	return attrsMap, nil
 }
 
-// ProfileItem representes a column in the database
-type ProfileItem struct {
+// ColumnItem representes a column in the index
+type ColumnItem struct {
 	ID         uint64
 	Attributes map[string]interface{}
 }
 
-func newProfileItemFromInternal(profile *internal.Profile) (*ProfileItem, error) {
-	attrs, err := convertInternalAttrsToMap(profile.Attrs)
+func newColumnItemFromInternal(column *internal.ColumnAttrSet) (*ColumnItem, error) {
+	attrs, err := convertInternalAttrsToMap(column.Attrs)
 	if err != nil {
 		return nil, err
 	}
-	return &ProfileItem{
-		ID:         profile.ID,
+	return &ColumnItem{
+		ID:         column.ID,
 		Attributes: attrs,
 	}, nil
 }

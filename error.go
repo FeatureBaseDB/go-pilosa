@@ -18,10 +18,11 @@ func (e PilosaError) Error() string {
 }
 
 var (
-	ErrorEmptyCluster        = NewPilosaError("No usable addresses in the cluster")
-	ErrorDatabaseExists      = NewPilosaError("Database exists")
-	ErrorFrameExists         = NewPilosaError("Frame exists")
-	ErrorInvalidDatabaseName = NewPilosaError("Invalid database name")
-	ErrorInvalidFrameName    = NewPilosaError("Invalid frame name")
-	ErrorInvalidLabel        = NewPilosaError("Invalid label")
+	ErrorEmptyCluster             = NewPilosaError("No usable addresses in the cluster")
+	ErrorIndexExists              = NewPilosaError("Index exists")
+	ErrorFrameExists              = NewPilosaError("Frame exists")
+	ErrorInvalidIndexName         = NewPilosaError("Invalid index name")
+	ErrorInvalidFrameName         = NewPilosaError("Invalid frame name")
+	ErrorInvalidLabel             = NewPilosaError("Invalid label")
+	ErrorInverseBitmapsNotEnabled = NewPilosaError("Inverse bitmaps support was not enabled for this frame")
 )

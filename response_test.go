@@ -10,14 +10,14 @@ import (
 func TestNewBitmapResultFromInternal(t *testing.T) {
 	targetAttrs := map[string]interface{}{
 		"name":       "some string",
-		"age":        uint64(95),
+		"age":        int64(95),
 		"registered": true,
 		"height":     1.83,
 	}
 	targetBits := []uint64{5, 10}
 	attrs := []*internal.Attr{
 		&internal.Attr{Key: "name", StringValue: "some string", Type: 1},
-		&internal.Attr{Key: "age", UintValue: 95, Type: 2},
+		&internal.Attr{Key: "age", IntValue: 95, Type: 2},
 		&internal.Attr{Key: "registered", BoolValue: true, Type: 3},
 		&internal.Attr{Key: "height", FloatValue: 1.83, Type: 4},
 	}
@@ -41,7 +41,7 @@ func TestNewBitmapResultFromInternal(t *testing.T) {
 func TestNewQueryResponseFromInternal(t *testing.T) {
 	targetAttrs := map[string]interface{}{
 		"name":       "some string",
-		"age":        uint64(95),
+		"age":        int64(95),
 		"registered": true,
 		"height":     1.83,
 	}
@@ -51,7 +51,7 @@ func TestNewQueryResponseFromInternal(t *testing.T) {
 	}
 	attrs := []*internal.Attr{
 		&internal.Attr{Key: "name", StringValue: "some string", Type: 1},
-		&internal.Attr{Key: "age", UintValue: 95, Type: 2},
+		&internal.Attr{Key: "age", IntValue: 95, Type: 2},
 		&internal.Attr{Key: "registered", BoolValue: true, Type: 3},
 		&internal.Attr{Key: "height", FloatValue: 1.83, Type: 4},
 	}
@@ -76,22 +76,24 @@ func TestNewQueryResponseFromInternal(t *testing.T) {
 	if qr.ErrorMessage != "" {
 		t.Fatalf("ErrorMessage should be empty")
 	}
-	if !qr.IsSuccess {
+	if !qr.Success {
 		t.Fatalf("IsSuccess should be true")
 	}
-	if len(qr.Results) != 2 {
+
+	results := qr.Results()
+	if len(results) != 2 {
 		t.Fatalf("Number of results should be 2")
 	}
-	if qr.Results[0] != qr.Result() {
+	if results[0] != qr.Result() {
 		t.Fatalf("Result() should return the first result")
 	}
-	if !reflect.DeepEqual(targetAttrs, qr.Results[0].BitmapResult.Attributes) {
+	if !reflect.DeepEqual(targetAttrs, results[0].Bitmap.Attributes) {
 		t.Fatalf("The bitmap result should contain the attributes")
 	}
-	if !reflect.DeepEqual(targetBits, qr.Results[0].BitmapResult.Bits) {
+	if !reflect.DeepEqual(targetBits, results[0].Bitmap.Bits) {
 		t.Fatalf("The bitmap result should contain the bits")
 	}
-	if !reflect.DeepEqual(targetCountItems, qr.Results[1].CountItems) {
+	if !reflect.DeepEqual(targetCountItems, results[1].CountItems) {
 		t.Fatalf("The response should include count items")
 	}
 }
@@ -107,7 +109,7 @@ func TestNewQueryResponseWithErrorFromInternal(t *testing.T) {
 	if qr.ErrorMessage != "some error" {
 		t.Fatalf("The response should include the error message")
 	}
-	if qr.IsSuccess {
+	if qr.Success {
 		t.Fatalf("IsSuccess should be false")
 	}
 	if qr.Result() != nil {
@@ -130,7 +132,7 @@ func TestNewQueryResponseFromInternalFailure(t *testing.T) {
 		t.Fatalf("Should have failed")
 	}
 	response = &internal.QueryResponse{
-		Profiles: []*internal.Profile{&internal.Profile{ID: 1, Attrs: attrs}},
+		ColumnAttrSets: []*internal.ColumnAttrSet{&internal.ColumnAttrSet{ID: 1, Attrs: attrs}},
 	}
 	qr, err = newQueryResponseFromInternal(response)
 	if qr != nil && err == nil {

@@ -3,25 +3,29 @@
 package pilosa
 
 import (
-	"fmt"
+	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"reflect"
 	"strconv"
 	"testing"
+
+	"github.com/golang/protobuf/proto"
+	"github.com/pilosa/go-client-pilosa/internal"
 )
 
-var db *Database
+var index *Index
 var testFrame *Frame
 
 func TestMain(m *testing.M) {
 	var err error
-	db, err = NewDatabase("go-testdb")
+	index, err = NewIndex("go-testdb", nil)
 	if err != nil {
 		panic(err)
 	}
-	testFrame, err = db.Frame("test-frame")
+	testFrame, err = index.Frame("test-frame", nil)
 	if err != nil {
 		panic(err)
 	}
@@ -34,11 +38,11 @@ func TestMain(m *testing.M) {
 
 func Setup() {
 	client := getClient()
-	err := client.EnsureDatabaseExists(db)
+	err := client.EnsureIndex(index)
 	if err != nil {
 		panic(err)
 	}
-	err = client.EnsureFrameExists(testFrame)
+	err = client.EnsureFrame(testFrame)
 	if err != nil {
 		panic(err)
 	}
@@ -46,7 +50,7 @@ func Setup() {
 
 func TearDown() {
 	client := getClient()
-	err := client.DeleteDatabase(db)
+	err := client.DeleteIndex(index)
 	if err != nil {
 		panic(err)
 	}
@@ -54,13 +58,13 @@ func TearDown() {
 
 func Reset() {
 	client := getClient()
-	client.DeleteDatabase(db)
-	client.CreateDatabase(db)
+	client.DeleteIndex(index)
+	client.CreateIndex(index)
 	client.CreateFrame(testFrame)
 }
 
 func TestCreateDefaultClient(t *testing.T) {
-	client := NewClient()
+	client := DefaultClient()
 	if client == nil {
 		t.Fatal()
 	}
@@ -68,7 +72,7 @@ func TestCreateDefaultClient(t *testing.T) {
 
 func TestClientReturnsResponse(t *testing.T) {
 	client := getClient()
-	response, err := client.Query(testFrame.Bitmap(1))
+	response, err := client.Query(testFrame.Bitmap(1), nil)
 	if err != nil {
 		t.Fatalf("Error querying: %s", err)
 	}
@@ -77,46 +81,80 @@ func TestClientReturnsResponse(t *testing.T) {
 	}
 }
 
-func TestQueryWithProfiles(t *testing.T) {
+func TestQueryWithColumns(t *testing.T) {
 	Reset()
 	client := getClient()
 	targetAttrs := map[string]interface{}{
 		"name":       "some string",
-		"age":        uint64(95),
+		"age":        int64(95),
 		"registered": true,
 		"height":     1.83,
 	}
-	_, err := client.Query(testFrame.SetBit(1, 100))
+	_, err := client.Query(testFrame.SetBit(1, 100), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = client.QueryRaw(db, "SetProfileAttrs(id=100, name='some string', age=95, registered=true, height=1.83)")
+	response, err := client.Query(index.SetColumnAttrs(100, targetAttrs), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := client.QueryWithOptions(&QueryOptions{GetProfiles: true}, testFrame.Bitmap(1))
+	if response.Column() != nil {
+		t.Fatalf("No columns should be returned if it wasn't explicitly requested")
+	}
+	response, err = client.Query(testFrame.Bitmap(1), &QueryOptions{Columns: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(response.Profiles) != 1 {
-		t.Fatalf("Profile count should be == 1")
+	columns := response.Columns()
+	if len(columns) != 1 {
+		t.Fatalf("Column count should be == 1")
 	}
-	if response.Profiles[0].ID != 100 {
-		t.Fatalf("Profile ID should be == 100")
+	if columns[0].ID != 100 {
+		t.Fatalf("Column ID should be == 100")
 	}
-	if !reflect.DeepEqual(response.Profiles[0].Attributes, targetAttrs) {
-		t.Fatalf("Protile attrs does not match")
+	if !reflect.DeepEqual(columns[0].Attributes, targetAttrs) {
+		t.Fatalf("Column attrs does not match")
+	}
+
+	if !reflect.DeepEqual(response.Column(), columns[0]) {
+		t.Fatalf("Columns() should be equivalent to first column in the response")
 	}
 }
 
-func TestCreateDeleteDatabaseFrame(t *testing.T) {
+func TestSetRowAttrs(t *testing.T) {
+	Reset()
 	client := getClient()
-	db1, err := NewDatabase("to-be-deleted")
+	targetAttrs := map[string]interface{}{
+		"name":       "some string",
+		"age":        int64(95),
+		"registered": true,
+		"height":     1.83,
+	}
+	_, err := client.Query(testFrame.SetBit(1, 100), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.Query(testFrame.SetRowAttrs(1, targetAttrs), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := client.Query(testFrame.Bitmap(1), &QueryOptions{Columns: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(targetAttrs, response.Result().Bitmap.Attributes) {
+		t.Fatalf("Bitmap attributes should be set")
+	}
+}
+
+func TestCreateDeleteIndexFrame(t *testing.T) {
+	client := getClient()
+	index1, err := NewIndex("to-be-deleted", nil)
 	if err != nil {
 		panic(err)
 	}
-	frame1, err := db1.Frame("foo")
-	err = client.CreateDatabase(db1)
+	frame1, err := index1.Frame("foo", nil)
+	err = client.CreateIndex(index1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,31 +166,58 @@ func TestCreateDeleteDatabaseFrame(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.DeleteDatabase(db1)
+	err = client.DeleteIndex(index1)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestEnsureDatabaseExists(t *testing.T) {
+func TestEnsureIndexExists(t *testing.T) {
 	client := getClient()
-	err := client.EnsureDatabaseExists(db)
+	err := client.EnsureIndex(index)
 	if err != nil {
-		t.Fatal()
+		t.Fatal(err)
+	}
+}
+
+func TestCreateIndexWithTimeQuantum(t *testing.T) {
+	client := getClient()
+	options := &IndexOptions{TimeQuantum: TimeQuantumYear}
+	index, err := NewIndex("db-with-timequantum", options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.CreateIndex(index)
+	defer client.DeleteIndex(index)
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
 func TestEnsureFrameExists(t *testing.T) {
 	client := getClient()
-	err := client.EnsureFrameExists(testFrame)
+	err := client.EnsureFrame(testFrame)
 	if err != nil {
-		t.Fatal()
+		t.Fatal(err)
 	}
 }
 
-func TestErrorCreatingDatabase(t *testing.T) {
+func TestCreateFrameWithTimeQuantum(t *testing.T) {
 	client := getClient()
-	err := client.CreateDatabase(db)
+	options := &FrameOptions{TimeQuantum: TimeQuantumYear}
+	frame, err := index.Frame("frame-with-timequantum", options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.CreateFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestErrorCreatingIndex(t *testing.T) {
+	client := getClient()
+	err := client.CreateIndex(index)
 	if err == nil {
 		t.Fatal()
 	}
@@ -166,26 +231,70 @@ func TestErrorCreatingFrame(t *testing.T) {
 	}
 }
 
-func TestDatabaseAlreadyExists(t *testing.T) {
+func TestIndexAlreadyExists(t *testing.T) {
 	client := getClient()
-	err := client.CreateDatabase(db)
-	if err != ErrorDatabaseExists {
-		t.Fail()
+	err := client.CreateIndex(index)
+	if err != ErrorIndexExists {
+		t.Fatal(err)
 	}
 }
 
 func TestQueryWithEmptyClusterFails(t *testing.T) {
-	client := NewClientWithCluster(NewCluster())
-	_, err := client.QueryRaw(db, "won't run")
+	client := NewClientWithCluster(DefaultCluster(), nil)
+	_, err := client.Query(index.RawQuery("won't run"), nil)
 	if err != ErrorEmptyCluster {
-		t.Fatal()
+		t.Fatal(err)
 	}
 }
 
-func TestQueryFailsIfAddressNotResovled(t *testing.T) {
+func TestQueryInverseBitmap(t *testing.T) {
+	client := getClient()
+	options := &FrameOptions{
+		RowLabel:       "row_label",
+		InverseEnabled: true,
+	}
+	f1, err := index.Frame("f1-inversable", options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureFrame(f1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.Query(
+		index.BatchQuery(
+			f1.SetBit(1000, 5000),
+			f1.SetBit(1000, 6000),
+			f1.SetBit(3000, 5000)), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := client.Query(
+		index.BatchQuery(
+			f1.Bitmap(1000),
+			f1.InverseBitmap(5000)), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Results()) != 2 {
+		t.Fatalf("Response should contain 2 results")
+	}
+	bits1 := response.Results()[0].Bitmap.Bits
+	targetBits1 := []uint64{5000, 6000}
+	if !reflect.DeepEqual(targetBits1, bits1) {
+		t.Fatalf("bits should be: %v, but it is: %v", targetBits1, bits1)
+	}
+	bits2 := response.Results()[1].Bitmap.Bits
+	targetBits2 := []uint64{1000, 3000}
+	if !reflect.DeepEqual(targetBits2, bits2) {
+		t.Fatalf("bits should be: %v, but it is: %v", targetBits2, bits2)
+	}
+}
+
+func TestQueryFailsIfAddressNotResolved(t *testing.T) {
 	uri, _ := NewURIFromAddress("nonexisting.domain.pilosa.com:3456")
-	client := NewClientWithAddress(uri)
-	_, err := client.QueryRaw(db, "bar")
+	client := NewClientWithURI(uri)
+	_, err := client.Query(index.RawQuery("bar"), nil)
 	if err == nil {
 		t.Fatal()
 	}
@@ -193,7 +302,7 @@ func TestQueryFailsIfAddressNotResovled(t *testing.T) {
 
 func TestQueryFails(t *testing.T) {
 	client := getClient()
-	_, err := client.QueryRaw(db, "Invalid query")
+	_, err := client.Query(index.RawQuery("Invalid query"), nil)
 	if err == nil {
 		t.Fatal()
 	}
@@ -201,7 +310,7 @@ func TestQueryFails(t *testing.T) {
 
 func TestInvalidHttpRequest(t *testing.T) {
 	client := getClient()
-	_, err := client.httpRequest("INVALID METHOD", "/foo", nil, false)
+	_, _, err := client.httpRequest("INVALID METHOD", "/foo", nil, 0)
 	if err == nil {
 		t.Fatal()
 	}
@@ -212,10 +321,10 @@ func TestErrorResponseNotRead(t *testing.T) {
 	defer server.Close()
 	uri, err := NewURIFromAddress(server.URL)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
-	client := NewClientWithAddress(uri)
-	response, err := client.Query(testFrame.Bitmap(1))
+	client := NewClientWithURI(uri)
+	response, err := client.Query(testFrame.Bitmap(1), nil)
 	if err == nil {
 		t.Fatalf("Got response: %s", response)
 	}
@@ -226,10 +335,10 @@ func TestResponseNotRead(t *testing.T) {
 	defer server.Close()
 	uri, err := NewURIFromAddress(server.URL)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
-	client := NewClientWithAddress(uri)
-	response, err := client.Query(testFrame.Bitmap(1))
+	client := NewClientWithURI(uri)
+	response, err := client.Query(testFrame.Bitmap(1), nil)
 	if err == nil {
 		t.Fatalf("Got response: %s", response)
 	}
@@ -242,8 +351,8 @@ func TestInvalidResponse(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	client := NewClientWithAddress(uri)
-	response, err := client.QueryRaw(db, "don't care")
+	client := NewClientWithURI(uri)
+	response, err := client.Query(index.RawQuery("don't care"), nil)
 	if err == nil {
 		t.Fatalf("Got response: %s", response)
 	}
@@ -256,10 +365,10 @@ func TestSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	// go-testdb should be in the schema
-	for _, db := range schema.DBs {
-		if db.Name == "go-testdb" {
+	for _, index := range schema.Indexes {
+		if index.Name == "go-testdb" {
 			// test-frame should be in the schema
-			for _, frame := range db.Frames {
+			for _, frame := range index.Frames {
 				if frame.Name == "test-frame" {
 					// OK!
 					return
@@ -277,7 +386,7 @@ func TestErrorRetrievingSchema(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	client := NewClientWithAddress(uri)
+	client := NewClientWithURI(uri)
 	_, err = client.Schema()
 	if err == nil {
 		t.Fatal("should have failed")
@@ -291,10 +400,43 @@ func TestInvalidSchema(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	client := NewClientWithAddress(uri)
+	client := NewClientWithURI(uri)
 	_, err = client.Schema()
 	if err == nil {
 		t.Fatal("should have failed")
+	}
+}
+
+func TestResponseWithInvalidType(t *testing.T) {
+	qr := &internal.QueryResponse{
+		Err: "",
+		ColumnAttrSets: []*internal.ColumnAttrSet{
+			&internal.ColumnAttrSet{
+				ID: 0,
+				Attrs: []*internal.Attr{
+					&internal.Attr{
+						Type:        9999,
+						StringValue: "NOVAL",
+					},
+				},
+			},
+		},
+		Results: []*internal.QueryResult{},
+	}
+	data, err := proto.Marshal(qr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := getMockServer(200, data, -1)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	_, err = client.Query(testFrame.Bitmap(1), nil)
+	if err == nil {
+		t.Fatalf("Should have failed")
 	}
 }
 
@@ -303,17 +445,18 @@ func getClient() *Client {
 	if err != nil {
 		panic(err)
 	}
-	return NewClientWithAddress(uri)
+	return NewClientWithURI(uri)
 }
 
 func getMockServer(statusCode int, response []byte, contentLength int) *httptest.Server {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-protobuf")
 		if contentLength >= 0 {
 			w.Header().Set("Content-Length", strconv.Itoa(contentLength))
 		}
 		w.WriteHeader(statusCode)
 		if response != nil {
-			fmt.Fprintln(w, response)
+			io.Copy(w, bytes.NewReader(response))
 		}
 	})
 	return httptest.NewServer(handler)

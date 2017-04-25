@@ -5,12 +5,15 @@ import (
 )
 
 func TestDefaultURI(t *testing.T) {
-	uri := NewURI()
+	uri := DefaultURI()
 	compare(t, uri, "http", "localhost", 10101)
 }
 
 func TestURIWithHostPort(t *testing.T) {
-	uri := NewURIWithHostPort("db1.pilosa.com", 3333)
+	uri, err := NewURIFromHostPort("db1.pilosa.com", 3333)
+	if err != nil {
+		t.Fatal(err)
+	}
 	compare(t, uri, "http", "db1.pilosa.com", 3333)
 }
 
@@ -55,17 +58,17 @@ func TestNormalizedAddress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Can't parse address")
 	}
-	if uri.NormalizedAddress() != "http://big-data.pilosa.com:6888" {
+	if uri.Normalize() != "http://big-data.pilosa.com:6888" {
 		t.Fatalf("Normalized address is not normal")
 	}
 }
 
 func TestEquals(t *testing.T) {
-	uri1 := NewURI()
+	uri1 := DefaultURI()
 	if uri1.Equals(nil) {
 		t.Fatalf("URI should not be equal to nil")
 	}
-	if !uri1.Equals(NewURI()) {
+	if !uri1.Equals(DefaultURI()) {
 		t.Fatalf("URI should be equal to another URI with the same scheme, host and port")
 	}
 }

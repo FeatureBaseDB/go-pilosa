@@ -2,26 +2,26 @@ package pilosa
 
 import "testing"
 
-func TestValidateDatabaseName(t *testing.T) {
+func TestValidateIndexName(t *testing.T) {
 	names := []string{
 		"a", "ab", "ab1", "1", "_", "-", "b-c", "d_e",
 		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}
 	for _, name := range names {
-		if validateDatabaseName(name) != nil {
-			t.Fatalf("Should be valid database name: %s", name)
+		if validateIndexName(name) != nil {
+			t.Fatalf("Should be valid index name: %s", name)
 		}
 	}
 }
 
-func TestValidateDatabaseNameInvalid(t *testing.T) {
+func TestValidateIndexNameInvalid(t *testing.T) {
 	names := []string{
 		"", "'", "^", "/", "\\", "A", "*", "a:b", "valid?no", "yüce",
 		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1",
 	}
 	for _, name := range names {
-		if validateDatabaseName(name) == nil {
-			t.Fatalf("Should be invalid database name: %s", name)
+		if validateIndexName(name) == nil {
+			t.Fatalf("Should be invalid index name: %s", name)
 		}
 	}
 }

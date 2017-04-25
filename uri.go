@@ -17,8 +17,8 @@ type URI struct {
 	port   uint16
 }
 
-// NewURI creates and returns the default URI
-func NewURI() *URI {
+// DefaultURI creates and returns the default URI
+func DefaultURI() *URI {
 	return &URI{
 		scheme: "http",
 		host:   "localhost",
@@ -26,13 +26,14 @@ func NewURI() *URI {
 	}
 }
 
-// NewURIWithHostPort returns a URI with specified host and port
-func NewURIWithHostPort(host string, port uint16) *URI {
+// NewURIFromHostPort returns a URI with specified host and port
+func NewURIFromHostPort(host string, port uint16) (*URI, error) {
+	// TODO: validate host
 	return &URI{
 		scheme: "http",
 		host:   host,
 		port:   port,
-	}
+	}, nil
 }
 
 // NewURIFromAddress parses the passed address and returns a URI
@@ -55,8 +56,8 @@ func (u *URI) Port() uint16 {
 	return u.port
 }
 
-// NormalizedAddress returns the address in a form usable by a HTTP client
-func (u *URI) NormalizedAddress() string {
+// Normalize returns the address in a form usable by a HTTP client
+func (u *URI) Normalize() string {
 	scheme := u.scheme
 	index := strings.Index(scheme, "+")
 	if index >= 0 {

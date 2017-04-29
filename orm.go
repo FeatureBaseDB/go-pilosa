@@ -142,7 +142,7 @@ func (options *IndexOptions) withDefaults() (updated *IndexOptions) {
 	*updated = *options
 	// impose defaults
 	if updated.ColumnLabel == "" {
-		updated.ColumnLabel = "col_id"
+		updated.ColumnLabel = "columnID"
 	}
 	return
 }
@@ -292,7 +292,7 @@ func (options *FrameOptions) withDefaults() (updated *FrameOptions) {
 	*updated = *options
 	// impose defaults
 	if updated.RowLabel == "" {
-		updated.RowLabel = "id"
+		updated.RowLabel = "rowID"
 	}
 	return
 }

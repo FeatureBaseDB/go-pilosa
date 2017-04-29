@@ -76,7 +76,7 @@ func TestNewFrameWithInvalidName(t *testing.T) {
 
 func TestBitmap(t *testing.T) {
 	comparePQL(t,
-		"Bitmap(id=5, frame='sample-frame')",
+		"Bitmap(rowID=5, frame='sample-frame')",
 		sampleFrame.Bitmap(5))
 	comparePQL(t,
 		"Bitmap(project=10, frame='collaboration')",
@@ -99,7 +99,7 @@ func TestInverseBitmap(t *testing.T) {
 
 func TestSetBit(t *testing.T) {
 	comparePQL(t,
-		"SetBit(id=5, frame='sample-frame', col_id=10)",
+		"SetBit(rowID=5, frame='sample-frame', columnID=10)",
 		sampleFrame.SetBit(5, 10))
 	comparePQL(t,
 		"SetBit(project=10, frame='collaboration', user=20)",
@@ -115,7 +115,7 @@ func TestSetBitTimestamp(t *testing.T) {
 
 func TestClearBit(t *testing.T) {
 	comparePQL(t,
-		"ClearBit(id=5, frame='sample-frame', col_id=10)",
+		"ClearBit(rowID=5, frame='sample-frame', columnID=10)",
 		sampleFrame.ClearBit(5, 10))
 	comparePQL(t,
 		"ClearBit(project=10, frame='collaboration', user=20)",
@@ -124,37 +124,37 @@ func TestClearBit(t *testing.T) {
 
 func TestUnion(t *testing.T) {
 	comparePQL(t,
-		"Union(Bitmap(id=10, frame='sample-frame'), Bitmap(id=20, frame='sample-frame'))",
+		"Union(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'))",
 		sampleDb.Union(b1, b2))
 	comparePQL(t,
-		"Union(Bitmap(id=10, frame='sample-frame'), Bitmap(id=20, frame='sample-frame'), Bitmap(id=42, frame='sample-frame'))",
+		"Union(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'), Bitmap(rowID=42, frame='sample-frame'))",
 		sampleDb.Union(b1, b2, b3))
 	comparePQL(t,
-		"Union(Bitmap(id=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))",
+		"Union(Bitmap(rowID=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))",
 		sampleDb.Union(b1, b4))
 }
 
 func TestIntersect(t *testing.T) {
 	comparePQL(t,
-		"Intersect(Bitmap(id=10, frame='sample-frame'), Bitmap(id=20, frame='sample-frame'))",
+		"Intersect(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'))",
 		sampleDb.Intersect(b1, b2))
 	comparePQL(t,
-		"Intersect(Bitmap(id=10, frame='sample-frame'), Bitmap(id=20, frame='sample-frame'), Bitmap(id=42, frame='sample-frame'))",
+		"Intersect(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'), Bitmap(rowID=42, frame='sample-frame'))",
 		sampleDb.Intersect(b1, b2, b3))
 	comparePQL(t,
-		"Intersect(Bitmap(id=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))",
+		"Intersect(Bitmap(rowID=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))",
 		sampleDb.Intersect(b1, b4))
 }
 
 func TestDifference(t *testing.T) {
 	comparePQL(t,
-		"Difference(Bitmap(id=10, frame='sample-frame'), Bitmap(id=20, frame='sample-frame'))",
+		"Difference(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'))",
 		sampleDb.Difference(b1, b2))
 	comparePQL(t,
-		"Difference(Bitmap(id=10, frame='sample-frame'), Bitmap(id=20, frame='sample-frame'), Bitmap(id=42, frame='sample-frame'))",
+		"Difference(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'), Bitmap(rowID=42, frame='sample-frame'))",
 		sampleDb.Difference(b1, b2, b3))
 	comparePQL(t,
-		"Difference(Bitmap(id=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))",
+		"Difference(Bitmap(rowID=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))",
 		sampleDb.Difference(b1, b4))
 }
 
@@ -254,7 +254,7 @@ func TestBatchQuery(t *testing.T) {
 	if q.Error() != nil {
 		t.Fatalf("Error should be nil")
 	}
-	comparePQL(t, "Bitmap(id=44, frame='sample-frame')Bitmap(id=10101, frame='sample-frame')", q)
+	comparePQL(t, "Bitmap(rowID=44, frame='sample-frame')Bitmap(rowID=10101, frame='sample-frame')", q)
 }
 
 func TestBatchQueryWithError(t *testing.T) {

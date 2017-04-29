@@ -1,15 +1,12 @@
 
-.PHONY: all cover doc generate-proto test test-all
+.PHONY: all cover generate-proto test test-all
 
 all: test
 
 cover:
 	go test -cover -tags=integration
 
-doc:
-	godoc -url '/pkg/github.com/pilosa/go-client-pilosa' > index.html
-
-generate:
+generate-proto:
 	protoc --go_out=. internal/public.proto
 
 test:

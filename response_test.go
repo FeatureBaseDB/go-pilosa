@@ -37,7 +37,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/pilosa/go-client-pilosa/internal"
+	"github.com/pilosa/go-pilosa/internal"
 )
 
 func TestNewBitmapResultFromInternal(t *testing.T) {

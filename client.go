@@ -43,7 +43,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/pilosa/go-client-pilosa/internal"
+	"github.com/pilosa/go-pilosa/internal"
 )
 
 // Pilosa HTTP Client

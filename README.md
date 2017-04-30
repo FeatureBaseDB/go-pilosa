@@ -1,6 +1,6 @@
 # Go Client for Pilosa
 
-<a href="https://travis-ci.com/pilosa/go-pilosa"><img src="https://api.travis-ci.com/pilosa/go-client-pilosa.svg?token=vqssvEWV3KAhu8oVFx9s&branch=master"></a>
+<a href="https://travis-ci.com/pilosa/go-pilosa"><img src="https://api.travis-ci.com/pilosa/go-pilosa.svg?token=vqssvEWV3KAhu8oVFx9s&branch=master"></a>
 
 <img src="https://dc3kpxyuw05cb.cloudfront.net/img/ce.svg" style="float: right" align="right" height="301">
 

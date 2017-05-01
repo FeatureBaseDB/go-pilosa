@@ -3,7 +3,7 @@
 <a href="https://travis-ci.com/pilosa/go-pilosa"><img src="https://api.travis-ci.com/pilosa/go-pilosa.svg?token=vqssvEWV3KAhu8oVFx9s&branch=master"></a>
 <a href="https://goreportcard.com/report/github.com/pilosa/go-pilosa"><img src="https://goreportcard.com/badge/github.com/pilosa/go-pilosa"></a>
 
-<img src="https://dc3kpxyuw05cb.cloudfront.net/img/ce.svg" style="float: right" align="right" height="301">
+<img src="https://www.pilosa.com/img/speed_sloth.svg" style="float: right" align="right" height="301">
 
 Go client for Pilosa high performance index.
 

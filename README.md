@@ -1,14 +1,16 @@
 # Go Client for Pilosa
 
 <a href="https://travis-ci.com/pilosa/go-pilosa"><img src="https://api.travis-ci.com/pilosa/go-pilosa.svg?token=vqssvEWV3KAhu8oVFx9s&branch=master"></a>
+<a href="https://goreportcard.com/report/github.com/pilosa/go-pilosa"><img src="https://goreportcard.com/badge/github.com/pilosa/go-pilosa"></a>
 
 <img src="https://dc3kpxyuw05cb.cloudfront.net/img/ce.svg" style="float: right" align="right" height="301">
 
 Go client for Pilosa high performance index.
 
-## Changelog
+## Change Log
 
-* 2017-05-01: Initial version
+* **v0.3.1** (2017-05-01): Initial version
+    * Supports Pilosa Server v0.3.1
 
 ## Requirements
 

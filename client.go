@@ -30,7 +30,6 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 // DAMAGE.
 
-
 package pilosa
 
 import (
@@ -46,25 +45,24 @@ import (
 	"github.com/pilosa/go-pilosa/internal"
 )
 
-// Pilosa HTTP Client
-
-// Client queries the Pilosa server
+// Client is the HTTP client for Pilosa server.
 type Client struct {
 	cluster *Cluster
 	client  *http.Client
 }
 
-// DefaultClient creates the default client
+// DefaultClient creates a client with the default address and options.
 func DefaultClient() *Client {
 	return NewClientWithURI(DefaultURI())
 }
 
-// NewClientWithURI creates a client with the given address
+// NewClientWithURI creates a client with the given server address.
 func NewClientWithURI(uri *URI) *Client {
 	return NewClientWithCluster(NewClusterWithHost(uri), nil)
 }
 
-// NewClientWithCluster creates a client with the given cluster
+// NewClientWithCluster creates a client with the given cluster and options.
+// Pass nil for default options.
 func NewClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 	if options == nil {
 		options = &ClientOptions{}
@@ -75,7 +73,8 @@ func NewClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 	}
 }
 
-// Query sends a query to the Pilosa server with the given options
+// Query runs the given query against the server with the given options.
+// Pass nil for default options.
 func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, error) {
 	if err := query.Error(); err != nil {
 		return nil, err
@@ -99,12 +98,12 @@ func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, e
 		return nil, err
 	}
 	if !queryResponse.Success {
-		return nil, NewPilosaError(queryResponse.ErrorMessage)
+		return nil, NewError(queryResponse.ErrorMessage)
 	}
 	return queryResponse, nil
 }
 
-// CreateIndex creates an index with default options
+// CreateIndex creates an index on the server using the given Index struct.
 func (c *Client) CreateIndex(index *Index) error {
 	data := []byte(index.options.String())
 	path := fmt.Sprintf("/index/%s", index.name)
@@ -120,7 +119,7 @@ func (c *Client) CreateIndex(index *Index) error {
 
 }
 
-// CreateFrame creates a frame with default options
+// CreateFrame creates a frame on the server using the given Frame struct.
 func (c *Client) CreateFrame(frame *Frame) error {
 	data := []byte(frame.options.String())
 	path := fmt.Sprintf("/index/%s/frame/%s", frame.index.name, frame.name)
@@ -135,7 +134,7 @@ func (c *Client) CreateFrame(frame *Frame) error {
 
 }
 
-// EnsureIndex creates an index with default options if it doesn't already exist
+// EnsureIndex creates an index on the server if it does not exist.
 func (c *Client) EnsureIndex(index *Index) error {
 	err := c.CreateIndex(index)
 	if err == ErrorIndexExists {
@@ -144,7 +143,7 @@ func (c *Client) EnsureIndex(index *Index) error {
 	return err
 }
 
-// EnsureFrame creates a frame with default options if it doesn't already exists
+// EnsureFrame creates a frame on the server if it doesn't exists.
 func (c *Client) EnsureFrame(frame *Frame) error {
 	err := c.CreateFrame(frame)
 	if err == ErrorFrameExists {
@@ -153,7 +152,7 @@ func (c *Client) EnsureFrame(frame *Frame) error {
 	return err
 }
 
-// DeleteIndex deletes an index
+// DeleteIndex deletes an index on the server.
 func (c *Client) DeleteIndex(index *Index) error {
 	path := fmt.Sprintf("/index/%s", index.name)
 	_, _, err := c.httpRequest("DELETE", path, nil, noResponse)
@@ -161,14 +160,14 @@ func (c *Client) DeleteIndex(index *Index) error {
 
 }
 
-// DeleteFrame deletes a frame with default options
+// DeleteFrame deletes a frame on the server.
 func (c *Client) DeleteFrame(frame *Frame) error {
 	path := fmt.Sprintf("/index/%s/frame/%s", frame.index.name, frame.name)
 	_, _, err := c.httpRequest("DELETE", path, nil, noResponse)
 	return err
 }
 
-// Schema returns the indexes and frames of the server
+// Schema returns the indexes and frames on the server.
 func (c *Client) Schema() (*Schema, error) {
 	_, buf, err := c.httpRequest("GET", "/index", nil, errorCheckedResponse)
 	if err != nil {
@@ -232,7 +231,7 @@ func (c *Client) httpRequest(method string, path string, data []byte, returnResp
 		if err != nil {
 			return nil, nil, err
 		}
-		return nil, nil, NewPilosaError(fmt.Sprintf("Server error (%d) %s: %s", response.StatusCode, response.Status, msg))
+		return nil, nil, NewError(fmt.Sprintf("Server error (%d) %s: %s", response.StatusCode, response.Status, msg))
 	}
 	if returnResponse == noResponse {
 		return nil, nil, nil
@@ -302,12 +301,13 @@ func (options *ClientOptions) withDefaults() (updated *ClientOptions) {
 	return
 }
 
-// QueryOptions contains options that can be sent with a query
+// QueryOptions contains options to customize the Query function.
 type QueryOptions struct {
+	// Columns enables returning columns in the query response.
 	Columns bool
 }
 
-// Schema contains the index and frame metadata
+// Schema contains the index and frame metadata.
 type Schema struct {
 	Indexes []*IndexInfo `json:"indexes"`
 }

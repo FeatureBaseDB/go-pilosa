@@ -42,14 +42,26 @@ import (
 
 var addressRegexp = regexp.MustCompile("^(([+a-z]+):\\/\\/)?([0-9a-z.-]+)?(:([0-9]+))?$")
 
-// URI is a Pilosa server address
+// URI represents a Pilosa URI.
+// A Pilosa URI consists of three parts:
+// 1) Scheme: Protocol of the URI. Default: http.
+// 2) Host: Hostname or IP URI. Default: localhost.
+// 3) Port: Port of the URI. Default: 10101.
+//
+// All parts of the URI are optional. The following are equivalent:
+// 	http://localhost:10101
+// 	http://localhost
+// 	http://:10101
+// 	localhost:10101
+// 	localhost
+// 	:10101
 type URI struct {
 	scheme string
 	host   string
 	port   uint16
 }
 
-// DefaultURI creates and returns the default URI
+// DefaultURI creates and returns the default URI.
 func DefaultURI() *URI {
 	return &URI{
 		scheme: "http",
@@ -58,7 +70,7 @@ func DefaultURI() *URI {
 	}
 }
 
-// NewURIFromHostPort returns a URI with specified host and port
+// NewURIFromHostPort returns a URI with specified host and port.
 func NewURIFromHostPort(host string, port uint16) (*URI, error) {
 	// TODO: validate host
 	return &URI{
@@ -68,27 +80,27 @@ func NewURIFromHostPort(host string, port uint16) (*URI, error) {
 	}, nil
 }
 
-// NewURIFromAddress parses the passed address and returns a URI
+// NewURIFromAddress parses the passed address and returns a URI.
 func NewURIFromAddress(address string) (*URI, error) {
 	return parseAddress(address)
 }
 
-// Scheme returns the scheme of this URI
+// Scheme returns the scheme of this URI.
 func (u *URI) Scheme() string {
 	return u.scheme
 }
 
-// Host returns the host of this URI
+// Host returns the host of this URI.
 func (u *URI) Host() string {
 	return u.host
 }
 
-// Port returns the port of this URI
+// Port returns the port of this URI.
 func (u *URI) Port() uint16 {
 	return u.port
 }
 
-// Normalize returns the address in a form usable by a HTTP client
+// Normalize returns the address in a form usable by a HTTP client.
 func (u *URI) Normalize() string {
 	scheme := u.scheme
 	index := strings.Index(scheme, "+")
@@ -98,6 +110,7 @@ func (u *URI) Normalize() string {
 	return fmt.Sprintf("%s://%s:%d", scheme, u.host, u.port)
 }
 
+// Equals returns true if the checked URI is equivalent to this URI.
 func (u URI) Equals(other *URI) bool {
 	if other == nil {
 		return false

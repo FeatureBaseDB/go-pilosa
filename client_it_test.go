@@ -358,7 +358,7 @@ func TestErrorResponseNotRead(t *testing.T) {
 	client := NewClientWithURI(uri)
 	response, err := client.Query(testFrame.Bitmap(1), nil)
 	if err == nil {
-		t.Fatalf("Got response: %s", response)
+		t.Fatalf("Got response: %v", response)
 	}
 }
 
@@ -372,7 +372,7 @@ func TestResponseNotRead(t *testing.T) {
 	client := NewClientWithURI(uri)
 	response, err := client.Query(testFrame.Bitmap(1), nil)
 	if err == nil {
-		t.Fatalf("Got response: %s", response)
+		t.Fatalf("Got response: %v", response)
 	}
 }
 
@@ -386,7 +386,7 @@ func TestInvalidResponse(t *testing.T) {
 	client := NewClientWithURI(uri)
 	response, err := client.Query(index.RawQuery("don't care"), nil)
 	if err == nil {
-		t.Fatalf("Got response: %s", response)
+		t.Fatalf("Got response: %v", response)
 	}
 }
 
@@ -443,10 +443,10 @@ func TestResponseWithInvalidType(t *testing.T) {
 	qr := &internal.QueryResponse{
 		Err: "",
 		ColumnAttrSets: []*internal.ColumnAttrSet{
-			&internal.ColumnAttrSet{
+			{
 				ID: 0,
 				Attrs: []*internal.Attr{
-					&internal.Attr{
+					{
 						Type:        9999,
 						StringValue: "NOVAL",
 					},

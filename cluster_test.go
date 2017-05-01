@@ -84,6 +84,9 @@ func TestRemoveHost(t *testing.T) {
 		t.Fatalf("The cluster should contain the host")
 	}
 	uri, err = NewURIFromAddress("db1.pilosa.com:9999")
+	if err != nil {
+		t.Fatal(err)
+	}
 	c.RemoveHost(uri)
 	if len(c.hosts) != 0 {
 		t.Fatalf("The cluster should not contain the host")

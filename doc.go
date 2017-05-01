@@ -30,17 +30,40 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 // DAMAGE.
 
-package pilosa
+/*
+Package pilosa enables querying a Pilosa server.
 
-import (
-	"fmt"
-	"testing"
-)
+This client uses Pilosa's http+protobuf API.
 
-func TestError(t *testing.T) {
-	err := NewError("some error")
-	if err.Error() != "Error: some error" {
-		fmt.Println(err.Error())
-		t.Fatal()
+Usage:
+
+	import (
+		"fmt"
+		pilosa "github.com/pilosa/go-pilosa"
+	)
+
+	// Create a Client instance
+	client := pilosa.DefaultClient()
+
+	// Create an Index instance
+	index, err := NewIndex("repository", nil)
+	if err != nil {
+		panic(err)
 	}
-}
+
+	stargazer, err := index.Frame("stargazer", nil)
+	if err != nil {
+		panic(err)
+	}
+
+	response, err := client.Query(stargazer.Bitmap(5), nil)
+	if err != nil {
+		panic(err)
+	}
+
+	// Act on the result
+	fmt.Println(response.Result())
+
+See also https://www.pilosa.com/docs/api-reference/ and https://www.pilosa.com/docs/query-language/.
+*/
+package pilosa

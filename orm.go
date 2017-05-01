@@ -42,21 +42,21 @@ import (
 
 const timeFormat = "2006-01-02T15:04"
 
-// PQLQuery is a interface for PQL queries
+// PQLQuery is an interface for PQL queries.
 type PQLQuery interface {
 	Index() *Index
 	serialize() string
 	Error() error
 }
 
-// PQLBaseQuery is the base implementation for IPqlQuery
+// PQLBaseQuery is the base implementation for PQLQuery.
 type PQLBaseQuery struct {
 	index *Index
 	pql   string
 	err   error
 }
 
-// NewPQLBaseQuery creates a new PqlQuery with the given PQL and index
+// NewPQLBaseQuery creates a new PQLQuery with the given PQL and index.
 func NewPQLBaseQuery(pql string, index *Index, err error) *PQLBaseQuery {
 	return &PQLBaseQuery{
 		index: index,
@@ -70,45 +70,54 @@ func (q *PQLBaseQuery) Index() *Index {
 	return q.index
 }
 
-// serialize converts this query to string
 func (q *PQLBaseQuery) serialize() string {
 	return q.pql
 }
 
-// Error returns the error or nil for this query
+// Error returns the error or nil for this query.
 func (q PQLBaseQuery) Error() error {
 	return q.err
 }
 
-// PQLBitmapQuery is the return type for bitmap queries
+// PQLBitmapQuery is the return type for bitmap queries.
 type PQLBitmapQuery struct {
 	index *Index
 	pql   string
 	err   error
 }
 
-// Index returns the index for this query
+// Index returns the index for this query/
 func (q *PQLBitmapQuery) Index() *Index {
 	return q.index
 }
 
-// serialize converts this query to string
 func (q *PQLBitmapQuery) serialize() string {
 	return q.pql
 }
 
-// Error returns the error or nil for this query
+// Error returns the error or nil for this query.
 func (q PQLBitmapQuery) Error() error {
 	return q.err
 }
 
+// PQLBatchQuery contains a batch of PQL queries.
+// Use Index.BatchQuery function to create an instance.
+//
+// Usage:
+//
+// 	index, err := NewIndex("repository", nil)
+// 	stargazer, err := index.Frame("stargazer", nil)
+// 	query := repo.BatchQuery(
+// 		stargazer.Bitmap(5),
+//		stargazer.Bitmap(15),
+//		repo.Union(stargazer.Bitmap(20), stargazer.Bitmap(25)))
 type PQLBatchQuery struct {
 	index   *Index
 	queries []string
 	err     error
 }
 
-// Index returns the index for this query
+// Index returns the index for this query.
 func (q *PQLBatchQuery) Index() *Index {
 	return q.index
 }
@@ -121,7 +130,7 @@ func (q *PQLBatchQuery) Error() error {
 	return q.err
 }
 
-// Add adds a query to the batch
+// Add adds a query to the batch.
 func (q *PQLBatchQuery) Add(query PQLQuery) {
 	err := query.Error()
 	if err != nil {
@@ -130,7 +139,7 @@ func (q *PQLBatchQuery) Add(query PQLQuery) {
 	q.queries = append(q.queries, query.serialize())
 }
 
-// IndexOptions contains the options for a Pilosa index
+// IndexOptions contains options to customize Index structs and column queries.
 type IndexOptions struct {
 	ColumnLabel string
 	TimeQuantum TimeQuantum
@@ -151,7 +160,7 @@ func (options IndexOptions) String() string {
 	return fmt.Sprintf(`{"options": {"columnLabel": "%s"}}`, options.ColumnLabel)
 }
 
-// NewPQLBitmapQuery creates a new PqlBitmapQuery
+// NewPQLBitmapQuery creates a new PqlBitmapQuery.
 func NewPQLBitmapQuery(pql string, index *Index, err error) *PQLBitmapQuery {
 	return &PQLBitmapQuery{
 		index: index,
@@ -160,13 +169,15 @@ func NewPQLBitmapQuery(pql string, index *Index, err error) *PQLBitmapQuery {
 	}
 }
 
-// Index is a Pilosa index
+// Index is a Pilosa index. The purpose of the Index is to represent a data namespace.
+// You cannot perform cross-index queries. Column-level attributes are global to the Index.
 type Index struct {
 	name    string
 	options *IndexOptions
 }
 
-// NewIndex creates the info for a Pilosa index with the given options
+// NewIndex creates an index with a name and options.
+// Pass nil for default options.
 func NewIndex(name string, options *IndexOptions) (*Index, error) {
 	if err := validateIndexName(name); err != nil {
 		return nil, err
@@ -184,12 +195,12 @@ func NewIndex(name string, options *IndexOptions) (*Index, error) {
 	}, nil
 }
 
-// Name returns the name of this index
+// Name returns the name of this index.
 func (d *Index) Name() string {
 	return d.name
 }
 
-// Frame creates the info for a Pilosa frame with default options
+// Frame creates a frame struct with the specified name and defaults.
 func (d *Index) Frame(name string, options *FrameOptions) (*Frame, error) {
 	if options == nil {
 		options = &FrameOptions{}
@@ -208,7 +219,7 @@ func (d *Index) Frame(name string, options *FrameOptions) (*Frame, error) {
 	}, nil
 }
 
-// BatchQuery creates a batch query
+// BatchQuery creates a batch query with the given queries.
 func (d *Index) BatchQuery(queries ...PQLQuery) *PQLBatchQuery {
 	stringQueries := make([]string, 0, len(queries))
 	for _, query := range queries {
@@ -220,32 +231,39 @@ func (d *Index) BatchQuery(queries ...PQLQuery) *PQLBatchQuery {
 	}
 }
 
-// RawQuery creates a query with the given string
+// RawQuery creates a query with the given string.
+// Note that the query is not validated before sending to the server.
 func (d *Index) RawQuery(query string) *PQLBaseQuery {
 	return NewPQLBaseQuery(query, d, nil)
 }
 
-// Union creates a Union query
+// Union creates a Union query.
+// Union performs a logical OR on the results of each BITMAP_CALL query passed to it.
 func (d *Index) Union(bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
 	return d.bitmapOperation("Union", bitmap1, bitmap2, bitmaps...)
 }
 
-// Intersect creates an Intersect query
+// Intersect creates an Intersect query.
+// Intersect performs a logical AND on the results of each BITMAP_CALL query passed to it.
 func (d *Index) Intersect(bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
 	return d.bitmapOperation("Intersect", bitmap1, bitmap2, bitmaps...)
 }
 
-// Difference creates an Intersect query
+// Difference creates an Intersect query.
+// Difference returns all of the bits from the first BITMAP_CALL argument passed to it, without the bits from each subsequent BITMAP_CALL.
 func (d *Index) Difference(bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
 	return d.bitmapOperation("Difference", bitmap1, bitmap2, bitmaps...)
 }
 
-// Count creates a Count query
+// Count creates a Count query.
+// Returns the number of set bits in the BITMAP_CALL passed in.
 func (d *Index) Count(bitmap *PQLBitmapQuery) *PQLBaseQuery {
 	return NewPQLBaseQuery(fmt.Sprintf("Count(%s)", bitmap.serialize()), d, nil)
 }
 
-// SetColumnAttrs creates a SetColumnAttrs query
+// SetColumnAttrs creates a SetColumnAttrs query.
+// SetColumnAttrs associates arbitrary key/value pairs with a column in an index.
+// Following types are accepted: integer, float, string and boolean types.
 func (d *Index) SetColumnAttrs(columnID uint64, attrs map[string]interface{}) *PQLBaseQuery {
 	attrsString, err := createAttributesString(attrs)
 	if err != nil {
@@ -279,10 +297,12 @@ type FrameInfo struct {
 	Name string `json:"name"`
 }
 
-// FrameOptions contains frame options
+// FrameOptions contains options to customize Frame objects and frame queries.
 type FrameOptions struct {
-	RowLabel       string
-	TimeQuantum    TimeQuantum
+	RowLabel string
+	// If a Frame has a time quantum, then Views are generated for each of the defined time segments.
+	TimeQuantum TimeQuantum
+	// Enables inverted frames
 	InverseEnabled bool
 }
 
@@ -302,20 +322,26 @@ func (options FrameOptions) String() string {
 		options.RowLabel, options.InverseEnabled)
 }
 
-// Frame is a Pilosa frame
+// Frame structs are used to segment and define different functional characteristics within your entire index.
+// You can think of a Frame as a table-like data partition within your Index.
+// Row-level attributes are namespaced at the Frame level.
 type Frame struct {
 	name    string
 	index   *Index
 	options *FrameOptions
 }
 
-// Bitmap creates a bitmap query
+// Bitmap creates a bitmap query using the row label.
+// Bitmap retrieves the indices of all the set bits in a row or column based on whether the row label or column label is given in the query.
+// It also retrieves any attributes set on that row or column.
 func (f *Frame) Bitmap(rowID uint64) *PQLBitmapQuery {
 	return NewPQLBitmapQuery(fmt.Sprintf("Bitmap(%s=%d, frame='%s')",
 		f.options.RowLabel, rowID, f.name), f.index, nil)
 }
 
-// InverseBitmap creates an inverse bitmap query
+// InverseBitmap creates a bitmap query using the column label.
+// Bitmap retrieves the indices of all the set bits in a row or column based on whether the row label or column label is given in the query.
+// It also retrieves any attributes set on that row or column.
 func (f *Frame) InverseBitmap(columnID uint64) *PQLBaseQuery {
 	if !f.options.InverseEnabled {
 		return NewPQLBaseQuery("", f.index, ErrorInverseBitmapsNotEnabled)
@@ -324,37 +350,44 @@ func (f *Frame) InverseBitmap(columnID uint64) *PQLBaseQuery {
 		f.index.options.ColumnLabel, columnID, f.name), f.index, nil)
 }
 
-// SetBit creates a SetBit query
+// SetBit creates a SetBit query.
+// SetBit, assigns a value of 1 to a bit in the binary matrix, thus associating the given row in the given frame with the given column.
 func (f *Frame) SetBit(rowID uint64, columnID uint64) *PQLBaseQuery {
 	return NewPQLBaseQuery(fmt.Sprintf("SetBit(%s=%d, frame='%s', %s=%d)",
 		f.options.RowLabel, rowID, f.name, f.index.options.ColumnLabel, columnID), f.index, nil)
 }
 
-// SetBitTimestamp creates a SetBit query with timestamp
+// SetBitTimestamp creates a SetBit query with timestamp.
+// SetBit, assigns a value of 1 to a bit in the binary matrix,
+// thus associating the given row in the given frame with the given column.
 func (f *Frame) SetBitTimestamp(rowID uint64, columnID uint64, timestamp time.Time) *PQLBaseQuery {
 	return NewPQLBaseQuery(fmt.Sprintf("SetBit(%s=%d, frame='%s', %s=%d, timestamp='%s')",
 		f.options.RowLabel, rowID, f.name, f.index.options.ColumnLabel, columnID, timestamp.Format(timeFormat)),
 		f.index, nil)
 }
 
-// ClearBit creates a ClearBit query
+// ClearBit creates a ClearBit query.
+// ClearBit, assigns a value of 0 to a bit in the binary matrix, thus disassociating the given row in the given frame from the given column.
 func (f *Frame) ClearBit(rowID uint64, columnID uint64) *PQLBaseQuery {
 	return NewPQLBaseQuery(fmt.Sprintf("ClearBit(%s=%d, frame='%s', %s=%d)",
 		f.options.RowLabel, rowID, f.name, f.index.options.ColumnLabel, columnID), f.index, nil)
 }
 
-// TopN creates a TopN query with the given item count
+// TopN creates a TopN query with the given item count.
+// Returns the id and count of the top n bitmaps (by count of bits) in the frame.
 func (f *Frame) TopN(n uint64) *PQLBitmapQuery {
 	return NewPQLBitmapQuery(fmt.Sprintf("TopN(frame='%s', n=%d)", f.name, n), f.index, nil)
 }
 
-// BitmapTopN creates a TopN query with the given item count and bitmap
+// BitmapTopN creates a TopN query with the given item count and bitmap.
+// This variant supports customizing the bitmap query.
 func (f *Frame) BitmapTopN(n uint64, bitmap *PQLBitmapQuery) *PQLBitmapQuery {
 	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d)",
 		bitmap.serialize(), f.name, n), f.index, nil)
 }
 
 // FilterFieldTopN creates a TopN query with the given item count, bitmap, field and the filter for that field
+// The field and filters arguments work together to only return Bitmaps which have the attribute specified by field with one of the values specified in filters.
 func (f *Frame) FilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, values ...interface{}) *PQLBitmapQuery {
 	if err := validateLabel(field); err != nil {
 		return NewPQLBitmapQuery("", f.index, err)
@@ -367,13 +400,16 @@ func (f *Frame) FilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, 
 		bitmap.serialize(), f.name, n, field, string(b)), f.index, nil)
 }
 
-// Range creates a Range query
+// Range creates a Range query.
+// Similar to Bitmap, but only returns bits which were set with timestamps between the given start and end timestamps.
 func (f *Frame) Range(rowID uint64, start time.Time, end time.Time) *PQLBitmapQuery {
 	return NewPQLBitmapQuery(fmt.Sprintf("Range(%s=%d, frame='%s', start='%s', end='%s')",
 		f.options.RowLabel, rowID, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
 }
 
-// SetRowAttrs creates a SetRowAttrs query
+// SetRowAttrs creates a SetRowAttrs query.
+// SetRowAttrs associates arbitrary key/value pairs with a row in a frame.
+// Following types are accepted: integer, float, string and boolean types.
 func (f *Frame) SetRowAttrs(rowID uint64, attrs map[string]interface{}) *PQLBaseQuery {
 	attrsString, err := createAttributesString(attrs)
 	if err != nil {
@@ -400,10 +436,10 @@ func createAttributesString(attrs map[string]interface{}) (string, error) {
 	return strings.Join(attrsList, ", "), nil
 }
 
-// TimeQuantum is the time resolution
+// TimeQuantum type represents valid time quantum values for frames having support for that.
 type TimeQuantum string
 
-// TimeQuantum resolution constants
+// TimeQuantum constants
 const (
 	TimeQuantumNone             TimeQuantum = ""
 	TimeQuantumYear             TimeQuantum = "Y"

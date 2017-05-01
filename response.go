@@ -38,7 +38,7 @@ import (
 	"github.com/pilosa/go-pilosa/internal"
 )
 
-// QueryResponse represents the response from a Pilosa query
+// QueryResponse represents the response from a Pilosa query.
 type QueryResponse struct {
 	results      []*QueryResult
 	columns      []*ColumnItem
@@ -77,12 +77,12 @@ func newQueryResponseFromInternal(response *internal.QueryResponse) (*QueryRespo
 	}, nil
 }
 
-// Results returns all results in the response
+// Results returns all results in the response.
 func (qr *QueryResponse) Results() []*QueryResult {
 	return qr.results
 }
 
-// Result returns the first result or nil
+// Result returns the first result or nil.
 func (qr *QueryResponse) Result() *QueryResult {
 	if len(qr.results) == 0 {
 		return nil
@@ -90,12 +90,12 @@ func (qr *QueryResponse) Result() *QueryResult {
 	return qr.results[0]
 }
 
-// Columns returns all columns in the response
+// Columns returns all columns in the response.
 func (qr *QueryResponse) Columns() []*ColumnItem {
 	return qr.columns
 }
 
-// Column returns the first column or nil
+// Column returns the first column or nil.
 func (qr *QueryResponse) Column() *ColumnItem {
 	if len(qr.columns) == 0 {
 		return nil
@@ -103,7 +103,7 @@ func (qr *QueryResponse) Column() *ColumnItem {
 	return qr.columns[0]
 }
 
-// QueryResult represent one of the results in the response
+// QueryResult represent one of the results in the response.
 type QueryResult struct {
 	Bitmap     *BitmapResult
 	CountItems []*CountResultItem
@@ -126,7 +126,7 @@ func newQueryResultFromInternal(result *internal.QueryResult) (*QueryResult, err
 	}, nil
 }
 
-// CountResultItem represents a result from TopN call
+// CountResultItem represents a result from TopN call.
 type CountResultItem struct {
 	ID    uint64
 	Count uint64
@@ -140,7 +140,7 @@ func countItemsFromInternal(items []*internal.Pair) []*CountResultItem {
 	return result
 }
 
-// BitmapResult represents a result from Bitmap, Union, Intersect, Difference and Range PQL calls
+// BitmapResult represents a result from Bitmap, Union, Intersect, Difference and Range PQL calls.
 type BitmapResult struct {
 	Attributes map[string]interface{}
 	Bits       []uint64
@@ -185,7 +185,8 @@ func convertInternalAttrsToMap(attrs []*internal.Attr) (attrsMap map[string]inte
 	return attrsMap, nil
 }
 
-// ColumnItem representes a column in the index
+// ColumnItem represents data about a column.
+// Column data is only returned if QueryOptions.Columns was set to true.
 type ColumnItem struct {
 	ID         uint64
 	Attributes map[string]interface{}

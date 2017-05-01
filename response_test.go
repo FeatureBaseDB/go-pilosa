@@ -48,10 +48,10 @@ func TestNewBitmapResultFromInternal(t *testing.T) {
 	}
 	targetBits := []uint64{5, 10}
 	attrs := []*internal.Attr{
-		&internal.Attr{Key: "name", StringValue: "some string", Type: 1},
-		&internal.Attr{Key: "age", IntValue: 95, Type: 2},
-		&internal.Attr{Key: "registered", BoolValue: true, Type: 3},
-		&internal.Attr{Key: "height", FloatValue: 1.83, Type: 4},
+		{Key: "name", StringValue: "some string", Type: 1},
+		{Key: "age", IntValue: 95, Type: 2},
+		{Key: "registered", BoolValue: true, Type: 3},
+		{Key: "height", FloatValue: 1.83, Type: 4},
 	}
 	bitmap := &internal.Bitmap{
 		Attrs: attrs,
@@ -79,25 +79,25 @@ func TestNewQueryResponseFromInternal(t *testing.T) {
 	}
 	targetBits := []uint64{5, 10}
 	targetCountItems := []*CountResultItem{
-		&CountResultItem{ID: 10, Count: 100},
+		{ID: 10, Count: 100},
 	}
 	attrs := []*internal.Attr{
-		&internal.Attr{Key: "name", StringValue: "some string", Type: 1},
-		&internal.Attr{Key: "age", IntValue: 95, Type: 2},
-		&internal.Attr{Key: "registered", BoolValue: true, Type: 3},
-		&internal.Attr{Key: "height", FloatValue: 1.83, Type: 4},
+		{Key: "name", StringValue: "some string", Type: 1},
+		{Key: "age", IntValue: 95, Type: 2},
+		{Key: "registered", BoolValue: true, Type: 3},
+		{Key: "height", FloatValue: 1.83, Type: 4},
 	}
 	bitmap := &internal.Bitmap{
 		Attrs: attrs,
 		Bits:  []uint64{5, 10},
 	}
 	pairs := []*internal.Pair{
-		&internal.Pair{Key: 10, Count: 100},
+		{Key: 10, Count: 100},
 	}
 	response := &internal.QueryResponse{
 		Results: []*internal.QueryResult{
-			&internal.QueryResult{Bitmap: bitmap},
-			&internal.QueryResult{Pairs: pairs},
+			{Bitmap: bitmap},
+			{Pairs: pairs},
 		},
 		Err: "",
 	}
@@ -151,20 +151,20 @@ func TestNewQueryResponseWithErrorFromInternal(t *testing.T) {
 
 func TestNewQueryResponseFromInternalFailure(t *testing.T) {
 	attrs := []*internal.Attr{
-		&internal.Attr{Key: "name", StringValue: "some string", Type: 99},
+		{Key: "name", StringValue: "some string", Type: 99},
 	}
 	bitmap := &internal.Bitmap{
 		Attrs: attrs,
 	}
 	response := &internal.QueryResponse{
-		Results: []*internal.QueryResult{&internal.QueryResult{Bitmap: bitmap}},
+		Results: []*internal.QueryResult{{Bitmap: bitmap}},
 	}
 	qr, err := newQueryResponseFromInternal(response)
 	if qr != nil && err == nil {
 		t.Fatalf("Should have failed")
 	}
 	response = &internal.QueryResponse{
-		ColumnAttrSets: []*internal.ColumnAttrSet{&internal.ColumnAttrSet{ID: 1, Attrs: attrs}},
+		ColumnAttrSets: []*internal.ColumnAttrSet{{ID: 1, Attrs: attrs}},
 	}
 	qr, err = newQueryResponseFromInternal(response)
 	if qr != nil && err == nil {

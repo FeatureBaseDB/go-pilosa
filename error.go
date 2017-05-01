@@ -36,25 +36,27 @@ import (
 	"fmt"
 )
 
-type PilosaError struct {
+// Error contains a Pilosa specific error.
+type Error struct {
 	Message string
 }
 
-// NewPilosaError creates a Pilosa error
-func NewPilosaError(message string) *PilosaError {
-	return &PilosaError{Message: message}
+// NewError creates a Pilosa error.
+func NewError(message string) *Error {
+	return &Error{Message: message}
 }
 
-func (e PilosaError) Error() string {
-	return fmt.Sprintf("PilosaError: %s", e.Message)
+func (e Error) Error() string {
+	return fmt.Sprintf("Error: %s", e.Message)
 }
 
+// Predefined Pilosa errors.
 var (
-	ErrorEmptyCluster             = NewPilosaError("No usable addresses in the cluster")
-	ErrorIndexExists              = NewPilosaError("Index exists")
-	ErrorFrameExists              = NewPilosaError("Frame exists")
-	ErrorInvalidIndexName         = NewPilosaError("Invalid index name")
-	ErrorInvalidFrameName         = NewPilosaError("Invalid frame name")
-	ErrorInvalidLabel             = NewPilosaError("Invalid label")
-	ErrorInverseBitmapsNotEnabled = NewPilosaError("Inverse bitmaps support was not enabled for this frame")
+	ErrorEmptyCluster             = NewError("No usable addresses in the cluster")
+	ErrorIndexExists              = NewError("Index exists")
+	ErrorFrameExists              = NewError("Frame exists")
+	ErrorInvalidIndexName         = NewError("Invalid index name")
+	ErrorInvalidFrameName         = NewError("Invalid frame name")
+	ErrorInvalidLabel             = NewError("Invalid label")
+	ErrorInverseBitmapsNotEnabled = NewError("Inverse bitmaps support was not enabled for this frame")
 )

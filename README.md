@@ -1,14 +1,16 @@
 # Go Client for Pilosa
 
 <a href="https://travis-ci.com/pilosa/go-pilosa"><img src="https://api.travis-ci.com/pilosa/go-pilosa.svg?token=vqssvEWV3KAhu8oVFx9s&branch=master"></a>
+<a href="https://goreportcard.com/report/github.com/pilosa/go-pilosa"><img src="https://goreportcard.com/badge/github.com/pilosa/go-pilosa"></a>
 
-<img src="https://dc3kpxyuw05cb.cloudfront.net/img/ce.svg" style="float: right" align="right" height="301">
+<img src="https://www.pilosa.com/img/speed_sloth.svg" style="float: right" align="right" height="301">
 
 Go client for Pilosa high performance index.
 
-## Changelog
+## Change Log
 
-* 2017-05-01: Initial version
+* **v0.3.1** (2017-05-01): Initial version
+    * Supports Pilosa Server v0.3.1
 
 ## Requirements
 
@@ -285,7 +287,7 @@ response := client.Query(frame.Bitmap(5), options)
 
 ### Server Response
 
-When a query is sent to a Pilosa server, the server either fulfills the query or sends an error message. In the case of an error, a `PilosaError` struct is returned, otherwise a `QueryResponse` struct is returned.
+When a query is sent to a Pilosa server, the server either fulfills the query or sends an error message. In the case of an error, a `pilosa.Error` struct is returned, otherwise a `QueryResponse` struct is returned.
 
 A `QueryResponse` struct may contain zero or more results of `QueryResult` type. You can access all results using the `Results` function of `QueryResponse` (which returns a list of `QueryResult` objects), or you can use the `Result` method (which returns either the first result or `nil` if there are no results):
 

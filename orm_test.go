@@ -303,7 +303,7 @@ func TestInverseBitmapFailsIfNotEnabled(t *testing.T) {
 		t.Fatal(err)
 	}
 	qry := frame.InverseBitmap(5)
-	if qry.Error == nil {
+	if qry.Error() == nil {
 		t.Fatalf("Creating InverseBitmap query for a frame without inverse frame enabled should fail")
 	}
 }

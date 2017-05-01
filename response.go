@@ -185,7 +185,7 @@ func convertInternalAttrsToMap(attrs []*internal.Attr) (attrsMap map[string]inte
 	return attrsMap, nil
 }
 
-// ColumnItem representes a column in the index
+// ColumnItem represents a column in the index
 type ColumnItem struct {
 	ID         uint64
 	Attributes map[string]interface{}

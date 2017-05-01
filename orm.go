@@ -304,6 +304,8 @@ type FrameOptions struct {
 	TimeQuantum TimeQuantum
 	// Enables inverted frames
 	InverseEnabled bool
+	CacheType      CacheType
+	CacheSize      uint
 }
 
 func (options *FrameOptions) withDefaults() (updated *FrameOptions) {
@@ -318,8 +320,22 @@ func (options *FrameOptions) withDefaults() (updated *FrameOptions) {
 }
 
 func (options FrameOptions) String() string {
-	return fmt.Sprintf(`{"options": {"rowLabel": "%s", "inverseEnabled": %v}}`,
-		options.RowLabel, options.InverseEnabled)
+	mopt := map[string]interface{}{
+		"rowLabel": options.RowLabel,
+	}
+	if options.InverseEnabled {
+		mopt["inverseEnabled"] = true
+	}
+	if options.TimeQuantum != TimeQuantumNone {
+		mopt["timeQuantum"] = string(options.TimeQuantum)
+	}
+	if options.CacheType != CacheTypeDefault {
+		mopt["cacheType"] = string(options.CacheType)
+	}
+	if options.CacheSize != 0 {
+		mopt["cacheSize"] = options.CacheSize
+	}
+	return fmt.Sprintf(`{"options": %s}`, encodeMap(mopt))
 }
 
 // Frame structs are used to segment and define different functional characteristics within your entire index.
@@ -453,3 +469,19 @@ const (
 	TimeQuantumMonthDayHour     TimeQuantum = "MDH"
 	TimeQuantumYearMonthDayHour TimeQuantum = "YMDH"
 )
+
+type CacheType string
+
+// CacheType constants
+const (
+	CacheTypeDefault CacheType = ""
+	CacheTypeLRU     CacheType = "lru"
+	CacheTypeRanked  CacheType = "ranked"
+)
+
+func encodeMap(m map[string]interface{}) string {
+	result, _ := json.Marshal(m)
+	// ignoring the error, since this function is package private
+	// and the input to that is pretty controlled.
+	return string(result)
+}

@@ -33,6 +33,7 @@
 package pilosa
 
 import (
+	"fmt"
 	"testing"
 	"time"
 )
@@ -305,6 +306,26 @@ func TestInverseBitmapFailsIfNotEnabled(t *testing.T) {
 	qry := frame.InverseBitmap(5)
 	if qry.Error() == nil {
 		t.Fatalf("Creating InverseBitmap query for a frame without inverse frame enabled should fail")
+	}
+}
+
+func TestFrameOptionsToString(t *testing.T) {
+	frameOptions := &FrameOptions{
+		RowLabel:       "stargazer_id",
+		TimeQuantum:    TimeQuantumDayHour,
+		InverseEnabled: true,
+		CacheType:      CacheTypeRanked,
+		CacheSize:      1000,
+	}
+	frame, err := sampleDb.Frame("stargazer", frameOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jsonString := frame.options.String()
+	targetString := `{"options": {"cacheSize":1000,"cacheType":"ranked","inverseEnabled":true,"rowLabel":"stargazer_id","timeQuantum":"DH"}}`
+	if targetString != jsonString {
+		fmt.Println(jsonString)
+		t.Fatalf("`%s` != `%s`", targetString, jsonString)
 	}
 }
 

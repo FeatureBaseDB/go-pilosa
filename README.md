@@ -5,7 +5,7 @@
 
 <img src="https://www.pilosa.com/img/speed_sloth.svg" style="float: right" align="right" height="301">
 
-Go client for Pilosa high performance index.
+Go client for Pilosa high performance distributed bitmap index.
 
 ## Change Log
 

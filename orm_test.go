@@ -33,7 +33,6 @@
 package pilosa
 
 import (
-	"fmt"
 	"testing"
 	"time"
 )
@@ -324,7 +323,6 @@ func TestFrameOptionsToString(t *testing.T) {
 	jsonString := frame.options.String()
 	targetString := `{"options": {"cacheSize":1000,"cacheType":"ranked","inverseEnabled":true,"rowLabel":"stargazer_id","timeQuantum":"DH"}}`
 	if targetString != jsonString {
-		fmt.Println(jsonString)
 		t.Fatalf("`%s` != `%s`", targetString, jsonString)
 	}
 }

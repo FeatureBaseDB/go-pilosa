@@ -102,6 +102,7 @@ func (q PQLBitmapQuery) Error() error {
 	return q.err
 }
 
+// PQLBatchQuery contains several queries to increase throughput
 type PQLBatchQuery struct {
 	index   *Index
 	queries []string

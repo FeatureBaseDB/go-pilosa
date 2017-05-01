@@ -287,7 +287,7 @@ response := client.Query(frame.Bitmap(5), options)
 
 ### Server Response
 
-When a query is sent to a Pilosa server, the server either fulfills the query or sends an error message. In the case of an error, a `PilosaError` struct is returned, otherwise a `QueryResponse` struct is returned.
+When a query is sent to a Pilosa server, the server either fulfills the query or sends an error message. In the case of an error, a `pilosa.Error` struct is returned, otherwise a `QueryResponse` struct is returned.
 
 A `QueryResponse` struct may contain zero or more results of `QueryResult` type. You can access all results using the `Results` function of `QueryResponse` (which returns a list of `QueryResult` objects), or you can use the `Result` method (which returns either the first result or `nil` if there are no results):
 

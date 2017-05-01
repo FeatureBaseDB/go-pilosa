@@ -36,13 +36,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/golang/protobuf/proto"
+	"github.com/pilosa/go-pilosa/internal"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"time"
-
-	"github.com/golang/protobuf/proto"
-	"github.com/pilosa/go-pilosa/internal"
 )
 
 // Pilosa HTTP Client
@@ -98,7 +97,7 @@ func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, e
 		return nil, err
 	}
 	if !queryResponse.Success {
-		return nil, NewPilosaError(queryResponse.ErrorMessage)
+		return nil, NewError(queryResponse.ErrorMessage)
 	}
 	return queryResponse, nil
 }
@@ -231,7 +230,7 @@ func (c *Client) httpRequest(method string, path string, data []byte, returnResp
 		if err != nil {
 			return nil, nil, err
 		}
-		return nil, nil, NewPilosaError(fmt.Sprintf("Server error (%d) %s: %s", response.StatusCode, response.Status, msg))
+		return nil, nil, NewError(fmt.Sprintf("Server error (%d) %s: %s", response.StatusCode, response.Status, msg))
 	}
 	if returnResponse == noResponse {
 		return nil, nil, nil

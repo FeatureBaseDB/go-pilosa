@@ -98,6 +98,7 @@ func (u *URI) Normalize() string {
 	return fmt.Sprintf("%s://%s:%d", scheme, u.host, u.port)
 }
 
+// Equals returns true if the checked URI is equivalent to this URI
 func (u URI) Equals(other *URI) bool {
 	if other == nil {
 		return false

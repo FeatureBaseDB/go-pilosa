@@ -480,8 +480,9 @@ const (
 )
 
 func encodeMap(m map[string]interface{}) string {
-	result, _ := json.Marshal(m)
-	// ignoring the error, since this function is package private
-	// and the input to that is pretty controlled.
+	result, err := json.Marshal(m)
+	if err != nil {
+		panic(err)
+	}
 	return string(result)
 }

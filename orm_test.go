@@ -327,6 +327,17 @@ func TestFrameOptionsToString(t *testing.T) {
 	}
 }
 
+func TestEncodeMapPanicsOnMarshalFailure(t *testing.T) {
+	defer func() {
+		recover()
+	}()
+	m := map[string]interface{}{
+		"foo": func() {},
+	}
+	encodeMap(m)
+	t.Fatal("Should have panicked")
+}
+
 func comparePQL(t *testing.T, target string, q PQLQuery) {
 	pql := q.serialize()
 	if pql != target {

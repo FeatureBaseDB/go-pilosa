@@ -36,12 +36,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/golang/protobuf/proto"
-	"github.com/pilosa/go-pilosa/internal"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"time"
+
+	"github.com/golang/protobuf/proto"
+	"github.com/pilosa/go-pilosa/internal"
 )
 
 // Client is the HTTP client for Pilosa server.

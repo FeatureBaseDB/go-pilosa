@@ -30,33 +30,40 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 // DAMAGE.
 
+/*
+Package pilosa enables querying a Pilosa server.
+
+This client uses Pilosa's http+protobuf API.
+
+Usage:
+
+	import (
+		"fmt"
+		pilosa "github.com/pilosa/go-pilosa"
+	)
+
+	// Create a Client instance
+	client := pilosa.DefaultClient()
+
+	// Create an Index instance
+	index, err := NewIndex("repository", nil)
+	if err != nil {
+		panic(err)
+	}
+
+	stargazer, err := index.Frame("stargazer", nil)
+	if err != nil {
+		panic(err)
+	}
+
+	response, err := client.Query(stargazer.Bitmap(5), nil)
+	if err != nil {
+		panic(err)
+	}
+
+	// Act on the result
+	fmt.Println(response.Result())
+
+See also https://www.pilosa.com/docs/api-reference/ and https://www.pilosa.com/docs/query-language/.
+*/
 package pilosa
-
-import (
-	"fmt"
-)
-
-// Error contains a Pilosa specific error.
-type Error struct {
-	Message string
-}
-
-// NewError creates a Pilosa error.
-func NewError(message string) *Error {
-	return &Error{Message: message}
-}
-
-func (e Error) Error() string {
-	return fmt.Sprintf("Error: %s", e.Message)
-}
-
-// Predefined Pilosa errors.
-var (
-	ErrorEmptyCluster             = NewError("No usable addresses in the cluster")
-	ErrorIndexExists              = NewError("Index exists")
-	ErrorFrameExists              = NewError("Frame exists")
-	ErrorInvalidIndexName         = NewError("Invalid index name")
-	ErrorInvalidFrameName         = NewError("Invalid frame name")
-	ErrorInvalidLabel             = NewError("Invalid label")
-	ErrorInverseBitmapsNotEnabled = NewError("Inverse bitmaps support was not enabled for this frame")
-)

@@ -308,6 +308,36 @@ func TestInverseBitmapFailsIfNotEnabled(t *testing.T) {
 	}
 }
 
+func TestFrameOptionsToString(t *testing.T) {
+	frameOptions := &FrameOptions{
+		RowLabel:       "stargazer_id",
+		TimeQuantum:    TimeQuantumDayHour,
+		InverseEnabled: true,
+		CacheType:      CacheTypeRanked,
+		CacheSize:      1000,
+	}
+	frame, err := sampleDb.Frame("stargazer", frameOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jsonString := frame.options.String()
+	targetString := `{"options": {"cacheSize":1000,"cacheType":"ranked","inverseEnabled":true,"rowLabel":"stargazer_id","timeQuantum":"DH"}}`
+	if targetString != jsonString {
+		t.Fatalf("`%s` != `%s`", targetString, jsonString)
+	}
+}
+
+func TestEncodeMapPanicsOnMarshalFailure(t *testing.T) {
+	defer func() {
+		recover()
+	}()
+	m := map[string]interface{}{
+		"foo": func() {},
+	}
+	encodeMap(m)
+	t.Fatal("Should have panicked")
+}
+
 func comparePQL(t *testing.T, target string, q PQLQuery) {
 	pql := q.serialize()
 	if pql != target {

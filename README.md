@@ -11,7 +11,8 @@ Go client for Pilosa high performance distributed bitmap index.
 
 ## Change Log
 
-* **v0.3.1** (2017-05-01): Initial version
+* **v0.3.1** (2017-05-01):
+    * Initial version
     * Supports Pilosa Server v0.3.1
 
 ## Requirements
@@ -20,22 +21,15 @@ Go client for Pilosa high performance distributed bitmap index.
 
 ## Install
 
-Import the library in your code using:
+Download the library in your `GOPATH` using:
+```
+go get github.com/pilosa/go-pilosa
+```
+
+After that, you can import that in your code using:
 
 ```go
 import pilosa "pilosa/go-pilosa"
-```
-
-Then, if you have [Glide](glide), you can run the following in the shell:
-
-```
-glide up
-```
-
-Otherwise:
-
-```
-go get -u
 ```
 
 ## Usage

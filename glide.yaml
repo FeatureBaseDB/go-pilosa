@@ -1,4 +1,4 @@
-package: github.com/pilosa/gopilosa
+package: github.com/pilosa/go-pilosa
 import:
 - package: github.com/golang/protobuf
   subpackages:

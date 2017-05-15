@@ -16,4 +16,4 @@ addons:
     packages:
       - glide
 script:
-  - glide up && $HOME/gopath/bin/goveralls -service=travis-ci -flags="-tags=integration"
+  - glide up && $HOME/gopath/bin/goveralls -service=travis-ci -ignore "internal/public.pb.go" -flags="-tags=integration"

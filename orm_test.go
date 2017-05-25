@@ -214,12 +214,12 @@ func TestBitmapOperationInvalidArg(t *testing.T) {
 		t.Fatalf("should have failed")
 	}
 	// not enough bitmaps supplied
-	q = sampleDb.Difference()
+	q = sampleIndex.Difference()
 	if q.Error() == nil {
 		t.Fatalf("should have failed")
 	}
 	// not enough bitmaps supplied
-	q = sampleDb.Intersect()
+	q = sampleIndex.Intersect()
 	if q.Error() == nil {
 		t.Fatalf("should have failed")
 	}

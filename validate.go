@@ -42,9 +42,9 @@ const (
 	maxLabel     = 64
 )
 
-var indexNameRegex = regexp.MustCompile("^[a-z0-9_-]+$")
-var frameNameRegex = regexp.MustCompile("^[a-z0-9][.a-z0-9_-]*$")
-var labelRegex = regexp.MustCompile("^[a-zA-Z][a-zA-Z0-9_]*$")
+var indexNameRegex = regexp.MustCompile("^[a-z][a-z0-9_-]*$")
+var frameNameRegex = regexp.MustCompile("^[a-z][a-z0-9_-]*$")
+var labelRegex = regexp.MustCompile("^[a-zA-Z][a-zA-Z0-9_-]*$")
 
 // ValidIndexName returns true if the given index name is valid, otherwise false.
 func ValidIndexName(name string) bool {

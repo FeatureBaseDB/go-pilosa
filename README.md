@@ -12,6 +12,9 @@ Go client for Pilosa high performance distributed bitmap index.
 
 ## Change Log
 
+* **v0.3.2**:
+    * Updated the accepted values for index, frame names and labels to match with the Pilosa server.
+
 * **v0.3.1** (2017-05-01):
     * Initial version
     * Supports Pilosa Server v0.3.1

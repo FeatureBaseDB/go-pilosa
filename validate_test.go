@@ -36,7 +36,7 @@ import "testing"
 
 func TestValidateIndexName(t *testing.T) {
 	names := []string{
-		"a", "ab", "ab1", "1", "_", "-", "b-c", "d_e",
+		"a", "ab", "ab1", "b-c", "d_e",
 		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}
 	for _, name := range names {
@@ -48,7 +48,7 @@ func TestValidateIndexName(t *testing.T) {
 
 func TestValidateIndexNameInvalid(t *testing.T) {
 	names := []string{
-		"", "'", "^", "/", "\\", "A", "*", "a:b", "valid?no", "yüce",
+		"", "'", "^", "/", "\\", "A", "*", "a:b", "valid?no", "yüce", "1", "_", "-",
 		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1",
 	}
 	for _, name := range names {
@@ -60,7 +60,7 @@ func TestValidateIndexNameInvalid(t *testing.T) {
 
 func TestValidateFrameName(t *testing.T) {
 	names := []string{
-		"a", "ab", "ab1", "b-c", "d_e", "d.e", "1",
+		"a", "ab", "ab1", "b-c", "d_e",
 		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}
 	for _, name := range names {
@@ -72,7 +72,7 @@ func TestValidateFrameName(t *testing.T) {
 
 func TestValidateFrameNameInvalid(t *testing.T) {
 	names := []string{
-		"", "'", "^", "/", "\\", "A", "*", "a:b", "valid?no", "yüce", "_", "-", ".data",
+		"", "'", "^", "/", "\\", "A", "*", "a:b", "valid?no", "yüce", "_", "-", ".data", "d.e", "1",
 		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1",
 	}
 	for _, name := range names {
@@ -85,7 +85,7 @@ func TestValidateFrameNameInvalid(t *testing.T) {
 
 func TestValidateLabel(t *testing.T) {
 	labels := []string{
-		"a", "ab", "ab1", "d_e", "A", "Bc", "B1", "aB",
+		"a", "ab", "ab1", "d_e", "A", "Bc", "B1", "aB", "b-c",
 		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}
 	for _, label := range labels {
@@ -97,7 +97,7 @@ func TestValidateLabel(t *testing.T) {
 
 func TestValidateLabelInvalid(t *testing.T) {
 	labels := []string{
-		"", "1", "_", "-", "b-c", "'", "^", "/", "\\", "*", "a:b", "valid?no", "yüce",
+		"", "1", "_", "-", "'", "^", "/", "\\", "*", "a:b", "valid?no", "yüce",
 		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1",
 	}
 	for _, label := range labels {

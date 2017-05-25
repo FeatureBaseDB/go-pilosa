@@ -201,6 +201,11 @@ func TestBitmapOperationInvalidArg(t *testing.T) {
 	if q.Error() == nil {
 		t.Fatalf("should have failed")
 	}
+	// not enough bitmaps supplied
+	q = sampleDb.Difference(b1)
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
 }
 
 func TestSetColumnAttrsTest(t *testing.T) {

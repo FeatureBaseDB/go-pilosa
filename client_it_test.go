@@ -53,7 +53,7 @@ var testFrame *Frame
 
 func TestMain(m *testing.M) {
 	var err error
-	index, err = NewIndex("go-testdb", nil)
+	index, err = NewIndex("go-testindex", nil)
 	if err != nil {
 		panic(err)
 	}
@@ -215,7 +215,7 @@ func TestEnsureIndexExists(t *testing.T) {
 func TestCreateIndexWithTimeQuantum(t *testing.T) {
 	client := getClient()
 	options := &IndexOptions{TimeQuantum: TimeQuantumYear}
-	index, err := NewIndex("db-with-timequantum", options)
+	index, err := NewIndex("index-with-timequantum", options)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -396,9 +396,9 @@ func TestSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// go-testdb should be in the schema
+	// go-testindex should be in the schema
 	for _, index := range schema.Indexes {
-		if index.Name == "go-testdb" {
+		if index.Name == "go-testindex" {
 			// test-frame should be in the schema
 			for _, frame := range index.Frames {
 				if frame.Name == "test-frame" {
@@ -408,7 +408,7 @@ func TestSchema(t *testing.T) {
 			}
 		}
 	}
-	t.Fatal("go-testdb or test-frame was not found")
+	t.Fatal("go-testindex or test-frame was not found")
 }
 
 func TestErrorRetrievingSchema(t *testing.T) {

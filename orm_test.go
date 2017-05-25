@@ -37,21 +37,21 @@ import (
 	"time"
 )
 
-var sampleDb = mustNewIndex("sample-db", "")
-var sampleFrame = mustNewFrame(sampleDb, "sample-frame", "")
-var projectDb = mustNewIndex("project-db", "user")
-var collabFrame = mustNewFrame(projectDb, "collaboration", "project")
+var sampleIndex = mustNewIndex("sample-index", "")
+var sampleFrame = mustNewFrame(sampleIndex, "sample-frame", "")
+var projectIndex = mustNewIndex("project-index", "user")
+var collabFrame = mustNewFrame(projectIndex, "collaboration", "project")
 var b1 = sampleFrame.Bitmap(10)
 var b2 = sampleFrame.Bitmap(20)
 var b3 = sampleFrame.Bitmap(42)
 var b4 = collabFrame.Bitmap(2)
 
 func TestNewIndex(t *testing.T) {
-	db, err := NewIndex("db-name", nil)
+	index, err := NewIndex("index-name", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if db.Name() != "db-name" {
+	if index.Name() != "index-name" {
 		t.Fatalf("index name was not set")
 	}
 }
@@ -64,11 +64,11 @@ func TestNewIndexWithInvalidName(t *testing.T) {
 }
 
 func TestNewFrameWithInvalidName(t *testing.T) {
-	db, err := NewIndex("foo", nil)
+	index, err := NewIndex("foo", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.Frame("$$INVALIDFRAME$$", nil)
+	_, err = index.Frame("$$INVALIDFRAME$$", nil)
 	if err == nil {
 		t.Fatal("Creating frames with invalid row labels should fail")
 	}
@@ -88,7 +88,7 @@ func TestInverseBitmap(t *testing.T) {
 		RowLabel:       "row_label",
 		InverseEnabled: true,
 	}
-	f1, err := projectDb.Frame("f1-inversable", options)
+	f1, err := projectIndex.Frame("f1-inversable", options)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,49 +125,49 @@ func TestClearBit(t *testing.T) {
 func TestUnion(t *testing.T) {
 	comparePQL(t,
 		"Union(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'))",
-		sampleDb.Union(b1, b2))
+		sampleIndex.Union(b1, b2))
 	comparePQL(t,
 		"Union(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'), Bitmap(rowID=42, frame='sample-frame'))",
-		sampleDb.Union(b1, b2, b3))
+		sampleIndex.Union(b1, b2, b3))
 	comparePQL(t,
 		"Union(Bitmap(rowID=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))",
-		sampleDb.Union(b1, b4))
+		sampleIndex.Union(b1, b4))
 	comparePQL(t,
 		"Union(Bitmap(rowID=10, frame='sample-frame'))",
-		sampleDb.Union(b1))
+		sampleIndex.Union(b1))
 	comparePQL(t,
 		"Union()",
-		sampleDb.Union())
+		sampleIndex.Union())
 }
 
 func TestIntersect(t *testing.T) {
 	comparePQL(t,
 		"Intersect(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'))",
-		sampleDb.Intersect(b1, b2))
+		sampleIndex.Intersect(b1, b2))
 	comparePQL(t,
 		"Intersect(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'), Bitmap(rowID=42, frame='sample-frame'))",
-		sampleDb.Intersect(b1, b2, b3))
+		sampleIndex.Intersect(b1, b2, b3))
 	comparePQL(t,
 		"Intersect(Bitmap(rowID=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))",
-		sampleDb.Intersect(b1, b4))
+		sampleIndex.Intersect(b1, b4))
 	comparePQL(t,
 		"Intersect(Bitmap(rowID=10, frame='sample-frame'))",
-		sampleDb.Intersect(b1))
+		sampleIndex.Intersect(b1))
 }
 
 func TestDifference(t *testing.T) {
 	comparePQL(t,
 		"Difference(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'))",
-		sampleDb.Difference(b1, b2))
+		sampleIndex.Difference(b1, b2))
 	comparePQL(t,
 		"Difference(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'), Bitmap(rowID=42, frame='sample-frame'))",
-		sampleDb.Difference(b1, b2, b3))
+		sampleIndex.Difference(b1, b2, b3))
 	comparePQL(t,
 		"Difference(Bitmap(rowID=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))",
-		sampleDb.Difference(b1, b4))
+		sampleIndex.Difference(b1, b4))
 	comparePQL(t,
 		"Difference(Bitmap(rowID=10, frame='sample-frame'))",
-		sampleDb.Difference(b1))
+		sampleIndex.Difference(b1))
 }
 
 func TestTopN(t *testing.T) {
@@ -199,17 +199,17 @@ func TestFilterFieldTopNInvalidValue(t *testing.T) {
 func TestBitmapOperationInvalidArg(t *testing.T) {
 	invalid := sampleFrame.FilterFieldTopN(12, collabFrame.Bitmap(7), "$invalid$", 80, 81)
 	// invalid argument in pos 1
-	q := sampleDb.Union(invalid, b1)
+	q := sampleIndex.Union(invalid, b1)
 	if q.Error() == nil {
 		t.Fatalf("should have failed")
 	}
 	// invalid argument in pos 2
-	q = sampleDb.Intersect(b1, invalid)
+	q = sampleIndex.Intersect(b1, invalid)
 	if q.Error() == nil {
 		t.Fatalf("should have failed")
 	}
 	// invalid argument in pos 3
-	q = sampleDb.Intersect(b1, b2, invalid)
+	q = sampleIndex.Intersect(b1, b2, invalid)
 	if q.Error() == nil {
 		t.Fatalf("should have failed")
 	}
@@ -232,7 +232,7 @@ func TestSetColumnAttrsTest(t *testing.T) {
 	}
 	comparePQL(t,
 		"SetColumnAttrs(user=5, happy=true, quote=\"\\\"Don't worry, be happy\\\"\")",
-		projectDb.SetColumnAttrs(5, attrs))
+		projectIndex.SetColumnAttrs(5, attrs))
 }
 
 func TestSetColumnAttrsInvalidAttr(t *testing.T) {
@@ -240,7 +240,7 @@ func TestSetColumnAttrsInvalidAttr(t *testing.T) {
 		"color":     "blue",
 		"$invalid$": true,
 	}
-	if projectDb.SetColumnAttrs(5, attrs).Error() == nil {
+	if projectIndex.SetColumnAttrs(5, attrs).Error() == nil {
 		t.Fatalf("Should have failed")
 	}
 }
@@ -267,8 +267,8 @@ func TestSetRowAttrsInvalidAttr(t *testing.T) {
 }
 
 func TestBatchQuery(t *testing.T) {
-	q := sampleDb.BatchQuery()
-	if q.Index() != sampleDb {
+	q := sampleIndex.BatchQuery()
+	if q.Index() != sampleIndex {
 		t.Fatalf("The correct index should be assigned")
 	}
 	q.Add(sampleFrame.Bitmap(44))
@@ -280,7 +280,7 @@ func TestBatchQuery(t *testing.T) {
 }
 
 func TestBatchQueryWithError(t *testing.T) {
-	q := sampleDb.BatchQuery()
+	q := sampleIndex.BatchQuery()
 	q.Add(sampleFrame.FilterFieldTopN(12, collabFrame.Bitmap(7), "$invalid$", 80, 81))
 	if q.Error() == nil {
 		t.Fatalf("The error must be set")
@@ -288,7 +288,7 @@ func TestBatchQueryWithError(t *testing.T) {
 }
 
 func TestCount(t *testing.T) {
-	q := projectDb.Count(collabFrame.Bitmap(42))
+	q := projectIndex.Count(collabFrame.Bitmap(42))
 	comparePQL(t, "Count(Bitmap(project=42, frame='collaboration'))", q)
 }
 
@@ -313,14 +313,14 @@ func TestInvalidColumnLabelFails(t *testing.T) {
 
 func TestInvalidRowLabelFails(t *testing.T) {
 	options := &FrameOptions{RowLabel: "$INVALID$"}
-	_, err := sampleDb.Frame("foo", options)
+	_, err := sampleIndex.Frame("foo", options)
 	if err == nil {
 		t.Fatalf("Creating frames with invalid row label should fail")
 	}
 }
 
 func TestInverseBitmapFailsIfNotEnabled(t *testing.T) {
-	frame, err := sampleDb.Frame("inverse-not-enabled", nil)
+	frame, err := sampleIndex.Frame("inverse-not-enabled", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -338,7 +338,7 @@ func TestFrameOptionsToString(t *testing.T) {
 		CacheType:      CacheTypeRanked,
 		CacheSize:      1000,
 	}
-	frame, err := sampleDb.Frame("stargazer", frameOptions)
+	frame, err := sampleIndex.Frame("stargazer", frameOptions)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -367,7 +367,7 @@ func comparePQL(t *testing.T, target string, q PQLQuery) {
 	}
 }
 
-func mustNewIndex(name string, columnLabel string) (db *Index) {
+func mustNewIndex(name string, columnLabel string) (index *Index) {
 	var err error
 	var options *IndexOptions
 	if columnLabel != "" {
@@ -375,9 +375,9 @@ func mustNewIndex(name string, columnLabel string) (db *Index) {
 		if err != nil {
 			panic(err)
 		}
-		db, err = NewIndex(name, options)
+		index, err = NewIndex(name, options)
 	} else {
-		db, err = NewIndex(name, nil)
+		index, err = NewIndex(name, nil)
 	}
 	if err != nil {
 		panic(err)
@@ -385,7 +385,7 @@ func mustNewIndex(name string, columnLabel string) (db *Index) {
 	return
 }
 
-func mustNewFrame(db *Index, name string, rowLabel string) (frame *Frame) {
+func mustNewFrame(index *Index, name string, rowLabel string) (frame *Frame) {
 	var err error
 	var options *FrameOptions
 	if rowLabel != "" {
@@ -393,9 +393,9 @@ func mustNewFrame(db *Index, name string, rowLabel string) (frame *Frame) {
 		if err != nil {
 			panic(err)
 		}
-		frame, err = db.Frame(name, options)
+		frame, err = index.Frame(name, options)
 	} else {
-		frame, err = db.Frame(name, nil)
+		frame, err = index.Frame(name, nil)
 	}
 	if err != nil {
 		panic(err)

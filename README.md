@@ -50,13 +50,13 @@ var err error
 client := pilosa.DefaultClient()
 
 // Create an Index object
-mydb, err := pilosa.NewIndex("mydb", nil)
+myindex, err := pilosa.NewIndex("myindex", nil)
 
 // Make sure the index exists on the server
-err = client.EnsureIndex(mydb)
+err = client.EnsureIndex(myindex)
 
 // Create a Frame object
-myframe, err := mydb.Frame("myframe", nil)
+myframe, err := myindex.Frame("myframe", nil)
 
 // Make sure the frame exists on the server
 err = client.EnsureFrame(myframe)
@@ -77,7 +77,7 @@ if result != nil {
 
 // You can batch queries to improve throughput
 response, err = client.Query(
-    mydb.BatchQuery(
+    myindex.BatchQuery(
         myframe.Bitmap(5),
         myframe.Bitmap(10),
     ), nil
@@ -205,10 +205,10 @@ A Pilosa URI is represented by the `pilosa.URI` struct. Below are a few ways to 
 uri1 := pilosa.DefaultURI()
 
 // create a URI from string address
-uri2, err := pilosa.NewURIFromAddress("db1.pilosa.com:20202");
+uri2, err := pilosa.NewURIFromAddress("index1.pilosa.com:20202");
 
 // create a URI with the given host and port
-uri3, err := pilosa.NewURIFromHostPort("db1.pilosa.com", 20202);
+uri3, err := pilosa.NewURIFromHostPort("index1.pilosa.com", 20202);
 ``` 
 
 ### Pilosa Client
@@ -224,7 +224,7 @@ client := pilosa.DefaultClient()
 To use a custom server address, use the `NewClientWithURI` function:
 
 ```go
-uri, err := pilosa.NewURIFromAddress("http://db1.pilosa.com:15000")
+uri, err := pilosa.NewURIFromAddress("http://index1.pilosa.com:15000")
 if err != nil {
     // Act on the error
 }

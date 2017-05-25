@@ -246,12 +246,18 @@ func (d *Index) Union(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
 // Intersect creates an Intersect query.
 // Intersect performs a logical AND on the results of each BITMAP_CALL query passed to it.
 func (d *Index) Intersect(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
+	if len(bitmaps) < 1 {
+		return NewPQLBitmapQuery("", d, NewError("Intersect operation requires at least 1 bitmap"))
+	}
 	return d.bitmapOperation("Intersect", bitmaps...)
 }
 
 // Difference creates an Intersect query.
 // Difference returns all of the bits from the first BITMAP_CALL argument passed to it, without the bits from each subsequent BITMAP_CALL.
 func (d *Index) Difference(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
+	if len(bitmaps) < 1 {
+		return NewPQLBitmapQuery("", d, NewError("Difference operation requires at least 1 bitmap"))
+	}
 	return d.bitmapOperation("Difference", bitmaps...)
 }
 
@@ -274,9 +280,6 @@ func (d *Index) SetColumnAttrs(columnID uint64, attrs map[string]interface{}) *P
 }
 
 func (d *Index) bitmapOperation(name string, bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
-	if len(bitmaps) < 2 {
-		return NewPQLBitmapQuery("", d, NewError(fmt.Sprintf("%s operation requires at least 2 bitmaps", name)))
-	}
 	var err error
 	args := make([]string, 0, len(bitmaps))
 	for _, bitmap := range bitmaps {

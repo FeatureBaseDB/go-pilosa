@@ -132,6 +132,12 @@ func TestUnion(t *testing.T) {
 	comparePQL(t,
 		"Union(Bitmap(rowID=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))",
 		sampleDb.Union(b1, b4))
+	comparePQL(t,
+		"Union(Bitmap(rowID=10, frame='sample-frame'))",
+		sampleDb.Union(b1))
+	comparePQL(t,
+		"Union()",
+		sampleDb.Union())
 }
 
 func TestIntersect(t *testing.T) {
@@ -144,6 +150,9 @@ func TestIntersect(t *testing.T) {
 	comparePQL(t,
 		"Intersect(Bitmap(rowID=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))",
 		sampleDb.Intersect(b1, b4))
+	comparePQL(t,
+		"Intersect(Bitmap(rowID=10, frame='sample-frame'))",
+		sampleDb.Intersect(b1))
 }
 
 func TestDifference(t *testing.T) {
@@ -156,6 +165,9 @@ func TestDifference(t *testing.T) {
 	comparePQL(t,
 		"Difference(Bitmap(rowID=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))",
 		sampleDb.Difference(b1, b4))
+	comparePQL(t,
+		"Difference(Bitmap(rowID=10, frame='sample-frame'))",
+		sampleDb.Difference(b1))
 }
 
 func TestTopN(t *testing.T) {
@@ -202,7 +214,12 @@ func TestBitmapOperationInvalidArg(t *testing.T) {
 		t.Fatalf("should have failed")
 	}
 	// not enough bitmaps supplied
-	q = sampleDb.Difference(b1)
+	q = sampleDb.Difference()
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+	// not enough bitmaps supplied
+	q = sampleDb.Intersect()
 	if q.Error() == nil {
 		t.Fatalf("should have failed")
 	}

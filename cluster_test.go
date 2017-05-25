@@ -75,7 +75,7 @@ func TestHosts(t *testing.T) {
 }
 
 func TestRemoveHost(t *testing.T) {
-	uri, err := NewURIFromAddress("db1.pilosa.com:9999")
+	uri, err := NewURIFromAddress("index1.pilosa.com:9999")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestRemoveHost(t *testing.T) {
 	if len(c.hosts) != 1 {
 		t.Fatalf("The cluster should contain the host")
 	}
-	uri, err = NewURIFromAddress("db1.pilosa.com:9999")
+	uri, err = NewURIFromAddress("index1.pilosa.com:9999")
 	if err != nil {
 		t.Fatal(err)
 	}

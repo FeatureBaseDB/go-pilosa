@@ -42,11 +42,11 @@ func TestDefaultURI(t *testing.T) {
 }
 
 func TestURIWithHostPort(t *testing.T) {
-	uri, err := NewURIFromHostPort("db1.pilosa.com", 3333)
+	uri, err := NewURIFromHostPort("index1.pilosa.com", 3333)
 	if err != nil {
 		t.Fatal(err)
 	}
-	compare(t, uri, "http", "db1.pilosa.com", 3333)
+	compare(t, uri, "http", "index1.pilosa.com", 3333)
 }
 
 func TestURIFromAddress(t *testing.T) {
@@ -56,10 +56,10 @@ func TestURIFromAddress(t *testing.T) {
 		host    string
 		port    uint16
 	}{
-		{"http+protobuf://db1.pilosa.com:3333", "http+protobuf", "db1.pilosa.com", 3333},
-		{"db1.pilosa.com:3333", "http", "db1.pilosa.com", 3333},
-		{"https://db1.pilosa.com", "https", "db1.pilosa.com", 10101},
-		{"db1.pilosa.com", "http", "db1.pilosa.com", 10101},
+		{"http+protobuf://index1.pilosa.com:3333", "http+protobuf", "index1.pilosa.com", 3333},
+		{"index1.pilosa.com:3333", "http", "index1.pilosa.com", 3333},
+		{"https://index1.pilosa.com", "https", "index1.pilosa.com", 10101},
+		{"index1.pilosa.com", "http", "index1.pilosa.com", 10101},
 		{"https://:3333", "https", "localhost", 3333},
 		{":3333", "http", "localhost", 3333},
 	}

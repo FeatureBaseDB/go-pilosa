@@ -41,11 +41,11 @@ import (
 func TestQueryWithError(t *testing.T) {
 	var err error
 	client := pilosa.DefaultClient()
-	db, err := pilosa.NewIndex("foo", nil)
+	index, err := pilosa.NewIndex("foo", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	frame, err := db.Frame("foo", nil)
+	frame, err := index.Frame("foo", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

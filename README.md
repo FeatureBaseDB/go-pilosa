@@ -14,6 +14,7 @@ Go client for Pilosa high performance distributed bitmap index.
 
 * **v0.3.2**:
     * Updated the accepted values for index, frame names and labels to match with the Pilosa server.
+    * `Union` query now accepts zero or more variadic arguments. `Intersect` and `Difference` queries now accept one or more variadic arguments.
 
 * **v0.3.1** (2017-05-01):
     * Initial version
@@ -163,9 +164,9 @@ Please check [Pilosa documentation](https://www.pilosa.com/docs) for PQL details
 
 Index:
 
-* `Union(bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, ...) *PQLBitmapQuery`
-* `Intersect(bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, ...) *PQLBitmapQuery`
-* `Difference(bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, ...) *PQLBitmapQuery`
+* `Union(bitmaps *PQLBitmapQuery...) *PQLBitmapQuery`
+* `Intersect(bitmaps *PQLBitmapQuery...) *PQLBitmapQuery`
+* `Difference(bitmaps *PQLBitmapQuery...) *PQLBitmapQuery`
 * `Count(bitmap *PQLBitmapQuery) *PQLBaseQuery`
 * `SetColumnAttrs(columnID uint64, attrs map[string]interface{}) *PQLBaseQuery`
 

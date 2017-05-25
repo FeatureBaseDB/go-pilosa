@@ -132,6 +132,12 @@ func TestUnion(t *testing.T) {
 	comparePQL(t,
 		"Union(Bitmap(rowID=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))",
 		sampleIndex.Union(b1, b4))
+	comparePQL(t,
+		"Union(Bitmap(rowID=10, frame='sample-frame'))",
+		sampleIndex.Union(b1))
+	comparePQL(t,
+		"Union()",
+		sampleIndex.Union())
 }
 
 func TestIntersect(t *testing.T) {
@@ -144,6 +150,9 @@ func TestIntersect(t *testing.T) {
 	comparePQL(t,
 		"Intersect(Bitmap(rowID=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))",
 		sampleIndex.Intersect(b1, b4))
+	comparePQL(t,
+		"Intersect(Bitmap(rowID=10, frame='sample-frame'))",
+		sampleIndex.Intersect(b1))
 }
 
 func TestDifference(t *testing.T) {
@@ -156,6 +165,9 @@ func TestDifference(t *testing.T) {
 	comparePQL(t,
 		"Difference(Bitmap(rowID=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))",
 		sampleIndex.Difference(b1, b4))
+	comparePQL(t,
+		"Difference(Bitmap(rowID=10, frame='sample-frame'))",
+		sampleIndex.Difference(b1))
 }
 
 func TestTopN(t *testing.T) {
@@ -198,6 +210,16 @@ func TestBitmapOperationInvalidArg(t *testing.T) {
 	}
 	// invalid argument in pos 3
 	q = sampleIndex.Intersect(b1, b2, invalid)
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+	// not enough bitmaps supplied
+	q = sampleIndex.Difference()
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+	// not enough bitmaps supplied
+	q = sampleIndex.Intersect()
 	if q.Error() == nil {
 		t.Fatalf("should have failed")
 	}

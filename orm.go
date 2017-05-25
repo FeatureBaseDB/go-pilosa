@@ -239,20 +239,26 @@ func (d *Index) RawQuery(query string) *PQLBaseQuery {
 
 // Union creates a Union query.
 // Union performs a logical OR on the results of each BITMAP_CALL query passed to it.
-func (d *Index) Union(bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
-	return d.bitmapOperation("Union", bitmap1, bitmap2, bitmaps...)
+func (d *Index) Union(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
+	return d.bitmapOperation("Union", bitmaps...)
 }
 
 // Intersect creates an Intersect query.
 // Intersect performs a logical AND on the results of each BITMAP_CALL query passed to it.
-func (d *Index) Intersect(bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
-	return d.bitmapOperation("Intersect", bitmap1, bitmap2, bitmaps...)
+func (d *Index) Intersect(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
+	if len(bitmaps) < 1 {
+		return NewPQLBitmapQuery("", d, NewError("Intersect operation requires at least 1 bitmap"))
+	}
+	return d.bitmapOperation("Intersect", bitmaps...)
 }
 
 // Difference creates an Intersect query.
 // Difference returns all of the bits from the first BITMAP_CALL argument passed to it, without the bits from each subsequent BITMAP_CALL.
-func (d *Index) Difference(bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
-	return d.bitmapOperation("Difference", bitmap1, bitmap2, bitmaps...)
+func (d *Index) Difference(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
+	if len(bitmaps) < 1 {
+		return NewPQLBitmapQuery("", d, NewError("Difference operation requires at least 1 bitmap"))
+	}
+	return d.bitmapOperation("Difference", bitmaps...)
 }
 
 // Count creates a Count query.
@@ -273,16 +279,9 @@ func (d *Index) SetColumnAttrs(columnID uint64, attrs map[string]interface{}) *P
 		d.options.ColumnLabel, columnID, attrsString), d, nil)
 }
 
-func (d *Index) bitmapOperation(name string, bitmap1 *PQLBitmapQuery, bitmap2 *PQLBitmapQuery, bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
+func (d *Index) bitmapOperation(name string, bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
 	var err error
-	if err = bitmap1.Error(); err != nil {
-		return NewPQLBitmapQuery("", d, err)
-	}
-	if err = bitmap2.Error(); err != nil {
-		return NewPQLBitmapQuery("", d, err)
-	}
-	args := make([]string, 0, 2+len(bitmaps))
-	args = append(args, bitmap1.serialize(), bitmap2.serialize())
+	args := make([]string, 0, len(bitmaps))
 	for _, bitmap := range bitmaps {
 		if err = bitmap.Error(); err != nil {
 			return NewPQLBitmapQuery("", d, err)

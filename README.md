@@ -1,6 +1,6 @@
 # Go Client for Pilosa
 
-<a href="https://github.com/pilosa"><img src="https://img.shields.io/badge/pilosa-v0.3.2-blue.svg"></a>
+<a href="https://github.com/pilosa"><img src="https://img.shields.io/badge/pilosa-v0.4.0-blue.svg"></a>
 <a href="https://godoc.org/github.com/pilosa/go-pilosa"><img src="https://godoc.org/github.com/pilosa/go-pilosa?status.svg" alt="GoDoc"></a>
 <a href="https://travis-ci.com/pilosa/go-pilosa"><img src="https://api.travis-ci.com/pilosa/go-pilosa.svg?token=vqssvEWV3KAhu8oVFx9s&branch=master"></a>
 <a href="https://goreportcard.com/report/github.com/pilosa/go-pilosa"><img src="https://goreportcard.com/badge/github.com/pilosa/go-pilosa?updated=1"></a>
@@ -12,9 +12,12 @@ Go client for Pilosa high performance distributed bitmap index.
 
 ## Change Log
 
-* **v0.3.2**:
+* **v0.4.0** (2017-06-09):
+    * Supports Pilosa Server v0.4.0.
     * Updated the accepted values for index, frame names and labels to match with the Pilosa server.
     * `Union` query now accepts zero or more variadic arguments. `Intersect` and `Difference` queries now accept one or more variadic arguments.
+    * Added `inverse TopN` and `inverse Range` calls.
+    * Inverse enabled status of frames is not checked on the client side.
 
 * **v0.3.1** (2017-05-01):
     * Initial version
@@ -173,13 +176,18 @@ Index:
 Frame:
 
 * `Bitmap(rowID uint64) *PQLBitmapQuery`
+* `InverseBitmap(columnID uint64) *PQLBitmapQuery`
 * `SetBit(rowID uint64, columnID uint64) *PQLBaseQuery`
 * `SetBitTimestamp(rowID uint64, columnID uint64, timestamp time.Time) *PQLBaseQuery`
 * `ClearBit(rowID uint64, columnID uint64) *PQLBaseQuery`
 * `TopN(n uint64) *PQLBitmapQuery`
 * `BitmapTopN(n uint64, bitmap *PQLBitmapQuery) *PQLBitmapQuery`
 * `FilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, values ...interface{}) *PQLBitmapQuery`
+* `InverseTopN(n uint64) *PQLBitmapQuery`
+* `InverseBitmapTopN(n uint64, bitmap *PQLBitmapQuery) *PQLBitmapQuery`
+* `InverseFilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, values ...interface{}) *PQLBitmapQuery`
 * `Range(rowID uint64, start time.Time, end time.Time) *PQLBitmapQuery`
+* `InverseRange(columnID uint64, start time.Time, end time.Time) *PQLBitmapQuery`
 * `SetBitmapAttrs(rowID uint64, attrs map[string]interface{}) *PQLBaseQuery`
 
 ### Pilosa URI

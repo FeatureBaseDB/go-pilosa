@@ -305,10 +305,10 @@ func TestRange(t *testing.T) {
 	start := time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2000, time.February, 2, 3, 4, 0, 0, time.UTC)
 	comparePQL(t,
-		"Range(project=10, frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04', inverse=false)",
+		"Range(project=10, frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
 		collabFrame.Range(10, start, end))
 	comparePQL(t,
-		"Range(project=10, frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04', inverse=true)",
+		"Range(user=10, frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
 		collabFrame.InverseRange(10, start, end))
 }
 

@@ -444,16 +444,15 @@ func (f *Frame) filterFieldTopN(n uint64, bitmap *PQLBitmapQuery, inverse bool, 
 // Range creates a Range query.
 // Similar to Bitmap, but only returns bits which were set with timestamps between the given start and end timestamps.
 func (f *Frame) Range(rowID uint64, start time.Time, end time.Time) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("Range(%s=%d, frame='%s', start='%s', end='%s', inverse=false)",
+	return NewPQLBitmapQuery(fmt.Sprintf("Range(%s=%d, frame='%s', start='%s', end='%s')",
 		f.options.RowLabel, rowID, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
 }
 
 // InverseRange creates a Range query.
 // Similar to Bitmap, but only returns bits which were set with timestamps between the given start and end timestamps.
-// This variant sets inverse=true.
-func (f *Frame) InverseRange(rowID uint64, start time.Time, end time.Time) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("Range(%s=%d, frame='%s', start='%s', end='%s', inverse=true)",
-		f.options.RowLabel, rowID, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
+func (f *Frame) InverseRange(columnID uint64, start time.Time, end time.Time) *PQLBitmapQuery {
+	return NewPQLBitmapQuery(fmt.Sprintf("Range(%s=%d, frame='%s', start='%s', end='%s')",
+		f.index.options.ColumnLabel, columnID, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
 }
 
 // SetRowAttrs creates a SetRowAttrs query.

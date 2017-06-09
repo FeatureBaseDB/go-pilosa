@@ -358,9 +358,6 @@ func (f *Frame) Bitmap(rowID uint64) *PQLBitmapQuery {
 // Bitmap retrieves the indices of all the set bits in a row or column based on whether the row label or column label is given in the query.
 // It also retrieves any attributes set on that row or column.
 func (f *Frame) InverseBitmap(columnID uint64) *PQLBaseQuery {
-	if !f.options.InverseEnabled {
-		return NewPQLBaseQuery("", f.index, ErrorInverseBitmapsNotEnabled)
-	}
 	return NewPQLBaseQuery(fmt.Sprintf("Bitmap(%s=%d, frame='%s')",
 		f.index.options.ColumnLabel, columnID, f.name), f.index, nil)
 }
@@ -391,19 +388,44 @@ func (f *Frame) ClearBit(rowID uint64, columnID uint64) *PQLBaseQuery {
 // TopN creates a TopN query with the given item count.
 // Returns the id and count of the top n bitmaps (by count of bits) in the frame.
 func (f *Frame) TopN(n uint64) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("TopN(frame='%s', n=%d)", f.name, n), f.index, nil)
+	return NewPQLBitmapQuery(fmt.Sprintf("TopN(frame='%s', n=%d, inverse=false)", f.name, n), f.index, nil)
+}
+
+// InverseTopN creates a TopN query with the given item count.
+// Returns the id and count of the top n bitmaps (by count of bits) in the frame.
+// This variant sets inverse=true
+func (f *Frame) InverseTopN(n uint64) *PQLBitmapQuery {
+	return NewPQLBitmapQuery(fmt.Sprintf("TopN(frame='%s', n=%d, inverse=true)", f.name, n), f.index, nil)
 }
 
 // BitmapTopN creates a TopN query with the given item count and bitmap.
-// This variant supports customizing the bitmap query.
+// This variant supports customizing the bitmap query and sets inverse=true.
 func (f *Frame) BitmapTopN(n uint64, bitmap *PQLBitmapQuery) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d)",
+	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d, inverse=false)",
+		bitmap.serialize(), f.name, n), f.index, nil)
+}
+
+// InverseBitmapTopN creates a TopN query with the given item count and bitmap.
+// This variant supports customizing the bitmap query and sets inverse=true.
+func (f *Frame) InverseBitmapTopN(n uint64, bitmap *PQLBitmapQuery) *PQLBitmapQuery {
+	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d, inverse=true)",
 		bitmap.serialize(), f.name, n), f.index, nil)
 }
 
 // FilterFieldTopN creates a TopN query with the given item count, bitmap, field and the filter for that field
 // The field and filters arguments work together to only return Bitmaps which have the attribute specified by field with one of the values specified in filters.
 func (f *Frame) FilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, values ...interface{}) *PQLBitmapQuery {
+	return f.filterFieldTopN(n, bitmap, false, field, values...)
+}
+
+// InverseFilterFieldTopN creates a TopN query with the given item count, bitmap, field and the filter for that field
+// The field and filters arguments work together to only return Bitmaps which have the attribute specified by field with one of the values specified in filters.
+// This variant sets inverse=true.
+func (f *Frame) InverseFilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, values ...interface{}) *PQLBitmapQuery {
+	return f.filterFieldTopN(n, bitmap, true, field, values...)
+}
+
+func (f *Frame) filterFieldTopN(n uint64, bitmap *PQLBitmapQuery, inverse bool, field string, values ...interface{}) *PQLBitmapQuery {
 	if err := validateLabel(field); err != nil {
 		return NewPQLBitmapQuery("", f.index, err)
 	}
@@ -411,14 +433,26 @@ func (f *Frame) FilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, 
 	if err != nil {
 		return NewPQLBitmapQuery("", f.index, err)
 	}
-	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d, field='%s', %s)",
-		bitmap.serialize(), f.name, n, field, string(b)), f.index, nil)
+	inverseStr := "true"
+	if !inverse {
+		inverseStr = "false"
+	}
+	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d, inverse=%s, field='%s', %s)",
+		bitmap.serialize(), f.name, n, inverseStr, field, string(b)), f.index, nil)
 }
 
 // Range creates a Range query.
 // Similar to Bitmap, but only returns bits which were set with timestamps between the given start and end timestamps.
 func (f *Frame) Range(rowID uint64, start time.Time, end time.Time) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("Range(%s=%d, frame='%s', start='%s', end='%s')",
+	return NewPQLBitmapQuery(fmt.Sprintf("Range(%s=%d, frame='%s', start='%s', end='%s', inverse=false)",
+		f.options.RowLabel, rowID, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
+}
+
+// InverseRange creates a Range query.
+// Similar to Bitmap, but only returns bits which were set with timestamps between the given start and end timestamps.
+// This variant sets inverse=true.
+func (f *Frame) InverseRange(rowID uint64, start time.Time, end time.Time) *PQLBitmapQuery {
+	return NewPQLBitmapQuery(fmt.Sprintf("Range(%s=%d, frame='%s', start='%s', end='%s', inverse=true)",
 		f.options.RowLabel, rowID, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
 }
 

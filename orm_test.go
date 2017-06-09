@@ -172,14 +172,23 @@ func TestDifference(t *testing.T) {
 
 func TestTopN(t *testing.T) {
 	comparePQL(t,
-		"TopN(frame='sample-frame', n=27)",
+		"TopN(frame='sample-frame', n=27, inverse=false)",
 		sampleFrame.TopN(27))
 	comparePQL(t,
-		"TopN(Bitmap(project=3, frame='collaboration'), frame='sample-frame', n=10)",
+		"TopN(frame='sample-frame', n=27, inverse=true)",
+		sampleFrame.InverseTopN(27))
+	comparePQL(t,
+		"TopN(Bitmap(project=3, frame='collaboration'), frame='sample-frame', n=10, inverse=false)",
 		sampleFrame.BitmapTopN(10, collabFrame.Bitmap(3)))
 	comparePQL(t,
-		"TopN(Bitmap(project=7, frame='collaboration'), frame='sample-frame', n=12, field='category', [80,81])",
+		"TopN(Bitmap(project=3, frame='collaboration'), frame='sample-frame', n=10, inverse=true)",
+		sampleFrame.InverseBitmapTopN(10, collabFrame.Bitmap(3)))
+	comparePQL(t,
+		"TopN(Bitmap(project=7, frame='collaboration'), frame='sample-frame', n=12, inverse=false, field='category', [80,81])",
 		sampleFrame.FilterFieldTopN(12, collabFrame.Bitmap(7), "category", 80, 81))
+	comparePQL(t,
+		"TopN(Bitmap(project=7, frame='collaboration'), frame='sample-frame', n=12, inverse=true, field='category', [80,81])",
+		sampleFrame.InverseFilterFieldTopN(12, collabFrame.Bitmap(7), "category", 80, 81))
 }
 
 func TestFilterFieldTopNInvalidField(t *testing.T) {
@@ -296,8 +305,11 @@ func TestRange(t *testing.T) {
 	start := time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2000, time.February, 2, 3, 4, 0, 0, time.UTC)
 	comparePQL(t,
-		"Range(project=10, frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
+		"Range(project=10, frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04', inverse=false)",
 		collabFrame.Range(10, start, end))
+	comparePQL(t,
+		"Range(project=10, frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04', inverse=true)",
+		collabFrame.InverseRange(10, start, end))
 }
 
 func TestInvalidColumnLabelFails(t *testing.T) {
@@ -316,17 +328,6 @@ func TestInvalidRowLabelFails(t *testing.T) {
 	_, err := sampleIndex.Frame("foo", options)
 	if err == nil {
 		t.Fatalf("Creating frames with invalid row label should fail")
-	}
-}
-
-func TestInverseBitmapFailsIfNotEnabled(t *testing.T) {
-	frame, err := sampleIndex.Frame("inverse-not-enabled", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	qry := frame.InverseBitmap(5)
-	if qry.Error() == nil {
-		t.Fatalf("Creating InverseBitmap query for a frame without inverse frame enabled should fail")
 	}
 }
 

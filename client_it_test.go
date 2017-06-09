@@ -1,4 +1,4 @@
-// +build integration
+ +build integration
 
 // Copyright 2017 Pilosa Corp.
 //
@@ -43,6 +43,7 @@ import (
 	"reflect"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pilosa/go-pilosa/internal"
@@ -176,6 +177,67 @@ func TestSetRowAttrs(t *testing.T) {
 	}
 	if !reflect.DeepEqual(targetAttrs, response.Result().Bitmap.Attributes) {
 		t.Fatalf("Bitmap attributes should be set")
+	}
+}
+
+func TestOrmCount(t *testing.T) {
+	client := getClient()
+	countFrame, err := index.Frame("count-test", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureFrame(countFrame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	qry := index.BatchQuery(
+		countFrame.SetBit(10, 20),
+		countFrame.SetBit(10, 21),
+		countFrame.SetBit(15, 25),
+	)
+	client.Query(qry, nil)
+	response, err := client.Query(index.Count(countFrame.Bitmap(10)), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Result().Count != 2 {
+		t.Fatalf("Count should be 2")
+	}
+}
+
+func TestTopNReturns(t *testing.T) {
+	client := getClient()
+	frame, err := index.Frame("topn_test", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	qry := index.BatchQuery(
+		frame.SetBit(10, 5),
+		frame.SetBit(10, 10),
+		frame.SetBit(10, 15),
+		frame.SetBit(20, 5),
+		frame.SetBit(30, 5),
+	)
+	client.Query(qry, nil)
+	time.Sleep(10 * time.Second)
+	response, err := client.Query(frame.TopN(2), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := response.Result().CountItems
+	if len(items) != 2 {
+		t.Fatalf("There should be 2 count items")
+	}
+	item := items[0]
+	if item.ID != 10 {
+		t.Fatalf("Item[0] ID should be 10")
+	}
+	if item.Count != 3 {
+		t.Fatalf("Item[0] Count should be 3")
 	}
 }
 

@@ -399,7 +399,7 @@ func (f *Frame) InverseTopN(n uint64) *PQLBitmapQuery {
 }
 
 // BitmapTopN creates a TopN query with the given item count and bitmap.
-// This variant supports customizing the bitmap query and sets inverse=true.
+// This variant supports customizing the bitmap query.
 func (f *Frame) BitmapTopN(n uint64, bitmap *PQLBitmapQuery) *PQLBitmapQuery {
 	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d, inverse=false)",
 		bitmap.serialize(), f.name, n), f.index, nil)

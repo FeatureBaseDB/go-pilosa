@@ -176,7 +176,7 @@ Index:
 Frame:
 
 * `Bitmap(rowID uint64) *PQLBitmapQuery`
-* `InverseBitmap(rowID uint64) *PQLBitmapQuery`
+* `InverseBitmap(columnID uint64) *PQLBitmapQuery`
 * `SetBit(rowID uint64, columnID uint64) *PQLBaseQuery`
 * `SetBitTimestamp(rowID uint64, columnID uint64, timestamp time.Time) *PQLBaseQuery`
 * `ClearBit(rowID uint64, columnID uint64) *PQLBaseQuery`
@@ -187,7 +187,7 @@ Frame:
 * `InverseBitmapTopN(n uint64, bitmap *PQLBitmapQuery) *PQLBitmapQuery`
 * `InverseFilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, values ...interface{}) *PQLBitmapQuery`
 * `Range(rowID uint64, start time.Time, end time.Time) *PQLBitmapQuery`
-* `InverseRange(rowID uint64, start time.Time, end time.Time) *PQLBitmapQuery`
+* `InverseRange(columnID uint64, start time.Time, end time.Time) *PQLBitmapQuery`
 * `SetBitmapAttrs(rowID uint64, attrs map[string]interface{}) *PQLBaseQuery`
 
 ### Pilosa URI

@@ -223,6 +223,7 @@ func TestTopNReturns(t *testing.T) {
 		frame.SetBit(30, 5),
 	)
 	client.Query(qry, nil)
+	// XXX: The following is required to make this test pass. See: https://github.com/pilosa/pilosa/issues/625
 	time.Sleep(10 * time.Second)
 	response, err := client.Query(frame.TopN(2), nil)
 	if err != nil {

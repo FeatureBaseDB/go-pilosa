@@ -36,9 +36,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -181,6 +183,97 @@ func (c *Client) Schema() (*Schema, error) {
 	return schema, nil
 }
 
+func (c *Client) ImportFrame(frame *Frame, bitIterator *CSVBitIterator, batchSize uint) error {
+	const sliceWidth = 1048576
+	canContinue := true
+	bitGroup := map[uint64][]Bit{}
+	var currentBatchSize uint
+	indexName := frame.index.name
+	frameName := frame.name
+
+	callback := func(bit Bit) bool {
+		slice := bit.ColumnID / sliceWidth
+		if sliceArray, ok := bitGroup[slice]; ok {
+			bitGroup[slice] = append(sliceArray, bit)
+		} else {
+			bitGroup[slice] = []Bit{bit}
+		}
+		currentBatchSize++
+		return currentBatchSize < batchSize
+	}
+	for canContinue {
+		err := bitIterator.Iterate(callback)
+		if err == io.EOF {
+			canContinue = false
+		} else if err != nil {
+			return err
+		}
+		for slice, bits := range bitGroup {
+			err := c.importBits(indexName, frameName, slice, bits)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (c *Client) importBits(indexName string, frameName string, slice uint64, bits []Bit) error {
+	// The maximum ingestion speed is accomplished by sorting bits by row ID and then column ID
+	sort.Slice(bits, func(i, j int) bool {
+		bit := bits[i]
+		other := bits[j]
+		bitCmp := bit.RowID - other.RowID
+		if bitCmp == 0 {
+			return bit.ColumnID < other.ColumnID
+		}
+		return bitCmp < 0
+	})
+	nodes, err := c.fetchFragmentNodes(indexName, slice)
+	if err != nil {
+		return err
+	}
+	for _, node := range nodes {
+		uri, err := NewURIFromAddress(node.Host)
+		if err != nil {
+			return err
+		}
+		client := NewClientWithURI(uri)
+		err = client.importNode(bitsToImportRequest(indexName, frameName, slice, bits))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]FragmentNode, error) {
+	path := fmt.Sprintf("/fragment/nodes?slice=%d&index=%s", slice, indexName)
+	_, body, err := c.httpRequest("GET", path, []byte{}, errorCheckedResponse)
+	if err != nil {
+		return nil, err
+	}
+	fragmentNodes := []FragmentNode{}
+	err = json.Unmarshal(body, &fragmentNodes)
+	if err != nil {
+		return nil, err
+	}
+	return fragmentNodes, nil
+}
+
+func (c *Client) importNode(request *internal.ImportRequest) error {
+	data, _ := proto.Marshal(request)
+	// request.Marshal never returns an error
+	_, _, err := c.httpRequest("POST", "/import", data, errorCheckedResponse)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (c *Client) patchIndexTimeQuantum(index *Index) error {
 	data := []byte(fmt.Sprintf(`{"timeQuantum": "%s"}`, index.options.TimeQuantum))
 	path := fmt.Sprintf("/index/%s/time-quantum", index.name)
@@ -273,6 +366,25 @@ func matchError(msg string) error {
 	return nil
 }
 
+func bitsToImportRequest(indexName string, frameName string, slice uint64, bits []Bit) *internal.ImportRequest {
+	bitmapIDs := make([]uint64, 0, len(bits))
+	columnIDs := make([]uint64, 0, len(bits))
+	timestamps := make([]int64, 0, len(bits))
+	for _, bit := range bits {
+		bitmapIDs = append(bitmapIDs, bit.RowID)
+		columnIDs = append(columnIDs, bit.ColumnID)
+		timestamps = append(timestamps, bit.Timestamp)
+	}
+	return &internal.ImportRequest{
+		Index:      indexName,
+		Frame:      frameName,
+		Slice:      slice,
+		RowIDs:     bitmapIDs,
+		ColumnIDs:  columnIDs,
+		Timestamps: timestamps,
+	}
+}
+
 // ClientOptions control the properties of client connection to the server
 type ClientOptions struct {
 	SocketTimeout    time.Duration
@@ -325,3 +437,8 @@ const (
 	rawResponse
 	errorCheckedResponse
 )
+
+type FragmentNode struct {
+	Host         string
+	InternalHost string
+}

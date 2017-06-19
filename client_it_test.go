@@ -36,12 +36,14 @@ package pilosa
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -239,6 +241,39 @@ func TestTopNReturns(t *testing.T) {
 	}
 	if item.Count != 3 {
 		t.Fatalf("Item[0] Count should be 3")
+	}
+}
+
+func TestIntersectReturns(t *testing.T) {
+	client := getClient()
+	options := &FrameOptions{
+		RowLabel: "segment_id",
+	}
+	frame, err := index.Frame("segments", options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	qry1 := index.BatchQuery(
+		frame.SetBit(2, 10),
+		frame.SetBit(2, 15),
+		frame.SetBit(3, 10),
+		frame.SetBit(3, 20),
+	)
+	client.Query(qry1, nil)
+	qry2 := index.Intersect(frame.Bitmap(2), frame.Bitmap(3))
+	response, err := client.Query(qry2, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Results()) != 1 {
+		t.Fatal("There must be 1 result")
+	}
+	if !reflect.DeepEqual(response.Result().Bitmap.Bits, []uint64{10}) {
+		t.Fatal("Returned bits must be: [10]")
 	}
 }
 
@@ -502,6 +537,85 @@ func TestInvalidSchema(t *testing.T) {
 	}
 }
 
+func TestCSVImport(t *testing.T) {
+	client := getClient()
+	text := `
+		10,5
+		2,3
+		10,7
+		7,1
+	`
+	iterator := NewCSVBitIterator(strings.NewReader(text))
+	frame, err := index.Frame("importframe", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.ImportFrame(frame, iterator, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	target := []uint64{3, 1, 5}
+	bq := index.BatchQuery(
+		frame.Bitmap(2),
+		frame.Bitmap(7),
+		frame.Bitmap(10),
+	)
+	response, err := client.Query(bq, nil)
+	if len(response.Results()) != 3 {
+		t.Fatalf("Result count should be 3")
+	}
+	for i, result := range response.Results() {
+		br := result.Bitmap
+		if target[i] != br.Bits[0] {
+			t.Fatalf("%d != %d", target[i], br.Bits[0])
+		}
+	}
+}
+
+func TestFetchFragmentNodes(t *testing.T) {
+	client := getClient()
+	nodes, err := client.fetchFragmentNodes(index.Name(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes) != 1 {
+		t.Fatalf("1 node should be returned")
+	}
+}
+
+func TestImportBitIteratorError(t *testing.T) {
+	client := getClient()
+	frame, err := index.Frame("not-important", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	iterator := NewCSVBitIterator(&BrokenReader{})
+	err = client.ImportFrame(frame, iterator, 100)
+	if err == nil {
+		t.Fatalf("import frame should fail with broken reader")
+	}
+}
+
+func TestImportFailsForFetchFrameError(t *testing.T) {
+	client := getClient()
+	frame, err := index.Frame("not-important", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	iterator := NewCSVBitIterator(strings.NewReader("1,10"))
+	server := getMockServer(500, []byte{}, 0)
+	defer server.Close()
+	err = client.ImportFrame(frame, iterator, 100)
+	if err == nil {
+		t.Fatalf("import frame should fail when fetch frames fails")
+	}
+}
+
 func TestResponseWithInvalidType(t *testing.T) {
 	qr := &internal.QueryResponse{
 		Err: "",
@@ -555,4 +669,10 @@ func getMockServer(statusCode int, response []byte, contentLength int) *httptest
 		}
 	})
 	return httptest.NewServer(handler)
+}
+
+type BrokenReader struct{}
+
+func (r BrokenReader) Read(p []byte) (n int, err error) {
+	return 0, errors.New("broken reader")
 }

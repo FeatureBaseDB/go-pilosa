@@ -220,16 +220,7 @@ func (c *Client) ImportFrame(frame *Frame, bitIterator *CSVBitIterator, batchSiz
 }
 
 func (c *Client) importBits(indexName string, frameName string, slice uint64, bits []Bit) error {
-	// The maximum ingestion speed is accomplished by sorting bits by row ID and then column ID
-	sort.Slice(bits, func(i, j int) bool {
-		bit := bits[i]
-		other := bits[j]
-		bitCmp := bit.RowID - other.RowID
-		if bitCmp == 0 {
-			return bit.ColumnID < other.ColumnID
-		}
-		return bitCmp < 0
-	})
+	sort.Sort(bitsForSort(bits))
 	nodes, err := c.fetchFragmentNodes(indexName, slice)
 	if err != nil {
 		return err

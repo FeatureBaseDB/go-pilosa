@@ -115,3 +115,21 @@ func (c *CSVBitIterator) Iterate(callback BitIteratorCallback) error {
 	}
 	return io.EOF
 }
+
+type bitsForSort []Bit
+
+func (b bitsForSort) Len() int {
+	return len(b)
+}
+
+func (b bitsForSort) Swap(i, j int) {
+	b[i], b[j] = b[j], b[i]
+}
+
+func (b bitsForSort) Less(i, j int) bool {
+	bitCmp := b[i].RowID - b[j].RowID
+	if bitCmp == 0 {
+		return b[i].ColumnID < b[j].ColumnID
+	}
+	return bitCmp < 0
+}

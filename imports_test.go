@@ -33,13 +33,45 @@
 package pilosa_test
 
 import (
+	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
-	"errors"
-
 	pilosa "github.com/pilosa/go-pilosa"
 )
+
+func TestCSVBitIterator(t *testing.T) {
+	iterator := pilosa.NewCSVBitIterator(strings.NewReader(`
+	1,10,683793200
+	5,20,683793300
+	3,41,683793385
+	`))
+	bits := []pilosa.Bit{}
+	// simulates partial iteration
+	iterator.Iterate(func(bit pilosa.Bit) bool {
+		bits = append(bits, bit)
+		return len(bits) != 2
+	})
+	if len(bits) != 2 {
+		t.Fatalf("There should be 2 bits")
+	}
+	iterator.Iterate(func(bit pilosa.Bit) bool {
+		bits = append(bits, bit)
+		return true
+	})
+	if len(bits) != 3 {
+		t.Fatalf("There should be 3 bits")
+	}
+	target := []pilosa.Bit{
+		pilosa.Bit{RowID: 1, ColumnID: 10, Timestamp: 683793200},
+		pilosa.Bit{RowID: 5, ColumnID: 20, Timestamp: 683793300},
+		pilosa.Bit{RowID: 3, ColumnID: 41, Timestamp: 683793385},
+	}
+	if !reflect.DeepEqual(target, bits) {
+		t.Fatalf("%v != %v", target, bits)
+	}
+}
 
 func TestCSVBitIteratorInvalidInput(t *testing.T) {
 	invalidInputs := []string{

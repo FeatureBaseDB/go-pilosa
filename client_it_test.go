@@ -45,7 +45,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pilosa/go-pilosa/internal"
@@ -204,43 +203,6 @@ func TestOrmCount(t *testing.T) {
 	}
 	if response.Result().Count != 2 {
 		t.Fatalf("Count should be 2")
-	}
-}
-
-func TestTopNReturns(t *testing.T) {
-	client := getClient()
-	frame, err := index.Frame("topn_test", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.EnsureFrame(frame)
-	if err != nil {
-		t.Fatal(err)
-	}
-	qry := index.BatchQuery(
-		frame.SetBit(10, 5),
-		frame.SetBit(10, 10),
-		frame.SetBit(10, 15),
-		frame.SetBit(20, 5),
-		frame.SetBit(30, 5),
-	)
-	client.Query(qry, nil)
-	// XXX: The following is required to make this test pass. See: https://github.com/pilosa/pilosa/issues/625
-	time.Sleep(10 * time.Second)
-	response, err := client.Query(frame.TopN(2), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	items := response.Result().CountItems
-	if len(items) != 2 {
-		t.Fatalf("There should be 2 count items")
-	}
-	item := items[0]
-	if item.ID != 10 {
-		t.Fatalf("Item[0] ID should be 10")
-	}
-	if item.Count != 3 {
-		t.Fatalf("Item[0] Count should be 3")
 	}
 }
 
@@ -540,9 +502,9 @@ func TestInvalidSchema(t *testing.T) {
 func TestCSVImport(t *testing.T) {
 	client := getClient()
 	text := `
+		10,7
 		10,5
 		2,3
-		10,7
 		7,1
 	`
 	iterator := NewCSVBitIterator(strings.NewReader(text))
@@ -601,18 +563,88 @@ func TestImportBitIteratorError(t *testing.T) {
 	}
 }
 
-func TestImportFailsForFetchFrameError(t *testing.T) {
-	client := getClient()
-	frame, err := index.Frame("not-important", nil)
+func TestImportFailsOnImportBitsError(t *testing.T) {
+	server := getMockServer(500, []byte{}, 0)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	iterator := NewCSVBitIterator(strings.NewReader("1,10"))
+	client := NewClientWithURI(uri)
+	err = client.importBits("foo", "bar", 0, []Bit{})
+	if err == nil {
+		t.Fatalf("importBits should fail when fetch fragment nodes fails")
+	}
+}
+
+func TestImportFrameFailsIfImportBitsFails(t *testing.T) {
+	data := []byte(`[{"host":"non-existing-domain:9999","internalHost":"10101"}]`)
+	server := getMockServer(200, data, len(data))
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	iterator := NewCSVBitIterator(strings.NewReader("10,7"))
+	frame, err := index.Frame("importframe", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.ImportFrame(frame, iterator, 10)
+	if err == nil {
+		t.Fatalf("ImportFrame should fail if importBits fails")
+	}
+}
+
+func TestImportBitsFailInvalidNodeAddress(t *testing.T) {
+	data := []byte(`[{"host":"10101:","internalHost":"doesn'tmatter"}]`)
+	server := getMockServer(200, data, len(data))
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	err = client.importBits("foo", "bar", 0, []Bit{})
+	if err == nil {
+		t.Fatalf("importBits should fail on invalid node host")
+	}
+}
+
+func TestDecodingFragmentNodesFails(t *testing.T) {
+	server := getMockServer(200, []byte("notjson"), 7)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	_, err = client.fetchFragmentNodes("foo", 0)
+	if err == nil {
+		t.Fatalf("fetchFragmentNodes should fail when response from /fragment/nodes cannot be decoded")
+	}
+}
+
+func TestImportNodeFails(t *testing.T) {
 	server := getMockServer(500, []byte{}, 0)
 	defer server.Close()
-	err = client.ImportFrame(frame, iterator, 100)
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	importRequest := &internal.ImportRequest{
+		ColumnIDs:  []uint64{},
+		RowIDs:     []uint64{},
+		Timestamps: []int64{},
+		Index:      "foo",
+		Frame:      "bar",
+		Slice:      0,
+	}
+	err = client.importNode(importRequest)
 	if err == nil {
-		t.Fatalf("import frame should fail when fetch frames fails")
+		t.Fatalf("importNode should fail when posting to /import fails")
 	}
 }
 

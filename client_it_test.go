@@ -45,6 +45,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pilosa/go-pilosa/internal"
@@ -236,6 +237,43 @@ func TestIntersectReturns(t *testing.T) {
 	}
 	if !reflect.DeepEqual(response.Result().Bitmap.Bits, []uint64{10}) {
 		t.Fatal("Returned bits must be: [10]")
+	}
+}
+
+func TestTopNReturns(t *testing.T) {
+	client := getClient()
+	frame, err := index.Frame("topn_test", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	qry := index.BatchQuery(
+		frame.SetBit(10, 5),
+		frame.SetBit(10, 10),
+		frame.SetBit(10, 15),
+		frame.SetBit(20, 5),
+		frame.SetBit(30, 5),
+	)
+	client.Query(qry, nil)
+	// XXX: The following is required to make this test pass. See: https://github.com/pilosa/pilosa/issues/625
+	time.Sleep(10 * time.Second)
+	response, err := client.Query(frame.TopN(2), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := response.Result().CountItems
+	if len(items) != 2 {
+		t.Fatalf("There should be 2 count items")
+	}
+	item := items[0]
+	if item.ID != 10 {
+		t.Fatalf("Item[0] ID should be 10")
+	}
+	if item.Count != 3 {
+		t.Fatalf("Item[0] Count should be 3")
 	}
 }
 

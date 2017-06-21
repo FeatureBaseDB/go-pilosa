@@ -258,7 +258,7 @@ func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]FragmentN
 func (c *Client) importNode(request *internal.ImportRequest) error {
 	data, _ := proto.Marshal(request)
 	// request.Marshal never returns an error
-	_, _, err := c.httpRequest("POST", "/import", data, errorCheckedResponse)
+	_, _, err := c.httpRequest("POST", "/import", data, noResponse)
 	if err != nil {
 		return err
 	}
@@ -359,11 +359,11 @@ func matchError(msg string) error {
 }
 
 func bitsToImportRequest(indexName string, frameName string, slice uint64, bits []Bit) *internal.ImportRequest {
-	bitmapIDs := make([]uint64, 0, len(bits))
+	rowIDs := make([]uint64, 0, len(bits))
 	columnIDs := make([]uint64, 0, len(bits))
 	timestamps := make([]int64, 0, len(bits))
 	for _, bit := range bits {
-		bitmapIDs = append(bitmapIDs, bit.RowID)
+		rowIDs = append(rowIDs, bit.RowID)
 		columnIDs = append(columnIDs, bit.ColumnID)
 		timestamps = append(timestamps, bit.Timestamp)
 	}
@@ -371,7 +371,7 @@ func bitsToImportRequest(indexName string, frameName string, slice uint64, bits 
 		Index:      indexName,
 		Frame:      frameName,
 		Slice:      slice,
-		RowIDs:     bitmapIDs,
+		RowIDs:     rowIDs,
 		ColumnIDs:  columnIDs,
 		Timestamps: timestamps,
 	}

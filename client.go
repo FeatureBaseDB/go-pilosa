@@ -214,6 +214,7 @@ func (c *Client) ImportFrame(frame *Frame, bitIterator *CSVBitIterator, batchSiz
 				return err
 			}
 		}
+		bitGroup = map[uint64][]Bit{}
 	}
 
 	return nil

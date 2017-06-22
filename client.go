@@ -183,6 +183,7 @@ func (c *Client) Schema() (*Schema, error) {
 	return schema, nil
 }
 
+// ImportFrame imports bits from the given CSV iterator
 func (c *Client) ImportFrame(frame *Frame, bitIterator *CSVBitIterator, batchSize uint) error {
 	const sliceWidth = 1048576
 	canContinue := true
@@ -215,6 +216,7 @@ func (c *Client) ImportFrame(frame *Frame, bitIterator *CSVBitIterator, batchSiz
 			}
 		}
 		bitGroup = map[uint64][]Bit{}
+		currentBatchSize = 0
 	}
 
 	return nil

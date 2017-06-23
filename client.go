@@ -186,13 +186,20 @@ func (c *Client) Schema() (*Schema, error) {
 // ImportFrame imports bits from the given CSV iterator
 func (c *Client) ImportFrame(frame *Frame, bitIterator *CSVBitIterator, batchSize uint) error {
 	const sliceWidth = 1048576
-	canContinue := true
+	linesLeft := true
 	bitGroup := map[uint64][]Bit{}
 	var currentBatchSize uint
 	indexName := frame.index.name
 	frameName := frame.name
 
-	callback := func(bit Bit) bool {
+	for linesLeft {
+		bit, err := bitIterator.NextBit()
+		if err == io.EOF {
+			linesLeft = false
+		} else if err != nil {
+			return err
+		}
+
 		slice := bit.ColumnID / sliceWidth
 		if sliceArray, ok := bitGroup[slice]; ok {
 			bitGroup[slice] = append(sliceArray, bit)
@@ -200,23 +207,19 @@ func (c *Client) ImportFrame(frame *Frame, bitIterator *CSVBitIterator, batchSiz
 			bitGroup[slice] = []Bit{bit}
 		}
 		currentBatchSize++
-		return currentBatchSize < batchSize
-	}
-	for canContinue {
-		err := bitIterator.Iterate(callback)
-		if err == io.EOF {
-			canContinue = false
-		} else if err != nil {
-			return err
-		}
-		for slice, bits := range bitGroup {
-			err := c.importBits(indexName, frameName, slice, bits)
-			if err != nil {
-				return err
+		// if the batch is full or there's no line left, start importing bits
+		if currentBatchSize >= batchSize || !linesLeft {
+			for slice, bits := range bitGroup {
+				if len(bits) > 0 {
+					err := c.importBits(indexName, frameName, slice, bits)
+					if err != nil {
+						return err
+					}
+				}
 			}
+			bitGroup = map[uint64][]Bit{}
+			currentBatchSize = 0
 		}
-		bitGroup = map[uint64][]Bit{}
-		currentBatchSize = 0
 	}
 
 	return nil

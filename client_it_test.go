@@ -539,12 +539,10 @@ func TestInvalidSchema(t *testing.T) {
 
 func TestCSVImport(t *testing.T) {
 	client := getClient()
-	text := `
-		10,7
+	text := `10,7
 		10,5
 		2,3
-		7,1
-	`
+		7,1`
 	iterator := NewCSVBitIterator(strings.NewReader(text))
 	frame, err := index.Frame("importframe", nil)
 	if err != nil {

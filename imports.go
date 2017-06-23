@@ -63,57 +63,50 @@ type CSVBitIterator struct {
 // NewCSVBitIterator creates a CSVBitIterator from a Reader.
 func NewCSVBitIterator(reader io.Reader) *CSVBitIterator {
 	return &CSVBitIterator{
-		reader: reader,
-		line:   0,
+		reader:  reader,
+		line:    0,
+		scanner: bufio.NewScanner(reader),
 	}
 }
 
-// Iterate iterates on all lines of a Reader.
-// If the callback returns false, the iteration is paused; call it again to resume.
+// NextBit iterates on lines of a Reader.
 // Returns io.EOF on end of iteration
-func (c *CSVBitIterator) Iterate(callback BitIteratorCallback) error {
-	if c.scanner == nil {
-		c.scanner = bufio.NewScanner(c.reader)
-	}
-
-	for c.scanner.Scan() {
+func (c *CSVBitIterator) NextBit() (Bit, error) {
+	if ok := c.scanner.Scan(); ok {
 		c.line++
 		text := strings.TrimSpace(c.scanner.Text())
-		if text != "" {
-			parts := strings.Split(text, ",")
-			if len(parts) < 2 {
-				return fmt.Errorf("Invalid CSV line: %d", c.line)
-			}
-			rowID, err := strconv.Atoi(parts[0])
+		parts := strings.Split(text, ",")
+		if len(parts) < 2 {
+			return Bit{}, fmt.Errorf("Invalid CSV line: %d", c.line)
+		}
+		rowID, err := strconv.Atoi(parts[0])
+		if err != nil {
+			return Bit{}, fmt.Errorf("Invalid row ID at line: %d", c.line)
+		}
+		columnID, err := strconv.Atoi(parts[1])
+		if err != nil {
+			return Bit{}, fmt.Errorf("Invalid column ID at line: %d", c.line)
+		}
+		timestamp := 0
+		if len(parts) == 3 {
+			timestamp, err = strconv.Atoi(parts[2])
 			if err != nil {
-				return fmt.Errorf("Invalid row ID at line: %d", c.line)
-			}
-			columnID, err := strconv.Atoi(parts[1])
-			if err != nil {
-				return fmt.Errorf("Invalid column ID at line: %d", c.line)
-			}
-			timestamp := 0
-			if len(parts) == 3 {
-				timestamp, err = strconv.Atoi(parts[2])
-				if err != nil {
-					return fmt.Errorf("Invalid timestamp at line: %d", c.line)
-				}
-			}
-			bit := Bit{
-				RowID:     uint64(rowID),
-				ColumnID:  uint64(columnID),
-				Timestamp: int64(timestamp),
-			}
-			if ok := callback(bit); !ok {
-				return nil
+				return Bit{}, fmt.Errorf("Invalid timestamp at line: %d", c.line)
 			}
 		}
+		bit := Bit{
+			RowID:     uint64(rowID),
+			ColumnID:  uint64(columnID),
+			Timestamp: int64(timestamp),
+		}
+		return bit, nil
 	}
 	err := c.scanner.Err()
 	if err != nil {
-		return err
+		return Bit{}, err
 	}
-	return io.EOF
+	return Bit{}, io.EOF
+
 }
 
 type bitsForSort []Bit

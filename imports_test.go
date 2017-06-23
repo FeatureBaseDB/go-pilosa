@@ -42,24 +42,18 @@ import (
 )
 
 func TestCSVBitIterator(t *testing.T) {
-	iterator := pilosa.NewCSVBitIterator(strings.NewReader(`
-	1,10,683793200
-	5,20,683793300
-	3,41,683793385
+	iterator := pilosa.NewCSVBitIterator(strings.NewReader(`1,10,683793200
+		5,20,683793300
+		3,41,683793385
 	`))
 	bits := []pilosa.Bit{}
-	// simulates partial iteration
-	iterator.Iterate(func(bit pilosa.Bit) bool {
+	for {
+		bit, err := iterator.NextBit()
+		if err != nil {
+			break
+		}
 		bits = append(bits, bit)
-		return len(bits) != 2
-	})
-	if len(bits) != 2 {
-		t.Fatalf("There should be 2 bits")
 	}
-	iterator.Iterate(func(bit pilosa.Bit) bool {
-		bits = append(bits, bit)
-		return true
-	})
 	if len(bits) != 3 {
 		t.Fatalf("There should be 3 bits")
 	}
@@ -86,7 +80,7 @@ func TestCSVBitIteratorInvalidInput(t *testing.T) {
 	}
 	for _, text := range invalidInputs {
 		iterator := pilosa.NewCSVBitIterator(strings.NewReader(text))
-		err := iterator.Iterate(func(b pilosa.Bit) bool { return true })
+		_, err := iterator.NextBit()
 		if err == nil {
 			t.Fatalf("CSVBitIterator input: %s should fail", text)
 		}
@@ -95,7 +89,7 @@ func TestCSVBitIteratorInvalidInput(t *testing.T) {
 
 func TestCSVBitIteratorError(t *testing.T) {
 	iterator := pilosa.NewCSVBitIterator(&BrokenReader{})
-	err := iterator.Iterate(func(b pilosa.Bit) bool { return true })
+	_, err := iterator.NextBit()
 	if err == nil {
 		t.Fatal("CSVBitIterator should fail with error")
 	}

@@ -12,6 +12,9 @@ Go client for Pilosa high performance distributed bitmap index.
 
 ## Change Log
 
+* **Next**:
+    * *make* commands are supported on Windows.
+
 * **v0.4.0** (2017-06-09):
     * Supports Pilosa Server v0.4.0.
     * Updated the accepted values for index, frame names and labels to match with the Pilosa server.
@@ -359,8 +362,6 @@ Please check our [Contributor's Guidelines](https://github.com/pilosa/pilosa/CON
 2. Fork this repo and add it as upstream: `git remote add upstream git@github.com:pilosa/go-pilosa.git`.
 3. Make sure all tests pass (use `make test-all`) and be sure that the tests cover all statements in your code (we aim for 100% test coverage).
 4. Commit your code to a feature branch and send a pull request to the `master` branch of our repo.
-
-The sections below assume your platform has `make`. Otherwise you can view the corresponding steps of the `Makefile`.
 
 ### Running tests
 

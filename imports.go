@@ -47,9 +47,10 @@ type Bit struct {
 	Timestamp int64
 }
 
-// BitIteratorCallback gets called for each bit in a stream.
-// return false to pause iteration.
-type BitIteratorCallback func(bit Bit) bool
+// BitIterator structs return bits one by one.
+type BitIterator interface {
+	NextBit() (Bit, error)
+}
 
 // CSVBitIterator reads bits from a Reader.
 // Each line should contain a single bit in the following form:

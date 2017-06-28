@@ -42,6 +42,32 @@ import (
 
 const timeFormat = "2006-01-02T15:04"
 
+// Schema contains the index properties
+type Schema struct {
+	indexes map[string]*Index
+}
+
+// NewSchema creates a new Schema
+func NewSchema() *Schema {
+	return &Schema{
+		indexes: make(map[string]*Index),
+	}
+}
+
+// Index returns an index with a name and options.
+// Pass nil for default options.
+func (s *Schema) Index(name string, options *IndexOptions) (*Index, error) {
+	if index, ok := s.indexes[name]; ok {
+		return index, nil
+	}
+	index, err := NewIndex(name, options)
+	if err != nil {
+		return nil, err
+	}
+	s.indexes[name] = index
+	return index, nil
+}
+
 // PQLQuery is an interface for PQL queries.
 type PQLQuery interface {
 	Index() *Index
@@ -174,6 +200,7 @@ func NewPQLBitmapQuery(pql string, index *Index, err error) *PQLBitmapQuery {
 type Index struct {
 	name    string
 	options *IndexOptions
+	frames  map[string]*Frame
 }
 
 // NewIndex creates an index with a name and options.
@@ -192,6 +219,7 @@ func NewIndex(name string, options *IndexOptions) (*Index, error) {
 	return &Index{
 		name:    name,
 		options: options,
+		frames:  map[string]*Frame{},
 	}, nil
 }
 
@@ -202,6 +230,9 @@ func (d *Index) Name() string {
 
 // Frame creates a frame struct with the specified name and defaults.
 func (d *Index) Frame(name string, options *FrameOptions) (*Frame, error) {
+	if frame, ok := d.frames[name]; ok {
+		return frame, nil
+	}
 	if options == nil {
 		options = &FrameOptions{}
 	}
@@ -212,11 +243,13 @@ func (d *Index) Frame(name string, options *FrameOptions) (*Frame, error) {
 	if err := validateLabel(options.RowLabel); err != nil {
 		return nil, err
 	}
-	return &Frame{
+	frame := &Frame{
 		name:    name,
 		index:   d,
 		options: options,
-	}, nil
+	}
+	d.frames[name] = frame
+	return frame, nil
 }
 
 // BatchQuery creates a batch query with the given queries.

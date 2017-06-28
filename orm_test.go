@@ -37,9 +37,10 @@ import (
 	"time"
 )
 
-var sampleIndex = mustNewIndex("sample-index", "")
+var schema = NewSchema()
+var sampleIndex = mustNewIndex(schema, "sample-index", "")
 var sampleFrame = mustNewFrame(sampleIndex, "sample-frame", "")
-var projectIndex = mustNewIndex("project-index", "user")
+var projectIndex = mustNewIndex(schema, "project-index", "user")
 var collabFrame = mustNewFrame(projectIndex, "collaboration", "project")
 var b1 = sampleFrame.Bitmap(10)
 var b2 = sampleFrame.Bitmap(20)
@@ -47,19 +48,38 @@ var b3 = sampleFrame.Bitmap(42)
 var b4 = collabFrame.Bitmap(2)
 
 func TestNewIndex(t *testing.T) {
-	index, err := NewIndex("index-name", nil)
+	index1, err := schema.Index("index-name", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if index.Name() != "index-name" {
+	if index1.Name() != "index-name" {
 		t.Fatalf("index name was not set")
+	}
+	// calling schema.Index again should return the same index
+	index2, err := schema.Index("index-name", nil)
+	if index1 != index2 {
+		t.Fatalf("calling schema.Index again should return the same index")
 	}
 }
 
 func TestNewIndexWithInvalidName(t *testing.T) {
-	_, err := NewIndex("$FOO", nil)
+	_, err := schema.Index("$FOO", nil)
 	if err == nil {
-		t.Fatal()
+		t.Fatal(err)
+	}
+}
+
+func TestFrame(t *testing.T) {
+	frame1, err := sampleIndex.Frame("nonexistent-frame", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	frame2, err := sampleIndex.Frame("nonexistent-frame", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if frame1 != frame2 {
+		t.Fatalf("calling index.Frame again should return the same frame")
 	}
 }
 
@@ -368,18 +388,14 @@ func comparePQL(t *testing.T, target string, q PQLQuery) {
 	}
 }
 
-func mustNewIndex(name string, columnLabel string) (index *Index) {
-	var err error
+func mustNewIndex(schema *Schema, name string, columnLabel string) (index *Index) {
 	var options *IndexOptions
 	if columnLabel != "" {
 		options = &IndexOptions{ColumnLabel: columnLabel}
-		if err != nil {
-			panic(err)
-		}
-		index, err = NewIndex(name, options)
 	} else {
-		index, err = NewIndex(name, nil)
+		options = &IndexOptions{}
 	}
+	index, err := schema.Index(name, options)
 	if err != nil {
 		panic(err)
 	}

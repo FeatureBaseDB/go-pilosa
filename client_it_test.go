@@ -494,19 +494,9 @@ func TestSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// go-testindex should be in the schema
-	for _, index := range schema.Indexes {
-		if index.Name == "go-testindex" {
-			// test-frame should be in the schema
-			for _, frame := range index.Frames {
-				if frame.Name == "test-frame" {
-					// OK!
-					return
-				}
-			}
-		}
+	if len(schema.indexes) < 1 {
+		t.Fatalf("There should be at least 1 index in the schema")
 	}
-	t.Fatal("go-testindex or test-frame was not found")
 }
 
 func TestErrorRetrievingSchema(t *testing.T) {
@@ -523,8 +513,62 @@ func TestErrorRetrievingSchema(t *testing.T) {
 	}
 }
 
-func TestInvalidSchema(t *testing.T) {
-	server := getMockServer(200, []byte("unserialize this"), -1)
+func TestInvalidSchemaNoNodes(t *testing.T) {
+	data := []byte(`{"status": {"Nodes": []}}`)
+	server := getMockServer(200, data, len(data))
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		panic(err)
+	}
+	client := NewClientWithURI(uri)
+	_, err = client.Schema()
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func TestInvalidSchemaInvalidIndex(t *testing.T) {
+	data := []byte(`
+		{
+			"status": {
+				"Nodes": [{
+					"Indexes": [{
+						"Name": "**INVALID**"
+					}]
+				}]
+			}
+		}
+	`)
+	server := getMockServer(200, data, len(data))
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		panic(err)
+	}
+	client := NewClientWithURI(uri)
+	_, err = client.Schema()
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func TestInvalidSchemaInvalidFrame(t *testing.T) {
+	data := []byte(`
+		{
+			"status": {
+				"Nodes": [{
+					"Indexes": [{
+						"Name": "myindex",
+						"Frames": [{
+							"Name": "**INVALID**"
+						}]
+					}]
+				}]
+			}
+		}
+	`)
+	server := getMockServer(200, data, len(data))
 	defer server.Close()
 	uri, err := NewURIFromAddress(server.URL)
 	if err != nil {

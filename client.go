@@ -35,6 +35,7 @@ package pilosa
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -171,14 +172,37 @@ func (c *Client) DeleteFrame(frame *Frame) error {
 
 // Schema returns the indexes and frames on the server.
 func (c *Client) Schema() (*Schema, error) {
-	_, buf, err := c.httpRequest("GET", "/index", nil, errorCheckedResponse)
+	status, err := c.status()
 	if err != nil {
 		return nil, err
 	}
-	var schema *Schema
-	err = json.NewDecoder(bytes.NewReader(buf)).Decode(&schema)
-	if err != nil {
-		return nil, err
+	if len(status.Nodes) == 0 {
+		return nil, errors.New("Status should contain at least 1 node")
+	}
+	schema := NewSchema()
+	for _, indexInfo := range status.Nodes[0].Indexes {
+		options := &IndexOptions{
+			ColumnLabel: indexInfo.Meta.ColumnLabel,
+			TimeQuantum: TimeQuantum(indexInfo.Meta.TimeQuantum),
+		}
+		index, err := schema.Index(indexInfo.Name, options)
+		if err != nil {
+			return nil, err
+		}
+		for _, frameInfo := range indexInfo.Frames {
+			frameOptions := &FrameOptions{
+				RowLabel:       frameInfo.Meta.RowLabel,
+				CacheSize:      frameInfo.Meta.CacheSize,
+				CacheType:      CacheType(frameInfo.Meta.CacheType),
+				InverseEnabled: frameInfo.Meta.InverseEnabled,
+				TimeQuantum:    TimeQuantum(frameInfo.Meta.TimeQuantum),
+			}
+			_, err := index.Frame(frameInfo.Name, frameOptions)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 	}
 	return schema, nil
 }
@@ -429,17 +453,6 @@ type QueryOptions struct {
 	Columns bool
 }
 
-// Schema contains the index and frame metadata.
-type Schema struct {
-	Indexes []*IndexInfo `json:"indexes"`
-}
-
-// IndexInfo represents schema information for an index
-type IndexInfo struct {
-	Name   string       `json:"name"`
-	Frames []*FrameInfo `json:"frames"`
-}
-
 type returnClientInfo uint
 
 const (
@@ -482,6 +495,7 @@ type StatusMeta struct {
 	ColumnLabel    string
 	RowLabel       string
 	CacheType      string
-	CacheSize      int
+	CacheSize      uint
 	InverseEnabled bool
+	TimeQuantum    string
 }

@@ -12,6 +12,11 @@ Go client for Pilosa high performance distributed bitmap index.
 
 ## Change Log
 
+* **next**:
+    * Supports imports.
+    * Introducing `client.Schema` which retrieves the schema information from the server side. No need to re-define already existing indexes and frames.
+    * **Deprecation** `NewIndex`. Use `schema.Index` instead.
+
 * **v0.4.0** (2017-06-09):
     * Supports Pilosa Server v0.4.0.
     * Updated the accepted values for index, frame names and labels to match with the Pilosa server.
@@ -52,8 +57,11 @@ var err error
 // Create the default client
 client := pilosa.DefaultClient()
 
+// Retrieve the schema
+schema, err := client.Schema()
+
 // Create an Index object
-myindex, err := pilosa.NewIndex("myindex", nil)
+myindex, err := schema.Index("myindex", nil)
 
 // Make sure the index exists on the server
 err = client.EnsureIndex(myindex)
@@ -98,9 +106,10 @@ for _, result := range reponse.Results() {
 
 *Index* and *frame*s are the main data models of Pilosa. You can check the [Pilosa documentation](https://www.pilosa.com/docs) for more detail about the data model.
 
-`NewIndex` function is used to create an index object. Note that this does not create an index on the server; the index object simply defines the schema.
+`schema.Index` function is used to create an index object. Note that this does not create an index on the server; the index object simply defines the schema.
 
 ```go
+schema := NewSchema()
 repository, err := NewIndex("repository", nil)
 ```
 
@@ -112,7 +121,7 @@ options := &pilosa.IndexOptions{
     TimeQuantum: TimeQuantumYearMonth,
 }
 
-repository, err := pilosa.NewIndex("repository", options);
+repository, err := schema.Index("repository", options);
 ```
 
 Frames are created with a call to `Frame` function of an index:

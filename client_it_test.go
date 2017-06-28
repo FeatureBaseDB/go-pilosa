@@ -586,6 +586,26 @@ func TestFetchFragmentNodes(t *testing.T) {
 	}
 }
 
+func TestFetchStatus(t *testing.T) {
+	client := getClient()
+	status, err := client.status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(status.Nodes) == 0 {
+		t.Fatalf("There should be at least 1 host in the status")
+	}
+	if len(status.Nodes[0].Indexes) == 0 {
+		t.Fatalf("There should be at least 1 index in the node")
+	}
+	if len(status.Nodes[0].Indexes[0].Frames) == 0 {
+		t.Fatalf("There should be at least 1 frame in the index")
+	}
+	if len(status.Nodes[0].Indexes[0].Slices) == 0 {
+		t.Fatalf("There should be at least 1 slice in the index")
+	}
+}
+
 func TestImportBitIteratorError(t *testing.T) {
 	client := getClient()
 	frame, err := index.Frame("not-important", nil)
@@ -712,6 +732,34 @@ func TestResponseWithInvalidType(t *testing.T) {
 	}
 	client := NewClientWithURI(uri)
 	_, err = client.Query(testFrame.Bitmap(1), nil)
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
+func TestStatusFails(t *testing.T) {
+	server := getMockServer(404, nil, 0)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	_, err = client.status()
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
+func TestStatusUnmarshalFails(t *testing.T) {
+	server := getMockServer(200, []byte("foo"), 3)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	_, err = client.status()
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}

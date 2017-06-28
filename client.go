@@ -286,6 +286,19 @@ func (c *Client) patchFrameTimeQuantum(frame *Frame) error {
 	return err
 }
 
+func (c *Client) status() (*Status, error) {
+	_, data, err := c.httpRequest("GET", "/status", nil, errorCheckedResponse)
+	if err != nil {
+		return nil, err
+	}
+	statusRoot := &StatusRoot{}
+	err = json.Unmarshal(data, statusRoot)
+	if err != nil {
+		return nil, err
+	}
+	return statusRoot.Status, nil
+}
+
 func (c *Client) httpRequest(method string, path string, data []byte, returnResponse returnClientInfo) (*http.Response, []byte, error) {
 	addr := c.cluster.Host()
 	if addr == nil {
@@ -438,4 +451,37 @@ const (
 type FragmentNode struct {
 	Host         string
 	InternalHost string
+}
+
+type StatusRoot struct {
+	Status *Status `json:"status"`
+}
+
+type Status struct {
+	Nodes []StatusNode
+}
+
+type StatusNode struct {
+	Host    string
+	Indexes []StatusIndex
+}
+
+type StatusIndex struct {
+	Name   string
+	Meta   StatusMeta
+	Frames []StatusFrame
+	Slices []uint64
+}
+
+type StatusFrame struct {
+	Name string
+	Meta StatusMeta
+}
+
+type StatusMeta struct {
+	ColumnLabel    string
+	RowLabel       string
+	CacheType      string
+	CacheSize      int
+	InverseEnabled bool
 }

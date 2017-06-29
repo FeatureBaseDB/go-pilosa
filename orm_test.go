@@ -33,6 +33,7 @@
 package pilosa
 
 import (
+	"reflect"
 	"testing"
 	"time"
 )
@@ -46,6 +47,31 @@ var b1 = sampleFrame.Bitmap(10)
 var b2 = sampleFrame.Bitmap(20)
 var b3 = sampleFrame.Bitmap(42)
 var b4 = collabFrame.Bitmap(2)
+
+func TestSchemaDiff(t *testing.T) {
+	schema1 := NewSchema()
+	index11, _ := schema1.Index("diff-index1", nil)
+	index11.Frame("frame1-1", nil)
+	index11.Frame("frame1-2", nil)
+	index12, _ := schema1.Index("diff-index2", nil)
+	index12.Frame("frame2-1", nil)
+
+	schema2 := NewSchema()
+	index21, _ := schema2.Index("diff-index1", nil)
+	index21.Frame("another-frame", nil)
+
+	targetDiff12 := NewSchema()
+	targetIndex1, _ := targetDiff12.Index("diff-index1", nil)
+	targetIndex1.Frame("frame1-1", nil)
+	targetIndex1.Frame("frame1-2", nil)
+	targetIndex2, _ := targetDiff12.Index("diff-index2", nil)
+	targetIndex2.Frame("frame2-1", nil)
+
+	diff12 := schema1.diff(schema2)
+	if !reflect.DeepEqual(targetDiff12, diff12) {
+		t.Fatalf("The diff must be correctly calculated")
+	}
+}
 
 func TestNewIndex(t *testing.T) {
 	index1, err := schema.Index("index-name", nil)
@@ -69,6 +95,28 @@ func TestNewIndexWithInvalidName(t *testing.T) {
 	}
 }
 
+func TestIndexCopy(t *testing.T) {
+	indexOptions := &IndexOptions{
+		ColumnLabel: "columnlabel",
+		TimeQuantum: TimeQuantumMonthDay,
+	}
+	index, err := schema.Index("my-index-4copy", indexOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	options := &FrameOptions{
+		RowLabel: "rowlabel",
+	}
+	_, err = index.Frame("my-frame-4copy", options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	copiedIndex := index.copy()
+	if !reflect.DeepEqual(index, copiedIndex) {
+		t.Fatalf("copied index should be equivalent")
+	}
+}
+
 func TestFrame(t *testing.T) {
 	frame1, err := sampleIndex.Frame("nonexistent-frame", nil)
 	if err != nil {
@@ -80,6 +128,24 @@ func TestFrame(t *testing.T) {
 	}
 	if frame1 != frame2 {
 		t.Fatalf("calling index.Frame again should return the same frame")
+	}
+}
+
+func TestFrameCopy(t *testing.T) {
+	options := &FrameOptions{
+		RowLabel:       "rowlabel",
+		TimeQuantum:    TimeQuantumMonthDayHour,
+		CacheType:      CacheTypeRanked,
+		CacheSize:      123456,
+		InverseEnabled: true,
+	}
+	frame, err := sampleIndex.Frame("my-frame-4copy", options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	copiedFrame := frame.copy()
+	if !reflect.DeepEqual(frame, copiedFrame) {
+		t.Fatalf("copied frame should be equivalent")
 	}
 }
 

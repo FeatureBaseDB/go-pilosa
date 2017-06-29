@@ -170,6 +170,43 @@ func (c *Client) DeleteFrame(frame *Frame) error {
 	return err
 }
 
+// SyncSchema updates a schema with the indexes and frames on the server and
+// creates the indexes and frames in the schema on the server side.
+// This function does not delete indexes and the frames on the server side nor in the schema.
+func (c *Client) SyncSchema(schema *Schema) error {
+	var err error
+	serverSchema, err := c.Schema()
+	if err != nil {
+		return err
+	}
+
+	// find out local - remote schema
+	diffSchema := schema.diff(serverSchema)
+	// create the indexes and frames which doesn't exist on the server side
+	for indexName, index := range diffSchema.indexes {
+		if _, ok := serverSchema.indexes[indexName]; !ok {
+			c.EnsureIndex(index)
+		}
+		for _, frame := range index.frames {
+			c.EnsureFrame(frame)
+		}
+	}
+
+	// find out remote - local schema
+	diffSchema = serverSchema.diff(schema)
+	for indexName, index := range diffSchema.indexes {
+		if serverIndex, ok := schema.indexes[indexName]; !ok {
+			schema.indexes[indexName] = index
+		} else {
+			for frameName, frame := range index.frames {
+				serverIndex.frames[frameName] = frame
+			}
+		}
+	}
+
+	return nil
+}
+
 // Schema returns the indexes and frames on the server.
 func (c *Client) Schema() (*Schema, error) {
 	status, err := c.status()

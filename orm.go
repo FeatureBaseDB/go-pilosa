@@ -68,6 +68,31 @@ func (s *Schema) Index(name string, options *IndexOptions) (*Index, error) {
 	return index, nil
 }
 
+func (s *Schema) diff(other *Schema) *Schema {
+	result := NewSchema()
+	for indexName, index := range s.indexes {
+		if otherIndex, ok := other.indexes[indexName]; !ok {
+			// if the index doesn't exist in the other schema, simply copy it
+			result.indexes[indexName] = index.copy()
+		} else {
+			// the index exists in the other schema; check the frames
+			resultIndex, _ := NewIndex(indexName, index.options)
+			for frameName, frame := range index.frames {
+				if _, ok := otherIndex.frames[frameName]; !ok {
+					// the frame doesn't exist in the other schame, copy it
+					resultIndex.frames[frameName] = frame.copy()
+				}
+			}
+			// check whether we modified result index
+			if len(resultIndex.frames) > 0 {
+				// if so, move it to the result
+				result.indexes[indexName] = resultIndex
+			}
+		}
+	}
+	return result
+}
+
 // PQLQuery is an interface for PQL queries.
 type PQLQuery interface {
 	Index() *Index
@@ -221,6 +246,20 @@ func NewIndex(name string, options *IndexOptions) (*Index, error) {
 		options: options,
 		frames:  map[string]*Frame{},
 	}, nil
+}
+
+func (d *Index) copy() *Index {
+	frames := make(map[string]*Frame)
+	for name, f := range d.frames {
+		frames[name] = f.copy()
+	}
+	index := &Index{
+		name:    d.name,
+		frames:  frames,
+		options: &IndexOptions{},
+	}
+	*index.options = *d.options
+	return index
 }
 
 // Name returns the name of this index.
@@ -377,6 +416,16 @@ type Frame struct {
 	name    string
 	index   *Index
 	options *FrameOptions
+}
+
+func (f *Frame) copy() *Frame {
+	frame := &Frame{
+		name:    f.name,
+		index:   f.index,
+		options: &FrameOptions{},
+	}
+	*frame.options = *f.options
+	return frame
 }
 
 // Bitmap creates a bitmap query using the row label.

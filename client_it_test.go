@@ -499,6 +499,49 @@ func TestSchema(t *testing.T) {
 	}
 }
 
+func TestSync(t *testing.T) {
+	client := getClient()
+	remoteIndex, _ := NewIndex("remote-index-1", nil)
+	err := client.EnsureIndex(remoteIndex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remoteFrame, _ := remoteIndex.Frame("remote-frame-1", nil)
+	err = client.EnsureFrame(remoteFrame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema1 := NewSchema()
+	index11, _ := schema1.Index("diff-index1", nil)
+	index11.Frame("frame1-1", nil)
+	index11.Frame("frame1-2", nil)
+	index12, _ := schema1.Index("diff-index2", nil)
+	index12.Frame("frame2-1", nil)
+	schema1.Index(remoteIndex.Name(), nil)
+
+	err = client.SyncSchema(schema1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.DeleteIndex(remoteIndex)
+	client.DeleteIndex(index11)
+	client.DeleteIndex(index12)
+}
+
+func TestSyncFailure(t *testing.T) {
+	server := getMockServer(404, []byte("sorry, not found"), -1)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		panic(err)
+	}
+	client := NewClientWithURI(uri)
+	err = client.SyncSchema(NewSchema())
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
 func TestErrorRetrievingSchema(t *testing.T) {
 	server := getMockServer(404, []byte("sorry, not found"), -1)
 	defer server.Close()

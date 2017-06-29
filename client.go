@@ -64,6 +64,23 @@ func NewClientWithURI(uri *URI) *Client {
 	return NewClientWithCluster(NewClusterWithHost(uri), nil)
 }
 
+// NewClientFromAddresses creates a client for a cluster specified by `hosts`. Each
+// string in `hosts` is the string represenation of a URI. E.G
+// node0.pilosa.com:10101
+func NewClientFromAddresses(addresses []string, options *ClientOptions) (*Client, error) {
+	uris := make([]*URI, len(addresses))
+	for i, address := range addresses {
+		uri, err := NewURIFromAddress(address)
+		if err != nil {
+			return nil, err
+		}
+		uris[i] = uri
+	}
+	cluster := NewClusterWithHost(uris...)
+	client := NewClientWithCluster(cluster, options)
+	return client, nil
+}
+
 // NewClientWithCluster creates a client with the given cluster and options.
 // Pass nil for default options.
 func NewClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {

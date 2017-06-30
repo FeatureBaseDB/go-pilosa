@@ -12,6 +12,12 @@ Go client for Pilosa high performance distributed bitmap index.
 
 ## Change Log
 
+* **next**:
+    * Supports imports.
+    * Introduced schemas. No need to re-define already existing indexes and frames.
+    * **Deprecation** `NewIndex`. Use `schema.Index` instead.
+    * **Deprecation** `CreateIndex`, `CreateFrame`, `EnsureIndex`, `EnsureFrame`. Use schemas and `client.SyncSchema` instead.
+
 * **v0.4.0** (2017-06-09):
     * Supports Pilosa Server v0.4.0.
     * Updated the accepted values for index, frame names and labels to match with the Pilosa server.
@@ -52,17 +58,17 @@ var err error
 // Create the default client
 client := pilosa.DefaultClient()
 
-// Create an Index object
-myindex, err := pilosa.NewIndex("myindex", nil)
+// Retrieve the schema
+schema, err := client.Schema()
 
-// Make sure the index exists on the server
-err = client.EnsureIndex(myindex)
+// Create an Index object
+myindex, err := schema.Index("myindex", nil)
 
 // Create a Frame object
 myframe, err := myindex.Frame("myframe", nil)
 
-// Make sure the frame exists on the server
-err = client.EnsureFrame(myframe)
+// make sure the index and frame exists on the server
+err = client.SyncSchema(schema)
 
 // Send a SetBit query. PilosaException is thrown if execution of the query fails.
 err = client.Query(myframe.SetBit(5, 42), nil)
@@ -98,9 +104,10 @@ for _, result := range reponse.Results() {
 
 *Index* and *frame*s are the main data models of Pilosa. You can check the [Pilosa documentation](https://www.pilosa.com/docs) for more detail about the data model.
 
-`NewIndex` function is used to create an index object. Note that this does not create an index on the server; the index object simply defines the schema.
+`schema.Index` function is used to create an index object. Note that this does not create an index on the server; the index object simply defines the schema.
 
 ```go
+schema := NewSchema()
 repository, err := NewIndex("repository", nil)
 ```
 
@@ -112,10 +119,10 @@ options := &pilosa.IndexOptions{
     TimeQuantum: TimeQuantumYearMonth,
 }
 
-repository, err := pilosa.NewIndex("repository", options);
+repository, err := schema.Index("repository", options);
 ```
 
-Frames are created with a call to `Frame` function of an index:
+Frames definitions are created with a call to `Frame` function of an index:
 
 ```go
 stargazer, err := repository.Frame("stargazer", nil)
@@ -264,19 +271,14 @@ options = &pilosa.ClientOptions{
 client := pilosa.NewClientWithCluster(cluster, options)
 ```
 
-Once you create a client, you can create indexes, frames and then start sending queries.
+Once you create a client, you can create indexes, frames or start sending queries.
 
 Here is how you would create a index and frame:
 
 ```go
-// materialize repository index instance initialized before
-err := client.CreateIndex(repository)
-
-// materialize stargazer frame instance initialized before
-err :=client.CreateFrame(stargazer)
+// materialize repository index definition and stargazer frame definition initialized before
+err := client.SyncSchema(schema)
 ```
-
-If the index or frame exists on the server, non-nil errors will be returned. You can use `EnsureIndex` and `EnsureFrame` functions to ignore existing indexes and frames.
 
 You can send queries to a Pilosa server using the `Query` function of the `Client` struct:
 

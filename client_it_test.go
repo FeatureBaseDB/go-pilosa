@@ -494,19 +494,52 @@ func TestSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// go-testindex should be in the schema
-	for _, index := range schema.Indexes {
-		if index.Name == "go-testindex" {
-			// test-frame should be in the schema
-			for _, frame := range index.Frames {
-				if frame.Name == "test-frame" {
-					// OK!
-					return
-				}
-			}
-		}
+	if len(schema.indexes) < 1 {
+		t.Fatalf("There should be at least 1 index in the schema")
 	}
-	t.Fatal("go-testindex or test-frame was not found")
+}
+
+func TestSync(t *testing.T) {
+	client := getClient()
+	remoteIndex, _ := NewIndex("remote-index-1", nil)
+	err := client.EnsureIndex(remoteIndex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remoteFrame, _ := remoteIndex.Frame("remote-frame-1", nil)
+	err = client.EnsureFrame(remoteFrame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema1 := NewSchema()
+	index11, _ := schema1.Index("diff-index1", nil)
+	index11.Frame("frame1-1", nil)
+	index11.Frame("frame1-2", nil)
+	index12, _ := schema1.Index("diff-index2", nil)
+	index12.Frame("frame2-1", nil)
+	schema1.Index(remoteIndex.Name(), nil)
+
+	err = client.SyncSchema(schema1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.DeleteIndex(remoteIndex)
+	client.DeleteIndex(index11)
+	client.DeleteIndex(index12)
+}
+
+func TestSyncFailure(t *testing.T) {
+	server := getMockServer(404, []byte("sorry, not found"), -1)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		panic(err)
+	}
+	client := NewClientWithURI(uri)
+	err = client.SyncSchema(NewSchema())
+	if err == nil {
+		t.Fatal("should have failed")
+	}
 }
 
 func TestErrorRetrievingSchema(t *testing.T) {
@@ -523,8 +556,62 @@ func TestErrorRetrievingSchema(t *testing.T) {
 	}
 }
 
-func TestInvalidSchema(t *testing.T) {
-	server := getMockServer(200, []byte("unserialize this"), -1)
+func TestInvalidSchemaNoNodes(t *testing.T) {
+	data := []byte(`{"status": {"Nodes": []}}`)
+	server := getMockServer(200, data, len(data))
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		panic(err)
+	}
+	client := NewClientWithURI(uri)
+	_, err = client.Schema()
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func TestInvalidSchemaInvalidIndex(t *testing.T) {
+	data := []byte(`
+		{
+			"status": {
+				"Nodes": [{
+					"Indexes": [{
+						"Name": "**INVALID**"
+					}]
+				}]
+			}
+		}
+	`)
+	server := getMockServer(200, data, len(data))
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		panic(err)
+	}
+	client := NewClientWithURI(uri)
+	_, err = client.Schema()
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func TestInvalidSchemaInvalidFrame(t *testing.T) {
+	data := []byte(`
+		{
+			"status": {
+				"Nodes": [{
+					"Indexes": [{
+						"Name": "myindex",
+						"Frames": [{
+							"Name": "**INVALID**"
+						}]
+					}]
+				}]
+			}
+		}
+	`)
+	server := getMockServer(200, data, len(data))
 	defer server.Close()
 	uri, err := NewURIFromAddress(server.URL)
 	if err != nil {
@@ -583,6 +670,26 @@ func TestFetchFragmentNodes(t *testing.T) {
 	}
 	if len(nodes) != 1 {
 		t.Fatalf("1 node should be returned")
+	}
+}
+
+func TestFetchStatus(t *testing.T) {
+	client := getClient()
+	status, err := client.status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(status.Nodes) == 0 {
+		t.Fatalf("There should be at least 1 host in the status")
+	}
+	if len(status.Nodes[0].Indexes) == 0 {
+		t.Fatalf("There should be at least 1 index in the node")
+	}
+	if len(status.Nodes[0].Indexes[0].Frames) == 0 {
+		t.Fatalf("There should be at least 1 frame in the index")
+	}
+	if len(status.Nodes[0].Indexes[0].Slices) == 0 {
+		t.Fatalf("There should be at least 1 slice in the index")
 	}
 }
 
@@ -712,6 +819,34 @@ func TestResponseWithInvalidType(t *testing.T) {
 	}
 	client := NewClientWithURI(uri)
 	_, err = client.Query(testFrame.Bitmap(1), nil)
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
+func TestStatusFails(t *testing.T) {
+	server := getMockServer(404, nil, 0)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	_, err = client.status()
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
+func TestStatusUnmarshalFails(t *testing.T) {
+	server := getMockServer(200, []byte("foo"), 3)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	_, err = client.status()
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}

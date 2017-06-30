@@ -35,6 +35,7 @@ package pilosa
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -169,16 +170,76 @@ func (c *Client) DeleteFrame(frame *Frame) error {
 	return err
 }
 
+// SyncSchema updates a schema with the indexes and frames on the server and
+// creates the indexes and frames in the schema on the server side.
+// This function does not delete indexes and the frames on the server side nor in the schema.
+func (c *Client) SyncSchema(schema *Schema) error {
+	var err error
+	serverSchema, err := c.Schema()
+	if err != nil {
+		return err
+	}
+
+	// find out local - remote schema
+	diffSchema := schema.diff(serverSchema)
+	// create the indexes and frames which doesn't exist on the server side
+	for indexName, index := range diffSchema.indexes {
+		if _, ok := serverSchema.indexes[indexName]; !ok {
+			c.EnsureIndex(index)
+		}
+		for _, frame := range index.frames {
+			c.EnsureFrame(frame)
+		}
+	}
+
+	// find out remote - local schema
+	diffSchema = serverSchema.diff(schema)
+	for indexName, index := range diffSchema.indexes {
+		if serverIndex, ok := schema.indexes[indexName]; !ok {
+			schema.indexes[indexName] = index
+		} else {
+			for frameName, frame := range index.frames {
+				serverIndex.frames[frameName] = frame
+			}
+		}
+	}
+
+	return nil
+}
+
 // Schema returns the indexes and frames on the server.
 func (c *Client) Schema() (*Schema, error) {
-	_, buf, err := c.httpRequest("GET", "/index", nil, errorCheckedResponse)
+	status, err := c.status()
 	if err != nil {
 		return nil, err
 	}
-	var schema *Schema
-	err = json.NewDecoder(bytes.NewReader(buf)).Decode(&schema)
-	if err != nil {
-		return nil, err
+	if len(status.Nodes) == 0 {
+		return nil, errors.New("Status should contain at least 1 node")
+	}
+	schema := NewSchema()
+	for _, indexInfo := range status.Nodes[0].Indexes {
+		options := &IndexOptions{
+			ColumnLabel: indexInfo.Meta.ColumnLabel,
+			TimeQuantum: TimeQuantum(indexInfo.Meta.TimeQuantum),
+		}
+		index, err := schema.Index(indexInfo.Name, options)
+		if err != nil {
+			return nil, err
+		}
+		for _, frameInfo := range indexInfo.Frames {
+			frameOptions := &FrameOptions{
+				RowLabel:       frameInfo.Meta.RowLabel,
+				CacheSize:      frameInfo.Meta.CacheSize,
+				CacheType:      CacheType(frameInfo.Meta.CacheType),
+				InverseEnabled: frameInfo.Meta.InverseEnabled,
+				TimeQuantum:    TimeQuantum(frameInfo.Meta.TimeQuantum),
+			}
+			_, err := index.Frame(frameInfo.Name, frameOptions)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 	}
 	return schema, nil
 }
@@ -284,6 +345,19 @@ func (c *Client) patchFrameTimeQuantum(frame *Frame) error {
 	path := fmt.Sprintf("/index/%s/frame/%s/time-quantum", frame.index.name, frame.name)
 	_, _, err := c.httpRequest("PATCH", path, data, noResponse)
 	return err
+}
+
+func (c *Client) status() (*Status, error) {
+	_, data, err := c.httpRequest("GET", "/status", nil, errorCheckedResponse)
+	if err != nil {
+		return nil, err
+	}
+	statusRoot := &StatusRoot{}
+	err = json.Unmarshal(data, statusRoot)
+	if err != nil {
+		return nil, err
+	}
+	return statusRoot.Status, nil
 }
 
 func (c *Client) httpRequest(method string, path string, data []byte, returnResponse returnClientInfo) (*http.Response, []byte, error) {
@@ -416,17 +490,6 @@ type QueryOptions struct {
 	Columns bool
 }
 
-// Schema contains the index and frame metadata.
-type Schema struct {
-	Indexes []*IndexInfo `json:"indexes"`
-}
-
-// IndexInfo represents schema information for an index
-type IndexInfo struct {
-	Name   string       `json:"name"`
-	Frames []*FrameInfo `json:"frames"`
-}
-
 type returnClientInfo uint
 
 const (
@@ -438,4 +501,38 @@ const (
 type FragmentNode struct {
 	Host         string
 	InternalHost string
+}
+
+type StatusRoot struct {
+	Status *Status `json:"status"`
+}
+
+type Status struct {
+	Nodes []StatusNode
+}
+
+type StatusNode struct {
+	Host    string
+	Indexes []StatusIndex
+}
+
+type StatusIndex struct {
+	Name   string
+	Meta   StatusMeta
+	Frames []StatusFrame
+	Slices []uint64
+}
+
+type StatusFrame struct {
+	Name string
+	Meta StatusMeta
+}
+
+type StatusMeta struct {
+	ColumnLabel    string
+	RowLabel       string
+	CacheType      string
+	CacheSize      uint
+	InverseEnabled bool
+	TimeQuantum    string
 }

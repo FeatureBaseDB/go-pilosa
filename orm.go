@@ -42,6 +42,57 @@ import (
 
 const timeFormat = "2006-01-02T15:04"
 
+// Schema contains the index properties
+type Schema struct {
+	indexes map[string]*Index
+}
+
+// NewSchema creates a new Schema
+func NewSchema() *Schema {
+	return &Schema{
+		indexes: make(map[string]*Index),
+	}
+}
+
+// Index returns an index with a name and options.
+// Pass nil for default options.
+func (s *Schema) Index(name string, options *IndexOptions) (*Index, error) {
+	if index, ok := s.indexes[name]; ok {
+		return index, nil
+	}
+	index, err := NewIndex(name, options)
+	if err != nil {
+		return nil, err
+	}
+	s.indexes[name] = index
+	return index, nil
+}
+
+func (s *Schema) diff(other *Schema) *Schema {
+	result := NewSchema()
+	for indexName, index := range s.indexes {
+		if otherIndex, ok := other.indexes[indexName]; !ok {
+			// if the index doesn't exist in the other schema, simply copy it
+			result.indexes[indexName] = index.copy()
+		} else {
+			// the index exists in the other schema; check the frames
+			resultIndex, _ := NewIndex(indexName, index.options)
+			for frameName, frame := range index.frames {
+				if _, ok := otherIndex.frames[frameName]; !ok {
+					// the frame doesn't exist in the other schame, copy it
+					resultIndex.frames[frameName] = frame.copy()
+				}
+			}
+			// check whether we modified result index
+			if len(resultIndex.frames) > 0 {
+				// if so, move it to the result
+				result.indexes[indexName] = resultIndex
+			}
+		}
+	}
+	return result
+}
+
 // PQLQuery is an interface for PQL queries.
 type PQLQuery interface {
 	Index() *Index
@@ -174,6 +225,7 @@ func NewPQLBitmapQuery(pql string, index *Index, err error) *PQLBitmapQuery {
 type Index struct {
 	name    string
 	options *IndexOptions
+	frames  map[string]*Frame
 }
 
 // NewIndex creates an index with a name and options.
@@ -192,7 +244,22 @@ func NewIndex(name string, options *IndexOptions) (*Index, error) {
 	return &Index{
 		name:    name,
 		options: options,
+		frames:  map[string]*Frame{},
 	}, nil
+}
+
+func (d *Index) copy() *Index {
+	frames := make(map[string]*Frame)
+	for name, f := range d.frames {
+		frames[name] = f.copy()
+	}
+	index := &Index{
+		name:    d.name,
+		frames:  frames,
+		options: &IndexOptions{},
+	}
+	*index.options = *d.options
+	return index
 }
 
 // Name returns the name of this index.
@@ -202,6 +269,9 @@ func (d *Index) Name() string {
 
 // Frame creates a frame struct with the specified name and defaults.
 func (d *Index) Frame(name string, options *FrameOptions) (*Frame, error) {
+	if frame, ok := d.frames[name]; ok {
+		return frame, nil
+	}
 	if options == nil {
 		options = &FrameOptions{}
 	}
@@ -212,11 +282,13 @@ func (d *Index) Frame(name string, options *FrameOptions) (*Frame, error) {
 	if err := validateLabel(options.RowLabel); err != nil {
 		return nil, err
 	}
-	return &Frame{
+	frame := &Frame{
 		name:    name,
 		index:   d,
 		options: options,
-	}, nil
+	}
+	d.frames[name] = frame
+	return frame, nil
 }
 
 // BatchQuery creates a batch query with the given queries.
@@ -344,6 +416,16 @@ type Frame struct {
 	name    string
 	index   *Index
 	options *FrameOptions
+}
+
+func (f *Frame) copy() *Frame {
+	frame := &Frame{
+		name:    f.name,
+		index:   f.index,
+		options: &FrameOptions{},
+	}
+	*frame.options = *f.options
+	return frame
 }
 
 // Bitmap creates a bitmap query using the row label.

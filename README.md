@@ -15,6 +15,8 @@ Go client for Pilosa high performance distributed bitmap index.
 * **next**:
     * Supports imports.
     * Introduced schemas. No need to re-define already existing indexes and frames.
+    * `NewClientFromAddresses` convenience function added. Create a client for a
+      cluster directly from a slice of strings.
     * **Deprecation** `NewIndex`. Use `schema.Index` instead.
     * **Deprecation** `CreateIndex`, `CreateFrame`, `EnsureIndex`, `EnsureFrame`. Use schemas and `client.SyncSchema` instead.
 

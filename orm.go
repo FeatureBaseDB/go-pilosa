@@ -79,7 +79,7 @@ func (s *Schema) diff(other *Schema) *Schema {
 			resultIndex, _ := NewIndex(indexName, index.options)
 			for frameName, frame := range index.frames {
 				if _, ok := otherIndex.frames[frameName]; !ok {
-					// the frame doesn't exist in the other schame, copy it
+					// the frame doesn't exist in the other schema, copy it
 					resultIndex.frames[frameName] = frame.copy()
 				}
 			}

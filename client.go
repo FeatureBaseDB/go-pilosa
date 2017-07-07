@@ -212,11 +212,11 @@ func (c *Client) SyncSchema(schema *Schema) error {
 	// find out remote - local schema
 	diffSchema = serverSchema.diff(schema)
 	for indexName, index := range diffSchema.indexes {
-		if serverIndex, ok := schema.indexes[indexName]; !ok {
+		if localIndex, ok := schema.indexes[indexName]; !ok {
 			schema.indexes[indexName] = index
 		} else {
 			for frameName, frame := range index.frames {
-				serverIndex.frames[frameName] = frame
+				localIndex.frames[frameName] = frame
 			}
 		}
 	}

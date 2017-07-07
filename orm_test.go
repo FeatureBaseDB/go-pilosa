@@ -73,6 +73,20 @@ func TestSchemaDiff(t *testing.T) {
 	}
 }
 
+func TestSchemaIndexes(t *testing.T) {
+	schema1 := NewSchema()
+	index11, _ := schema1.Index("diff-index1", nil)
+	index12, _ := schema1.Index("diff-index2", nil)
+	indexes := schema1.Indexes()
+	target := map[string]*Index{
+		"diff-index1": index11,
+		"diff-index2": index12,
+	}
+	if !reflect.DeepEqual(target, indexes) {
+		t.Fatalf("calling schema.Indexes should return indexes")
+	}
+}
+
 func TestNewIndex(t *testing.T) {
 	index1, err := schema.Index("index-name", nil)
 	if err != nil {
@@ -117,6 +131,22 @@ func TestIndexCopy(t *testing.T) {
 	}
 }
 
+func TestIndexFrames(t *testing.T) {
+	schema1 := NewSchema()
+	index11, _ := schema1.Index("diff-index1", nil)
+	frame11, _ := index11.Frame("frame1-1", nil)
+	frame12, _ := index11.Frame("frame1-2", nil)
+	frames := index11.Frames()
+	target := map[string]*Frame{
+		"frame1-1": frame11,
+		"frame1-2": frame12,
+	}
+	if !reflect.DeepEqual(target, frames) {
+		t.Fatalf("calling index.Frames should return frames")
+	}
+
+}
+
 func TestFrame(t *testing.T) {
 	frame1, err := sampleIndex.Frame("nonexistent-frame", nil)
 	if err != nil {
@@ -128,6 +158,9 @@ func TestFrame(t *testing.T) {
 	}
 	if frame1 != frame2 {
 		t.Fatalf("calling index.Frame again should return the same frame")
+	}
+	if frame1.Name() != "nonexistent-frame" {
+		t.Fatalf("calling frame.Name should return frame's name")
 	}
 }
 

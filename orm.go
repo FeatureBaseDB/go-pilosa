@@ -68,6 +68,15 @@ func (s *Schema) Index(name string, options *IndexOptions) (*Index, error) {
 	return index, nil
 }
 
+// Indexes return a copy of the indexes in this schema
+func (s *Schema) Indexes() map[string]*Index {
+	result := make(map[string]*Index)
+	for k, v := range s.indexes {
+		result[k] = v.copy()
+	}
+	return result
+}
+
 func (s *Schema) diff(other *Schema) *Schema {
 	result := NewSchema()
 	for indexName, index := range s.indexes {
@@ -248,6 +257,15 @@ func NewIndex(name string, options *IndexOptions) (*Index, error) {
 	}, nil
 }
 
+// Frames return a copy of the frames in this index
+func (d *Index) Frames() map[string]*Frame {
+	result := make(map[string]*Frame)
+	for k, v := range d.frames {
+		result[k] = v.copy()
+	}
+	return result
+}
+
 func (d *Index) copy() *Index {
 	frames := make(map[string]*Frame)
 	for name, f := range d.frames {
@@ -416,6 +434,11 @@ type Frame struct {
 	name    string
 	index   *Index
 	options *FrameOptions
+}
+
+// Name returns the name of the frame
+func (f *Frame) Name() string {
+	return f.name
 }
 
 func (f *Frame) copy() *Frame {

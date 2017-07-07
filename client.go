@@ -48,9 +48,12 @@ import (
 	"github.com/pilosa/go-pilosa/internal"
 )
 
+const maxHosts = 10
+
 // Client is the HTTP client for Pilosa server.
 type Client struct {
 	cluster *Cluster
+	host    *URI
 	client  *http.Client
 }
 
@@ -378,24 +381,34 @@ func (c *Client) status() (*Status, error) {
 }
 
 func (c *Client) httpRequest(method string, path string, data []byte, returnResponse returnClientInfo) (*http.Response, []byte, error) {
-	addr := c.cluster.Host()
-	if addr == nil {
-		return nil, nil, ErrorEmptyCluster
-	}
 	if data == nil {
 		data = []byte{}
 	}
-	request, err := http.NewRequest(method, addr.Normalize()+path, bytes.NewReader(data))
-	if err != nil {
-		return nil, nil, err
+	reader := bytes.NewReader(data)
+
+	// try at most maxHosts non-failed hosts; protect against broken cluster.removeHost
+	var response *http.Response
+	var err error
+	for i := 0; i < maxHosts; i++ {
+		if c.host == nil {
+			c.host = c.cluster.Host()
+			if c.host == nil {
+				return nil, nil, ErrorEmptyCluster
+			}
+		}
+		request, err := c.makeRequest(method, path, reader)
+		if err != nil {
+			return nil, nil, err
+		}
+		response, err = c.client.Do(request)
+		if err == nil {
+			break
+		}
+		c.cluster.RemoveHost(c.host)
+		c.host = c.cluster.Host()
 	}
-	// both Content-Type and Accept headers must be set for protobuf content
-	request.Header.Set("Content-Type", "application/x-protobuf")
-	request.Header.Set("Accept", "application/x-protobuf")
-	response, err := c.client.Do(request)
-	if err != nil {
-		c.cluster.RemoveHost(addr)
-		return nil, nil, err
+	if response == nil {
+		return nil, nil, ErrorTriedMaxHosts
 	}
 	defer response.Body.Close()
 	// TODO: Optimize buffer creation
@@ -418,6 +431,18 @@ func (c *Client) httpRequest(method string, path string, data []byte, returnResp
 		return nil, nil, nil
 	}
 	return response, buf, nil
+}
+
+func (c *Client) makeRequest(method string, path string, reader io.Reader) (*http.Request, error) {
+	request, err := http.NewRequest(method, c.host.Normalize()+path, reader)
+	if err != nil {
+		return nil, err
+	}
+	// both Content-Type and Accept headers must be set for protobuf content
+	request.Header.Set("Content-Type", "application/x-protobuf")
+	request.Header.Set("Accept", "application/x-protobuf")
+
+	return request, err
 }
 
 func newHTTPClient(options *ClientOptions) *http.Client {

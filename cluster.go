@@ -32,16 +32,23 @@
 
 package pilosa
 
+import (
+	"sync"
+)
+
 // Cluster contains hosts in a Pilosa cluster.
 type Cluster struct {
-	hosts     []*URI
-	nextIndex int
+	hosts  []*URI
+	okList []bool
+	mutex  *sync.RWMutex
 }
 
 // DefaultCluster returns the default Cluster.
 func DefaultCluster() *Cluster {
 	return &Cluster{
-		hosts: make([]*URI, 0),
+		hosts:  make([]*URI, 0),
+		okList: make([]bool, 0),
+		mutex:  &sync.RWMutex{},
 	}
 }
 
@@ -56,35 +63,57 @@ func NewClusterWithHost(hosts ...*URI) *Cluster {
 
 // AddHost adds a host to the cluster.
 func (c *Cluster) AddHost(address *URI) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	c.hosts = append(c.hosts, address)
+	c.okList = append(c.okList, true)
 }
 
-// Host returns the next host in the cluster.
+// Host returns a host in the cluster.
 func (c *Cluster) Host() *URI {
-	if len(c.hosts) == 0 {
-		return nil
+	c.mutex.RLock()
+	var host *URI
+	for i, ok := range c.okList {
+		if ok {
+			host = c.hosts[i]
+			break
+		}
 	}
-	// Return the transport, e.g., http from http+protobuf
-	uri := c.hosts[c.nextIndex%len(c.hosts)]
-	c.nextIndex = (c.nextIndex + 1) % len(c.hosts)
-	return uri
+	c.mutex.RUnlock()
+	if host != nil {
+		return host
+	}
+	c.reset()
+	return host
 }
 
-// RemoveHost removes the host with the given URI from the cluster.
+// RemoveHost black lists the host with the given URI from the cluster.
 func (c *Cluster) RemoveHost(address *URI) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	for i, uri := range c.hosts {
 		if uri.Equals(address) {
-			c.hosts = append(c.hosts[:i], c.hosts[i+1:]...)
+			c.okList[i] = false
 			break
 		}
 	}
 }
 
-// Hosts returns all hosts in the cluster.
+// Hosts returns all available hosts in the cluster.
 func (c *Cluster) Hosts() []URI {
-	arr := make([]URI, 0, len(c.hosts))
-	for _, u := range c.hosts {
-		arr = append(arr, *u)
+	hosts := make([]URI, 0, len(c.hosts))
+	for i, host := range c.hosts {
+		if c.okList[i] {
+			hosts = append(hosts, *host)
+		}
 	}
-	return arr
+	return hosts
+}
+
+func (c *Cluster) reset() {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	for i := range c.okList {
+		c.okList[i] = true
+	}
 }

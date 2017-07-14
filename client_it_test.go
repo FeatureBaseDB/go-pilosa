@@ -440,7 +440,7 @@ func TestQueryFails(t *testing.T) {
 
 func TestInvalidHttpRequest(t *testing.T) {
 	client := getClient()
-	_, _, err := client.httpRequest("INVALID METHOD", "/foo", nil, 0)
+	_, _, err := client.httpRequest("INVALID METHOD", "/foo", nil, nil, 0)
 	if err == nil {
 		t.Fatal()
 	}
@@ -659,6 +659,83 @@ func TestCSVImport(t *testing.T) {
 		if target[i] != br.Bits[0] {
 			t.Fatalf("%d != %d", target[i], br.Bits[0])
 		}
+	}
+}
+
+func TestCSVExport(t *testing.T) {
+	client := getClient()
+	frame, err := index.Frame("exportframe", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.EnsureFrame(frame)
+	_, err = client.Query(index.BatchQuery(
+		frame.SetBit(1, 1),
+		frame.SetBit(1, 10),
+		frame.SetBit(2, 1048577),
+	), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetBits := []Bit{
+		Bit{RowID: 1, ColumnID: 1},
+		Bit{RowID: 1, ColumnID: 10},
+		Bit{RowID: 2, ColumnID: 1048577},
+	}
+	bits := []Bit{}
+	iterator, err := client.ExportFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		bit, err := iterator.NextBit()
+		if err == io.EOF {
+			break
+		}
+		bits = append(bits, bit)
+	}
+	if !reflect.DeepEqual(targetBits, bits) {
+		t.Fatalf("ExportFrame should export the frame")
+	}
+}
+
+func TestCSVExportFailure(t *testing.T) {
+	server := getMockServer(404, []byte("sorry, not found"), -1)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		panic(err)
+	}
+	client := NewClientWithURI(uri)
+	frame, err := index.Frame("exportframe", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.ExportFrame(frame)
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func TestExportReaderFailure(t *testing.T) {
+	server := getMockServer(404, []byte("sorry, not found"), -1)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		panic(err)
+	}
+	frame, err := index.Frame("exportframe", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sliceURIs := map[uint64]*URI{
+		0: uri,
+	}
+	reader := newExportReader(sliceURIs, frame)
+	buf := make([]byte, 1000)
+	_, err = reader.Read(buf)
+	if err == nil {
+		t.Fatal("should have failed")
 	}
 }
 

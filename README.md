@@ -12,8 +12,8 @@ Go client for Pilosa high performance distributed bitmap index.
 
 ## Change Log
 
-* **next**:
-    * Supports imports.
+* **v0.5.0**:
+    * Supports imports and exports.
     * Introduced schemas. No need to re-define already existing indexes and frames.
     * `NewClientFromAddresses` convenience function added. Create a client for a
       cluster directly from a slice of strings.

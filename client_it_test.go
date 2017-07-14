@@ -692,6 +692,9 @@ func TestCSVExport(t *testing.T) {
 		if err == io.EOF {
 			break
 		}
+		if err != nil {
+			t.Fatal(err)
+		}
 		bits = append(bits, bit)
 	}
 	if !reflect.DeepEqual(targetBits, bits) {

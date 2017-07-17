@@ -982,6 +982,42 @@ func TestFetchViewsUnmarshalFails(t *testing.T) {
 	}
 }
 
+func TestStatusToNodeSlicesForIndex(t *testing.T) {
+	// even though this function isn't reallyu an integration test,
+	// it needs to access statusToNodeSlicesForIndex which is not
+	// available to client_test.go
+
+	status := &Status{
+		Nodes: []StatusNode{
+			StatusNode{
+				Host: ":10101",
+				Indexes: []StatusIndex{
+					StatusIndex{
+						Name:   "index1",
+						Slices: []uint64{0},
+					},
+					StatusIndex{
+						Name:   "index2",
+						Slices: []uint64{0},
+					},
+				},
+			},
+		},
+	}
+	sliceMap := statusToNodeSlicesForIndex(status, "index2")
+	if len(sliceMap) != 1 {
+		t.Fatalf("slice map should have a single item")
+	}
+	if uri, ok := sliceMap[0]; ok {
+		target, _ := NewURIFromAddress(":10101")
+		if !uri.Equals(target) {
+			t.Fatalf("slice map should have the correct URI")
+		}
+	} else {
+		t.Fatalf("slice map should have the correct slice")
+	}
+}
+
 func getClient() *Client {
 	uri, err := NewURIFromAddress(":10101")
 	if err != nil {

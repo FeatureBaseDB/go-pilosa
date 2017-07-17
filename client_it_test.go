@@ -683,7 +683,7 @@ func TestCSVExport(t *testing.T) {
 		Bit{RowID: 2, ColumnID: 1048577},
 	}
 	bits := []Bit{}
-	iterator, err := client.ExportFrame(frame)
+	iterator, err := client.ExportFrame(frame, "standard")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -714,7 +714,7 @@ func TestCSVExportFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = client.ExportFrame(frame)
+	_, err = client.ExportFrame(frame, "standard")
 	if err == nil {
 		t.Fatal("should have failed")
 	}
@@ -734,7 +734,7 @@ func TestExportReaderFailure(t *testing.T) {
 	sliceURIs := map[uint64]*URI{
 		0: uri,
 	}
-	reader := newExportReader(sliceURIs, frame)
+	reader := newExportReader(sliceURIs, frame, "standard")
 	buf := make([]byte, 1000)
 	_, err = reader.Read(buf)
 	if err == nil {

@@ -358,13 +358,13 @@ func (c *Client) importNode(request *internal.ImportRequest) error {
 }
 
 // ExportFrame exports bits for a frame
-func (c *Client) ExportFrame(frame *Frame) (BitIterator, error) {
+func (c *Client) ExportFrame(frame *Frame, view string) (BitIterator, error) {
 	status, err := c.status()
 	if err != nil {
 		return nil, err
 	}
 	sliceURIs := statusToNodeSlicesForIndex(status, frame.index.Name())
-	return NewCSVBitIterator(newExportReader(sliceURIs, frame)), nil
+	return NewCSVBitIterator(newExportReader(sliceURIs, frame, view)), nil
 }
 
 func (c *Client) patchIndexTimeQuantum(index *Index) error {
@@ -620,13 +620,15 @@ type exportReader struct {
 	bodyIndex    int
 	currentSlice uint64
 	sliceCount   uint64
+	view         string
 }
 
-func newExportReader(sliceURIs map[uint64]*URI, frame *Frame) *exportReader {
+func newExportReader(sliceURIs map[uint64]*URI, frame *Frame, view string) *exportReader {
 	return &exportReader{
 		sliceURIs:  sliceURIs,
 		frame:      frame,
 		sliceCount: uint64(len(sliceURIs)),
+		view:       view,
 	}
 }
 
@@ -640,7 +642,8 @@ func (r *exportReader) Read(p []byte) (n int, err error) {
 			"Accept": "text/csv",
 		}
 		client := NewClientWithURI(uri)
-		path := fmt.Sprintf("/export?index=%s&frame=%s&slice=%d&view=standard", r.frame.index.Name(), r.frame.Name(), r.currentSlice)
+		path := fmt.Sprintf("/export?index=%s&frame=%s&slice=%d&view=%s",
+			r.frame.index.Name(), r.frame.Name(), r.currentSlice, r.view)
 		_, r.body, err = client.httpRequest("GET", path, nil, headers, errorCheckedResponse)
 		if err != nil {
 			return 0, err

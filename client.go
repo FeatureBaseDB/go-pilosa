@@ -367,6 +367,21 @@ func (c *Client) ExportFrame(frame *Frame, view string) (BitIterator, error) {
 	return NewCSVBitIterator(newExportReader(sliceURIs, frame, view)), nil
 }
 
+// Views fetches and returns the views of a frame
+func (c *Client) Views(frame *Frame) ([]string, error) {
+	path := fmt.Sprintf("/index/%s/frame/%s/views", frame.index.name, frame.name)
+	_, body, err := c.httpRequest("GET", path, nil, nil, errorCheckedResponse)
+	if err != nil {
+		return nil, err
+	}
+	viewsInfo := viewsInfo{}
+	err = json.Unmarshal(body, &viewsInfo)
+	if err != nil {
+		return nil, err
+	}
+	return viewsInfo.Views, nil
+}
+
 func (c *Client) patchIndexTimeQuantum(index *Index) error {
 	data := []byte(fmt.Sprintf(`{"timeQuantum": "%s"}`, index.options.TimeQuantum))
 	path := fmt.Sprintf("/index/%s/time-quantum", index.name)
@@ -611,6 +626,10 @@ type StatusMeta struct {
 	CacheSize      uint
 	InverseEnabled bool
 	TimeQuantum    string
+}
+
+type viewsInfo struct {
+	Views []string `json:"views"`
 }
 
 type exportReader struct {

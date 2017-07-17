@@ -773,6 +773,26 @@ func TestFetchStatus(t *testing.T) {
 	}
 }
 
+func TestFetchViews(t *testing.T) {
+	client := getClient()
+	options := &FrameOptions{
+		TimeQuantum: "YMD",
+	}
+	frame, err := index.Frame("viewsframe", options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.EnsureFrame(frame)
+	client.Query(frame.SetBitTimestamp(10, 100, time.Now()), nil)
+	views, err := client.Views(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(views) != 4 {
+		t.Fatalf("4 views should have been returned")
+	}
+}
+
 func TestImportBitIteratorError(t *testing.T) {
 	client := getClient()
 	frame, err := index.Frame("not-important", nil)
@@ -927,6 +947,36 @@ func TestStatusUnmarshalFails(t *testing.T) {
 	}
 	client := NewClientWithURI(uri)
 	_, err = client.status()
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
+func TestFetchViewsFails(t *testing.T) {
+	server := getMockServer(404, nil, 0)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	frame, _ := index.Frame("viewfail", nil)
+	_, err = client.Views(frame)
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
+func TestFetchViewsUnmarshalFails(t *testing.T) {
+	server := getMockServer(200, []byte("foo"), 3)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	frame, _ := index.Frame("viewfail", nil)
+	_, err = client.Views(frame)
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}

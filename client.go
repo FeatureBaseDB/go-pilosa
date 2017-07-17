@@ -332,13 +332,13 @@ func (c *Client) importBits(indexName string, frameName string, slice uint64, bi
 	return nil
 }
 
-func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]FragmentNode, error) {
+func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentNode, error) {
 	path := fmt.Sprintf("/fragment/nodes?slice=%d&index=%s", slice, indexName)
 	_, body, err := c.httpRequest("GET", path, []byte{}, nil, errorCheckedResponse)
 	if err != nil {
 		return nil, err
 	}
-	fragmentNodes := []FragmentNode{}
+	fragmentNodes := []fragmentNode{}
 	err = json.Unmarshal(body, &fragmentNodes)
 	if err != nil {
 		return nil, err
@@ -357,7 +357,7 @@ func (c *Client) importNode(request *internal.ImportRequest) error {
 	return nil
 }
 
-// ExportFrame exports bits for a frame
+// ExportFrame exports bits for a frame.
 func (c *Client) ExportFrame(frame *Frame, view string) (BitIterator, error) {
 	status, err := c.status()
 	if err != nil {
@@ -402,12 +402,12 @@ func (c *Client) status() (*Status, error) {
 	if err != nil {
 		return nil, err
 	}
-	statusRoot := &StatusRoot{}
-	err = json.Unmarshal(data, statusRoot)
+	root := &statusRoot{}
+	err = json.Unmarshal(data, root)
 	if err != nil {
 		return nil, err
 	}
-	return statusRoot.Status, nil
+	return root.Status, nil
 }
 
 func (c *Client) httpRequest(method string, path string, data []byte, headers map[string]string, returnResponse returnClientInfo) (*http.Response, []byte, error) {
@@ -529,19 +529,21 @@ func bitsToImportRequest(indexName string, frameName string, slice uint64, bits 
 	}
 }
 
+// statusToNodeSlicesForIndex finds the hosts which contains slices for the given index
 func statusToNodeSlicesForIndex(status *Status, indexName string) map[uint64]*URI {
 	result := make(map[uint64]*URI)
 	for _, node := range status.Nodes {
 		for _, index := range node.Indexes {
-			if index.Name == indexName {
-				for _, slice := range index.Slices {
-					uri, err := NewURIFromAddress(node.Host)
-					if err == nil {
-						result[slice] = uri
-					}
-				}
-				break
+			if index.Name != indexName {
+				continue
 			}
+			for _, slice := range index.Slices {
+				uri, err := NewURIFromAddress(node.Host)
+				if err == nil {
+					result[slice] = uri
+				}
+			}
+			break
 		}
 	}
 	return result
@@ -589,24 +591,27 @@ const (
 	errorCheckedResponse
 )
 
-type FragmentNode struct {
+type fragmentNode struct {
 	Host         string
 	InternalHost string
 }
 
-type StatusRoot struct {
+type statusRoot struct {
 	Status *Status `json:"status"`
 }
 
+// Status contains the status information from a Pilosa server.
 type Status struct {
 	Nodes []StatusNode
 }
 
+// StatusNode contains node information.
 type StatusNode struct {
 	Host    string
 	Indexes []StatusIndex
 }
 
+// StatusIndex contains index information.
 type StatusIndex struct {
 	Name   string
 	Meta   StatusMeta
@@ -614,11 +619,13 @@ type StatusIndex struct {
 	Slices []uint64
 }
 
+// StatusFrame contains frame information.
 type StatusFrame struct {
 	Name string
 	Meta StatusMeta
 }
 
+// StatusMeta contains options for a frame or an index.
 type StatusMeta struct {
 	ColumnLabel    string
 	RowLabel       string
@@ -651,9 +658,11 @@ func newExportReader(sliceURIs map[uint64]*URI, frame *Frame, view string) *expo
 	}
 }
 
+// Read updates the passed array with the exported CSV data and returns the number of bytes read
 func (r *exportReader) Read(p []byte) (n int, err error) {
 	if r.currentSlice >= r.sliceCount {
-		return 0, io.EOF
+		err = io.EOF
+		return
 	}
 	if r.body == nil {
 		uri, _ := r.sliceURIs[r.currentSlice]
@@ -665,7 +674,7 @@ func (r *exportReader) Read(p []byte) (n int, err error) {
 			r.frame.index.Name(), r.frame.Name(), r.currentSlice, r.view)
 		_, r.body, err = client.httpRequest("GET", path, nil, headers, errorCheckedResponse)
 		if err != nil {
-			return 0, err
+			return
 		}
 		r.bodyIndex = 0
 	}

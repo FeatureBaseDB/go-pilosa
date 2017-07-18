@@ -983,7 +983,7 @@ func TestFetchViewsUnmarshalFails(t *testing.T) {
 }
 
 func TestStatusToNodeSlicesForIndex(t *testing.T) {
-	// even though this function isn't reallyu an integration test,
+	// even though this function isn't really an integration test,
 	// it needs to access statusToNodeSlicesForIndex which is not
 	// available to client_test.go
 

@@ -539,7 +539,7 @@ func statusToNodeSlicesForIndex(status *Status, indexName string) map[uint64]*UR
 			}
 			for _, slice := range index.Slices {
 				uri, err := NewURIFromAddress(node.Host)
-				// err will always be nil, but prevent a panic in the odd chance the server returns an invalid URO
+				// err will always be nil, but prevent a panic in the odd chance the server returns an invalid URI
 				if err == nil {
 					result[slice] = uri
 				}

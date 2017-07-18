@@ -50,6 +50,12 @@ import (
 
 const maxHosts = 10
 
+// // both Content-Type and Accept headers must be set for protobuf content
+var protobufHeaders = map[string]string{
+	"Content-Type": "application/x-protobuf",
+	"Accept":       "application/x-protobuf",
+}
+
 // Client is the HTTP client for Pilosa server.
 type Client struct {
 	cluster *Cluster
@@ -107,7 +113,7 @@ func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, e
 	}
 	data := makeRequestData(query.serialize(), options)
 	path := fmt.Sprintf("/index/%s/query", query.Index().name)
-	_, buf, err := c.httpRequest("POST", path, data, rawResponse)
+	_, buf, err := c.httpRequest("POST", path, data, protobufHeaders, rawResponse)
 	if err != nil {
 		return nil, err
 	}
@@ -130,8 +136,7 @@ func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, e
 func (c *Client) CreateIndex(index *Index) error {
 	data := []byte(index.options.String())
 	path := fmt.Sprintf("/index/%s", index.name)
-	_, _, err := c.httpRequest("POST", path,
-		data, noResponse)
+	_, _, err := c.httpRequest("POST", path, data, nil, noResponse)
 	if err != nil {
 		return err
 	}
@@ -146,7 +151,7 @@ func (c *Client) CreateIndex(index *Index) error {
 func (c *Client) CreateFrame(frame *Frame) error {
 	data := []byte(frame.options.String())
 	path := fmt.Sprintf("/index/%s/frame/%s", frame.index.name, frame.name)
-	_, _, err := c.httpRequest("POST", path, data, noResponse)
+	_, _, err := c.httpRequest("POST", path, data, nil, noResponse)
 	if err != nil {
 		return err
 	}
@@ -178,7 +183,7 @@ func (c *Client) EnsureFrame(frame *Frame) error {
 // DeleteIndex deletes an index on the server.
 func (c *Client) DeleteIndex(index *Index) error {
 	path := fmt.Sprintf("/index/%s", index.name)
-	_, _, err := c.httpRequest("DELETE", path, nil, noResponse)
+	_, _, err := c.httpRequest("DELETE", path, nil, nil, noResponse)
 	return err
 
 }
@@ -186,7 +191,7 @@ func (c *Client) DeleteIndex(index *Index) error {
 // DeleteFrame deletes a frame on the server.
 func (c *Client) DeleteFrame(frame *Frame) error {
 	path := fmt.Sprintf("/index/%s/frame/%s", frame.index.name, frame.name)
-	_, _, err := c.httpRequest("DELETE", path, nil, noResponse)
+	_, _, err := c.httpRequest("DELETE", path, nil, nil, noResponse)
 	return err
 }
 
@@ -327,13 +332,13 @@ func (c *Client) importBits(indexName string, frameName string, slice uint64, bi
 	return nil
 }
 
-func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]FragmentNode, error) {
+func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentNode, error) {
 	path := fmt.Sprintf("/fragment/nodes?slice=%d&index=%s", slice, indexName)
-	_, body, err := c.httpRequest("GET", path, []byte{}, errorCheckedResponse)
+	_, body, err := c.httpRequest("GET", path, []byte{}, nil, errorCheckedResponse)
 	if err != nil {
 		return nil, err
 	}
-	fragmentNodes := []FragmentNode{}
+	fragmentNodes := []fragmentNode{}
 	err = json.Unmarshal(body, &fragmentNodes)
 	if err != nil {
 		return nil, err
@@ -344,7 +349,7 @@ func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]FragmentN
 func (c *Client) importNode(request *internal.ImportRequest) error {
 	data, _ := proto.Marshal(request)
 	// request.Marshal never returns an error
-	_, _, err := c.httpRequest("POST", "/import", data, noResponse)
+	_, _, err := c.httpRequest("POST", "/import", data, protobufHeaders, noResponse)
 	if err != nil {
 		return err
 	}
@@ -352,10 +357,35 @@ func (c *Client) importNode(request *internal.ImportRequest) error {
 	return nil
 }
 
+// ExportFrame exports bits for a frame.
+func (c *Client) ExportFrame(frame *Frame, view string) (BitIterator, error) {
+	status, err := c.status()
+	if err != nil {
+		return nil, err
+	}
+	sliceURIs := statusToNodeSlicesForIndex(status, frame.index.Name())
+	return NewCSVBitIterator(newExportReader(sliceURIs, frame, view)), nil
+}
+
+// Views fetches and returns the views of a frame
+func (c *Client) Views(frame *Frame) ([]string, error) {
+	path := fmt.Sprintf("/index/%s/frame/%s/views", frame.index.name, frame.name)
+	_, body, err := c.httpRequest("GET", path, nil, nil, errorCheckedResponse)
+	if err != nil {
+		return nil, err
+	}
+	viewsInfo := viewsInfo{}
+	err = json.Unmarshal(body, &viewsInfo)
+	if err != nil {
+		return nil, err
+	}
+	return viewsInfo.Views, nil
+}
+
 func (c *Client) patchIndexTimeQuantum(index *Index) error {
 	data := []byte(fmt.Sprintf(`{"timeQuantum": "%s"}`, index.options.TimeQuantum))
 	path := fmt.Sprintf("/index/%s/time-quantum", index.name)
-	_, _, err := c.httpRequest("PATCH", path, data, noResponse)
+	_, _, err := c.httpRequest("PATCH", path, data, nil, noResponse)
 	return err
 }
 
@@ -363,24 +393,24 @@ func (c *Client) patchFrameTimeQuantum(frame *Frame) error {
 	data := []byte(fmt.Sprintf(`{"index": "%s", "frame": "%s", "timeQuantum": "%s"}`,
 		frame.index.name, frame.name, frame.options.TimeQuantum))
 	path := fmt.Sprintf("/index/%s/frame/%s/time-quantum", frame.index.name, frame.name)
-	_, _, err := c.httpRequest("PATCH", path, data, noResponse)
+	_, _, err := c.httpRequest("PATCH", path, data, nil, noResponse)
 	return err
 }
 
 func (c *Client) status() (*Status, error) {
-	_, data, err := c.httpRequest("GET", "/status", nil, errorCheckedResponse)
+	_, data, err := c.httpRequest("GET", "/status", nil, nil, errorCheckedResponse)
 	if err != nil {
 		return nil, err
 	}
-	statusRoot := &StatusRoot{}
-	err = json.Unmarshal(data, statusRoot)
+	root := &statusRoot{}
+	err = json.Unmarshal(data, root)
 	if err != nil {
 		return nil, err
 	}
-	return statusRoot.Status, nil
+	return root.Status, nil
 }
 
-func (c *Client) httpRequest(method string, path string, data []byte, returnResponse returnClientInfo) (*http.Response, []byte, error) {
+func (c *Client) httpRequest(method string, path string, data []byte, headers map[string]string, returnResponse returnClientInfo) (*http.Response, []byte, error) {
 	if data == nil {
 		data = []byte{}
 	}
@@ -396,7 +426,7 @@ func (c *Client) httpRequest(method string, path string, data []byte, returnResp
 				return nil, nil, ErrorEmptyCluster
 			}
 		}
-		request, err := c.makeRequest(method, path, reader)
+		request, err := c.makeRequest(method, path, headers, reader)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -433,14 +463,15 @@ func (c *Client) httpRequest(method string, path string, data []byte, returnResp
 	return response, buf, nil
 }
 
-func (c *Client) makeRequest(method string, path string, reader io.Reader) (*http.Request, error) {
+func (c *Client) makeRequest(method string, path string, headers map[string]string, reader io.Reader) (*http.Request, error) {
 	request, err := http.NewRequest(method, c.host.Normalize()+path, reader)
 	if err != nil {
 		return nil, err
 	}
-	// both Content-Type and Accept headers must be set for protobuf content
-	request.Header.Set("Content-Type", "application/x-protobuf")
-	request.Header.Set("Accept", "application/x-protobuf")
+
+	for k, v := range headers {
+		request.Header.Set(k, v)
+	}
 
 	return request, err
 }
@@ -498,6 +529,27 @@ func bitsToImportRequest(indexName string, frameName string, slice uint64, bits 
 	}
 }
 
+// statusToNodeSlicesForIndex finds the hosts which contains slices for the given index
+func statusToNodeSlicesForIndex(status *Status, indexName string) map[uint64]*URI {
+	result := make(map[uint64]*URI)
+	for _, node := range status.Nodes {
+		for _, index := range node.Indexes {
+			if index.Name != indexName {
+				continue
+			}
+			for _, slice := range index.Slices {
+				uri, err := NewURIFromAddress(node.Host)
+				// err will always be nil, but prevent a panic in the odd chance the server returns an invalid URI
+				if err == nil {
+					result[slice] = uri
+				}
+			}
+			break
+		}
+	}
+	return result
+}
+
 // ClientOptions control the properties of client connection to the server
 type ClientOptions struct {
 	SocketTimeout    time.Duration
@@ -540,24 +592,27 @@ const (
 	errorCheckedResponse
 )
 
-type FragmentNode struct {
+type fragmentNode struct {
 	Host         string
 	InternalHost string
 }
 
-type StatusRoot struct {
+type statusRoot struct {
 	Status *Status `json:"status"`
 }
 
+// Status contains the status information from a Pilosa server.
 type Status struct {
 	Nodes []StatusNode
 }
 
+// StatusNode contains node information.
 type StatusNode struct {
 	Host    string
 	Indexes []StatusIndex
 }
 
+// StatusIndex contains index information.
 type StatusIndex struct {
 	Name   string
 	Meta   StatusMeta
@@ -565,11 +620,13 @@ type StatusIndex struct {
 	Slices []uint64
 }
 
+// StatusFrame contains frame information.
 type StatusFrame struct {
 	Name string
 	Meta StatusMeta
 }
 
+// StatusMeta contains options for a frame or an index.
 type StatusMeta struct {
 	ColumnLabel    string
 	RowLabel       string
@@ -577,4 +634,56 @@ type StatusMeta struct {
 	CacheSize      uint
 	InverseEnabled bool
 	TimeQuantum    string
+}
+
+type viewsInfo struct {
+	Views []string `json:"views"`
+}
+
+type exportReader struct {
+	sliceURIs    map[uint64]*URI
+	frame        *Frame
+	body         []byte
+	bodyIndex    int
+	currentSlice uint64
+	sliceCount   uint64
+	view         string
+}
+
+func newExportReader(sliceURIs map[uint64]*URI, frame *Frame, view string) *exportReader {
+	return &exportReader{
+		sliceURIs:  sliceURIs,
+		frame:      frame,
+		sliceCount: uint64(len(sliceURIs)),
+		view:       view,
+	}
+}
+
+// Read updates the passed array with the exported CSV data and returns the number of bytes read
+func (r *exportReader) Read(p []byte) (n int, err error) {
+	if r.currentSlice >= r.sliceCount {
+		err = io.EOF
+		return
+	}
+	if r.body == nil {
+		uri, _ := r.sliceURIs[r.currentSlice]
+		headers := map[string]string{
+			"Accept": "text/csv",
+		}
+		client := NewClientWithURI(uri)
+		path := fmt.Sprintf("/export?index=%s&frame=%s&slice=%d&view=%s",
+			r.frame.index.Name(), r.frame.Name(), r.currentSlice, r.view)
+		_, r.body, err = client.httpRequest("GET", path, nil, headers, errorCheckedResponse)
+		if err != nil {
+			return
+		}
+		r.bodyIndex = 0
+	}
+	n = copy(p, r.body[r.bodyIndex:])
+	r.bodyIndex += n
+	if n >= len(r.body) {
+		r.body = nil
+		r.currentSlice++
+	}
+	return
 }

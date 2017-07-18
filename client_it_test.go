@@ -440,7 +440,7 @@ func TestQueryFails(t *testing.T) {
 
 func TestInvalidHttpRequest(t *testing.T) {
 	client := getClient()
-	_, _, err := client.httpRequest("INVALID METHOD", "/foo", nil, 0)
+	_, _, err := client.httpRequest("INVALID METHOD", "/foo", nil, nil, 0)
 	if err == nil {
 		t.Fatal()
 	}
@@ -662,6 +662,86 @@ func TestCSVImport(t *testing.T) {
 	}
 }
 
+func TestCSVExport(t *testing.T) {
+	client := getClient()
+	frame, err := index.Frame("exportframe", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.EnsureFrame(frame)
+	_, err = client.Query(index.BatchQuery(
+		frame.SetBit(1, 1),
+		frame.SetBit(1, 10),
+		frame.SetBit(2, 1048577),
+	), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetBits := []Bit{
+		Bit{RowID: 1, ColumnID: 1},
+		Bit{RowID: 1, ColumnID: 10},
+		Bit{RowID: 2, ColumnID: 1048577},
+	}
+	bits := []Bit{}
+	iterator, err := client.ExportFrame(frame, "standard")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		bit, err := iterator.NextBit()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		bits = append(bits, bit)
+	}
+	if !reflect.DeepEqual(targetBits, bits) {
+		t.Fatalf("ExportFrame should export the frame")
+	}
+}
+
+func TestCSVExportFailure(t *testing.T) {
+	server := getMockServer(404, []byte("sorry, not found"), -1)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		panic(err)
+	}
+	client := NewClientWithURI(uri)
+	frame, err := index.Frame("exportframe", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.ExportFrame(frame, "standard")
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func TestExportReaderFailure(t *testing.T) {
+	server := getMockServer(404, []byte("sorry, not found"), -1)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		panic(err)
+	}
+	frame, err := index.Frame("exportframe", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sliceURIs := map[uint64]*URI{
+		0: uri,
+	}
+	reader := newExportReader(sliceURIs, frame, "standard")
+	buf := make([]byte, 1000)
+	_, err = reader.Read(buf)
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
 func TestFetchFragmentNodes(t *testing.T) {
 	client := getClient()
 	nodes, err := client.fetchFragmentNodes(index.Name(), 0)
@@ -690,6 +770,26 @@ func TestFetchStatus(t *testing.T) {
 	}
 	if len(status.Nodes[0].Indexes[0].Slices) == 0 {
 		t.Fatalf("There should be at least 1 slice in the index")
+	}
+}
+
+func TestFetchViews(t *testing.T) {
+	client := getClient()
+	options := &FrameOptions{
+		TimeQuantum: "YMD",
+	}
+	frame, err := index.Frame("viewsframe", options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.EnsureFrame(frame)
+	client.Query(frame.SetBitTimestamp(10, 100, time.Now()), nil)
+	views, err := client.Views(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(views) != 4 {
+		t.Fatalf("4 views should have been returned")
 	}
 }
 
@@ -849,6 +949,72 @@ func TestStatusUnmarshalFails(t *testing.T) {
 	_, err = client.status()
 	if err == nil {
 		t.Fatalf("Should have failed")
+	}
+}
+
+func TestFetchViewsFails(t *testing.T) {
+	server := getMockServer(404, nil, 0)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	frame, _ := index.Frame("viewfail", nil)
+	_, err = client.Views(frame)
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
+func TestFetchViewsUnmarshalFails(t *testing.T) {
+	server := getMockServer(200, []byte("foo"), 3)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	frame, _ := index.Frame("viewfail", nil)
+	_, err = client.Views(frame)
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
+func TestStatusToNodeSlicesForIndex(t *testing.T) {
+	// even though this function isn't really an integration test,
+	// it needs to access statusToNodeSlicesForIndex which is not
+	// available to client_test.go
+
+	status := &Status{
+		Nodes: []StatusNode{
+			StatusNode{
+				Host: ":10101",
+				Indexes: []StatusIndex{
+					StatusIndex{
+						Name:   "index1",
+						Slices: []uint64{0},
+					},
+					StatusIndex{
+						Name:   "index2",
+						Slices: []uint64{0},
+					},
+				},
+			},
+		},
+	}
+	sliceMap := statusToNodeSlicesForIndex(status, "index2")
+	if len(sliceMap) != 1 {
+		t.Fatalf("slice map should have a single item")
+	}
+	if uri, ok := sliceMap[0]; ok {
+		target, _ := NewURIFromAddress(":10101")
+		if !uri.Equals(target) {
+			t.Fatalf("slice map should have the correct URI")
+		}
+	} else {
+		t.Fatalf("slice map should have the correct slice")
 	}
 }
 

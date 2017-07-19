@@ -814,7 +814,7 @@ func TestImportFailsOnImportBitsError(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := NewClientWithURI(uri)
-	err = client.importBits("foo", "bar", 0, []Bit{})
+	err = client.importBits("foo", "bar", "", 0, []Bit{})
 	if err == nil {
 		t.Fatalf("importBits should fail when fetch fragment nodes fails")
 	}
@@ -849,7 +849,7 @@ func TestImportBitsFailInvalidNodeAddress(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := NewClientWithURI(uri)
-	err = client.importBits("foo", "bar", 0, []Bit{})
+	err = client.importBits("foo", "bar", "", 0, []Bit{})
 	if err == nil {
 		t.Fatalf("importBits should fail on invalid node host")
 	}
@@ -1015,6 +1015,34 @@ func TestStatusToNodeSlicesForIndex(t *testing.T) {
 		}
 	} else {
 		t.Fatalf("slice map should have the correct slice")
+	}
+}
+
+func TestBitsToImportRequestWithView(t *testing.T) {
+	bits := []Bit{
+		Bit{
+			RowID:     1,
+			ColumnID:  100,
+			Timestamp: 1000,
+		},
+		Bit{
+			RowID:     10,
+			ColumnID:  1000,
+			Timestamp: 10000,
+		},
+	}
+	target := &internal.ImportRequest{
+		Index:      "index",
+		Frame:      "frame",
+		Slice:      0,
+		View:       "view",
+		RowIDs:     []uint64{1, 10},
+		ColumnIDs:  []uint64{100, 1000},
+		Timestamps: nil,
+	}
+	request := bitsToImportRequest("index", "frame", "view", 0, bits)
+	if !reflect.DeepEqual(target, request) {
+		t.Fatalf("Import request should be created correctly")
 	}
 }
 

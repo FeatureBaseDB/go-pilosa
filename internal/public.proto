@@ -40,7 +40,6 @@ message QueryRequest {
 	string Query = 1;
 	repeated uint64 Slices = 2;
 	bool ColumnAttrs = 3;
-	string Quantum = 4;
 	bool Remote = 5;
 }
 
@@ -64,4 +63,5 @@ message ImportRequest {
 	repeated uint64 RowIDs = 4;
 	repeated uint64 ColumnIDs = 5;
 	repeated int64 Timestamps = 6;
+	string View = 7;
 }

@@ -372,6 +372,91 @@ func (c *Client) ExportFrame(frame *Frame, view string) (BitIterator, error) {
 	return NewCSVBitIterator(newExportReader(sliceURIs, frame, view)), nil
 }
 
+// FragmentBlockIDs returns block IDs for the given frame and slice.
+// set inverse to false to retrieve row block IDs or true to retrieve column block IDs
+func (c *Client) FragmentBlockIDs(frame *Frame, slice uint64, inverse bool) ([]int, error) {
+	view := "standard"
+	if inverse {
+		view = "inverse"
+	}
+	path := fmt.Sprintf("/fragment/blocks?index=%s&frame=%s&view=%s&slice=%d",
+		frame.index.Name(), frame.Name(), view, slice)
+	_, body, err := c.httpRequest("GET", path, nil, nil, errorCheckedResponse)
+	if err != nil {
+		return nil, err
+	}
+	binfo := fragmentBlockInfo{}
+	err = json.Unmarshal(body, &binfo)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]int, len(binfo.Blocks))
+	for i, block := range binfo.Blocks {
+		result[i] = block.ID
+	}
+	return result, nil
+}
+
+// ExportRowBlockAttrs exports row attributes for a frame block.
+func (c *Client) ExportRowBlockAttrs(frame *Frame, block uint64) (result BlockAttrsResponse, err error) {
+	path := fmt.Sprintf("/block/row-attrs?index=%s&frame=%s&block=%d",
+		frame.index.Name(), frame.Name(), block)
+	_, body, err := c.httpRequest("GET", path, nil, nil, errorCheckedResponse)
+	if err != nil {
+		return
+	}
+	result = BlockAttrsResponse{}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return
+	}
+	return
+}
+
+// ExportColumnBlockAttrs exports row attributes for an index block.
+func (c *Client) ExportColumnBlockAttrs(index *Index, block uint64) (result BlockAttrsResponse, err error) {
+	path := fmt.Sprintf("/block/column-attrs?index=%s&block=%d", index.Name(), block)
+	_, body, err := c.httpRequest("GET", path, nil, nil, errorCheckedResponse)
+	if err != nil {
+		return
+	}
+	result = BlockAttrsResponse{}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return
+	}
+	return
+}
+
+// ImportRowBlockAttrs imports row attributes for a frame block.
+func (c *Client) ImportRowBlockAttrs(frame *Frame, block uint64, attrs BlockAttrs) error {
+	path := fmt.Sprintf("/block/row-attrs?index=%s&frame=%s&block=%d",
+		frame.index.Name(), frame.Name(), block)
+	data, err := json.Marshal(attrs)
+	if err != nil {
+		return err
+	}
+	_, _, err = c.httpRequest("POST", path, data, nil, errorCheckedResponse)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// ImportColumnBlockAttrs imports column attributes for an index block
+func (c *Client) ImportColumnBlockAttrs(index *Index, block uint64, attrs BlockAttrs) error {
+	path := fmt.Sprintf("/block/column-attrs?index=%s&block=%d", index.Name(), block)
+	data, err := json.Marshal(attrs)
+	if err != nil {
+		return err
+	}
+	_, _, err = c.httpRequest("POST", path, data, nil, errorCheckedResponse)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // Views fetches and returns the views of a frame
 func (c *Client) Views(frame *Frame) ([]string, error) {
 	path := fmt.Sprintf("/index/%s/frame/%s/views", frame.index.name, frame.name)
@@ -705,4 +790,20 @@ func (r *exportReader) Read(p []byte) (n int, err error) {
 		r.currentSlice++
 	}
 	return
+}
+
+type fragmentBlockInfo struct {
+	Blocks []fragmentBlock `json:"blocks"`
+}
+
+type fragmentBlock struct {
+	ID int `json:"id"`
+}
+
+// BlockAttrs contains the attributes for block IDs.
+type BlockAttrs map[uint64]map[string]interface{}
+
+// BlockAttrsResponse is the result from exporting block attributes.
+type BlockAttrsResponse struct {
+	Attrs BlockAttrs `json:"attrs"`
 }

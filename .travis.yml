@@ -10,9 +10,9 @@ services:
 before_install:
   # - docker run -d -p 10101:10101 pilosa/pilosa:v0.4.0
   - go get github.com/mattn/goveralls      
-  - curl -O https://storage.googleapis.com/pilosa/pilosa
-  - chmod +x pilosa
-  - ./pilosa server &
+  - curl -O https://storage.googleapis.com/pilosa/pilosa-attrs
+  - chmod +x pilosa-attrs
+  - ./pilosa-attrs server &
 addons:
   apt:
     sources:

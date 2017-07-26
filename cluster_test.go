@@ -88,7 +88,7 @@ func TestRemoveHost(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.RemoveHost(uri)
-	if len(c.hosts) != 0 {
+	if len(c.Hosts()) != 0 {
 		t.Fatalf("The cluster should not contain the host")
 	}
 }

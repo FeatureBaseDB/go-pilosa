@@ -35,19 +35,31 @@ package pilosa
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pilosa/go-pilosa/internal"
 )
 
+const maxHosts = 10
+
+// // both Content-Type and Accept headers must be set for protobuf content
+var protobufHeaders = map[string]string{
+	"Content-Type": "application/x-protobuf",
+	"Accept":       "application/x-protobuf",
+}
+
 // Client is the HTTP client for Pilosa server.
 type Client struct {
 	cluster *Cluster
+	host    *URI
 	client  *http.Client
 }
 
@@ -59,6 +71,23 @@ func DefaultClient() *Client {
 // NewClientWithURI creates a client with the given server address.
 func NewClientWithURI(uri *URI) *Client {
 	return NewClientWithCluster(NewClusterWithHost(uri), nil)
+}
+
+// NewClientFromAddresses creates a client for a cluster specified by `hosts`. Each
+// string in `hosts` is the string represenation of a URI. E.G
+// node0.pilosa.com:10101
+func NewClientFromAddresses(addresses []string, options *ClientOptions) (*Client, error) {
+	uris := make([]*URI, len(addresses))
+	for i, address := range addresses {
+		uri, err := NewURIFromAddress(address)
+		if err != nil {
+			return nil, err
+		}
+		uris[i] = uri
+	}
+	cluster := NewClusterWithHost(uris...)
+	client := NewClientWithCluster(cluster, options)
+	return client, nil
 }
 
 // NewClientWithCluster creates a client with the given cluster and options.
@@ -84,7 +113,7 @@ func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, e
 	}
 	data := makeRequestData(query.serialize(), options)
 	path := fmt.Sprintf("/index/%s/query", query.Index().name)
-	_, buf, err := c.httpRequest("POST", path, data, rawResponse)
+	_, buf, err := c.httpRequest("POST", path, data, protobufHeaders, rawResponse)
 	if err != nil {
 		return nil, err
 	}
@@ -107,8 +136,7 @@ func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, e
 func (c *Client) CreateIndex(index *Index) error {
 	data := []byte(index.options.String())
 	path := fmt.Sprintf("/index/%s", index.name)
-	_, _, err := c.httpRequest("POST", path,
-		data, noResponse)
+	_, _, err := c.httpRequest("POST", path, data, nil, noResponse)
 	if err != nil {
 		return err
 	}
@@ -123,7 +151,7 @@ func (c *Client) CreateIndex(index *Index) error {
 func (c *Client) CreateFrame(frame *Frame) error {
 	data := []byte(frame.options.String())
 	path := fmt.Sprintf("/index/%s/frame/%s", frame.index.name, frame.name)
-	_, _, err := c.httpRequest("POST", path, data, noResponse)
+	_, _, err := c.httpRequest("POST", path, data, nil, noResponse)
 	if err != nil {
 		return err
 	}
@@ -155,7 +183,7 @@ func (c *Client) EnsureFrame(frame *Frame) error {
 // DeleteIndex deletes an index on the server.
 func (c *Client) DeleteIndex(index *Index) error {
 	path := fmt.Sprintf("/index/%s", index.name)
-	_, _, err := c.httpRequest("DELETE", path, nil, noResponse)
+	_, _, err := c.httpRequest("DELETE", path, nil, nil, noResponse)
 	return err
 
 }
@@ -163,28 +191,201 @@ func (c *Client) DeleteIndex(index *Index) error {
 // DeleteFrame deletes a frame on the server.
 func (c *Client) DeleteFrame(frame *Frame) error {
 	path := fmt.Sprintf("/index/%s/frame/%s", frame.index.name, frame.name)
-	_, _, err := c.httpRequest("DELETE", path, nil, noResponse)
+	_, _, err := c.httpRequest("DELETE", path, nil, nil, noResponse)
 	return err
+}
+
+// SyncSchema updates a schema with the indexes and frames on the server and
+// creates the indexes and frames in the schema on the server side.
+// This function does not delete indexes and the frames on the server side nor in the schema.
+func (c *Client) SyncSchema(schema *Schema) error {
+	var err error
+	serverSchema, err := c.Schema()
+	if err != nil {
+		return err
+	}
+
+	// find out local - remote schema
+	diffSchema := schema.diff(serverSchema)
+	// create the indexes and frames which doesn't exist on the server side
+	for indexName, index := range diffSchema.indexes {
+		if _, ok := serverSchema.indexes[indexName]; !ok {
+			c.EnsureIndex(index)
+		}
+		for _, frame := range index.frames {
+			c.EnsureFrame(frame)
+		}
+	}
+
+	// find out remote - local schema
+	diffSchema = serverSchema.diff(schema)
+	for indexName, index := range diffSchema.indexes {
+		if localIndex, ok := schema.indexes[indexName]; !ok {
+			schema.indexes[indexName] = index
+		} else {
+			for frameName, frame := range index.frames {
+				localIndex.frames[frameName] = frame
+			}
+		}
+	}
+
+	return nil
 }
 
 // Schema returns the indexes and frames on the server.
 func (c *Client) Schema() (*Schema, error) {
-	_, buf, err := c.httpRequest("GET", "/index", nil, errorCheckedResponse)
+	status, err := c.status()
 	if err != nil {
 		return nil, err
 	}
-	var schema *Schema
-	err = json.NewDecoder(bytes.NewReader(buf)).Decode(&schema)
-	if err != nil {
-		return nil, err
+	if len(status.Nodes) == 0 {
+		return nil, errors.New("Status should contain at least 1 node")
+	}
+	schema := NewSchema()
+	for _, indexInfo := range status.Nodes[0].Indexes {
+		options := &IndexOptions{
+			ColumnLabel: indexInfo.Meta.ColumnLabel,
+			TimeQuantum: TimeQuantum(indexInfo.Meta.TimeQuantum),
+		}
+		index, err := schema.Index(indexInfo.Name, options)
+		if err != nil {
+			return nil, err
+		}
+		for _, frameInfo := range indexInfo.Frames {
+			frameOptions := &FrameOptions{
+				RowLabel:       frameInfo.Meta.RowLabel,
+				CacheSize:      frameInfo.Meta.CacheSize,
+				CacheType:      CacheType(frameInfo.Meta.CacheType),
+				InverseEnabled: frameInfo.Meta.InverseEnabled,
+				TimeQuantum:    TimeQuantum(frameInfo.Meta.TimeQuantum),
+			}
+			_, err := index.Frame(frameInfo.Name, frameOptions)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 	}
 	return schema, nil
+}
+
+// ImportFrame imports bits from the given CSV iterator
+func (c *Client) ImportFrame(frame *Frame, bitIterator BitIterator, batchSize uint) error {
+	const sliceWidth = 1048576
+	linesLeft := true
+	bitGroup := map[uint64][]Bit{}
+	var currentBatchSize uint
+	indexName := frame.index.name
+	frameName := frame.name
+
+	for linesLeft {
+		bit, err := bitIterator.NextBit()
+		if err == io.EOF {
+			linesLeft = false
+		} else if err != nil {
+			return err
+		}
+
+		slice := bit.ColumnID / sliceWidth
+		if sliceArray, ok := bitGroup[slice]; ok {
+			bitGroup[slice] = append(sliceArray, bit)
+		} else {
+			bitGroup[slice] = []Bit{bit}
+		}
+		currentBatchSize++
+		// if the batch is full or there's no line left, start importing bits
+		if currentBatchSize >= batchSize || !linesLeft {
+			for slice, bits := range bitGroup {
+				if len(bits) > 0 {
+					err := c.importBits(indexName, frameName, slice, bits)
+					if err != nil {
+						return err
+					}
+				}
+			}
+			bitGroup = map[uint64][]Bit{}
+			currentBatchSize = 0
+		}
+	}
+
+	return nil
+}
+
+func (c *Client) importBits(indexName string, frameName string, slice uint64, bits []Bit) error {
+	sort.Sort(bitsForSort(bits))
+	nodes, err := c.fetchFragmentNodes(indexName, slice)
+	if err != nil {
+		return err
+	}
+	for _, node := range nodes {
+		uri, err := NewURIFromAddress(node.Host)
+		if err != nil {
+			return err
+		}
+		client := NewClientWithURI(uri)
+		err = client.importNode(bitsToImportRequest(indexName, frameName, slice, bits))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentNode, error) {
+	path := fmt.Sprintf("/fragment/nodes?slice=%d&index=%s", slice, indexName)
+	_, body, err := c.httpRequest("GET", path, []byte{}, nil, errorCheckedResponse)
+	if err != nil {
+		return nil, err
+	}
+	fragmentNodes := []fragmentNode{}
+	err = json.Unmarshal(body, &fragmentNodes)
+	if err != nil {
+		return nil, err
+	}
+	return fragmentNodes, nil
+}
+
+func (c *Client) importNode(request *internal.ImportRequest) error {
+	data, _ := proto.Marshal(request)
+	// request.Marshal never returns an error
+	_, _, err := c.httpRequest("POST", "/import", data, protobufHeaders, noResponse)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ExportFrame exports bits for a frame.
+func (c *Client) ExportFrame(frame *Frame, view string) (BitIterator, error) {
+	status, err := c.status()
+	if err != nil {
+		return nil, err
+	}
+	sliceURIs := statusToNodeSlicesForIndex(status, frame.index.Name())
+	return NewCSVBitIterator(newExportReader(sliceURIs, frame, view)), nil
+}
+
+// Views fetches and returns the views of a frame
+func (c *Client) Views(frame *Frame) ([]string, error) {
+	path := fmt.Sprintf("/index/%s/frame/%s/views", frame.index.name, frame.name)
+	_, body, err := c.httpRequest("GET", path, nil, nil, errorCheckedResponse)
+	if err != nil {
+		return nil, err
+	}
+	viewsInfo := viewsInfo{}
+	err = json.Unmarshal(body, &viewsInfo)
+	if err != nil {
+		return nil, err
+	}
+	return viewsInfo.Views, nil
 }
 
 func (c *Client) patchIndexTimeQuantum(index *Index) error {
 	data := []byte(fmt.Sprintf(`{"timeQuantum": "%s"}`, index.options.TimeQuantum))
 	path := fmt.Sprintf("/index/%s/time-quantum", index.name)
-	_, _, err := c.httpRequest("PATCH", path, data, noResponse)
+	_, _, err := c.httpRequest("PATCH", path, data, nil, noResponse)
 	return err
 }
 
@@ -192,29 +393,52 @@ func (c *Client) patchFrameTimeQuantum(frame *Frame) error {
 	data := []byte(fmt.Sprintf(`{"index": "%s", "frame": "%s", "timeQuantum": "%s"}`,
 		frame.index.name, frame.name, frame.options.TimeQuantum))
 	path := fmt.Sprintf("/index/%s/frame/%s/time-quantum", frame.index.name, frame.name)
-	_, _, err := c.httpRequest("PATCH", path, data, noResponse)
+	_, _, err := c.httpRequest("PATCH", path, data, nil, noResponse)
 	return err
 }
 
-func (c *Client) httpRequest(method string, path string, data []byte, returnResponse returnClientInfo) (*http.Response, []byte, error) {
-	addr := c.cluster.Host()
-	if addr == nil {
-		return nil, nil, ErrorEmptyCluster
+func (c *Client) status() (*Status, error) {
+	_, data, err := c.httpRequest("GET", "/status", nil, nil, errorCheckedResponse)
+	if err != nil {
+		return nil, err
 	}
+	root := &statusRoot{}
+	err = json.Unmarshal(data, root)
+	if err != nil {
+		return nil, err
+	}
+	return root.Status, nil
+}
+
+func (c *Client) httpRequest(method string, path string, data []byte, headers map[string]string, returnResponse returnClientInfo) (*http.Response, []byte, error) {
 	if data == nil {
 		data = []byte{}
 	}
-	request, err := http.NewRequest(method, addr.Normalize()+path, bytes.NewReader(data))
-	if err != nil {
-		return nil, nil, err
+	reader := bytes.NewReader(data)
+
+	// try at most maxHosts non-failed hosts; protect against broken cluster.removeHost
+	var response *http.Response
+	var err error
+	for i := 0; i < maxHosts; i++ {
+		if c.host == nil {
+			c.host = c.cluster.Host()
+			if c.host == nil {
+				return nil, nil, ErrorEmptyCluster
+			}
+		}
+		request, err := c.makeRequest(method, path, headers, reader)
+		if err != nil {
+			return nil, nil, err
+		}
+		response, err = c.client.Do(request)
+		if err == nil {
+			break
+		}
+		c.cluster.RemoveHost(c.host)
+		c.host = c.cluster.Host()
 	}
-	// both Content-Type and Accept headers must be set for protobuf content
-	request.Header.Set("Content-Type", "application/x-protobuf")
-	request.Header.Set("Accept", "application/x-protobuf")
-	response, err := c.client.Do(request)
-	if err != nil {
-		c.cluster.RemoveHost(addr)
-		return nil, nil, err
+	if response == nil {
+		return nil, nil, ErrorTriedMaxHosts
 	}
 	defer response.Body.Close()
 	// TODO: Optimize buffer creation
@@ -237,6 +461,19 @@ func (c *Client) httpRequest(method string, path string, data []byte, returnResp
 		return nil, nil, nil
 	}
 	return response, buf, nil
+}
+
+func (c *Client) makeRequest(method string, path string, headers map[string]string, reader io.Reader) (*http.Request, error) {
+	request, err := http.NewRequest(method, c.host.Normalize()+path, reader)
+	if err != nil {
+		return nil, err
+	}
+
+	for k, v := range headers {
+		request.Header.Set(k, v)
+	}
+
+	return request, err
 }
 
 func newHTTPClient(options *ClientOptions) *http.Client {
@@ -273,6 +510,46 @@ func matchError(msg string) error {
 	return nil
 }
 
+func bitsToImportRequest(indexName string, frameName string, slice uint64, bits []Bit) *internal.ImportRequest {
+	rowIDs := make([]uint64, 0, len(bits))
+	columnIDs := make([]uint64, 0, len(bits))
+	timestamps := make([]int64, 0, len(bits))
+	for _, bit := range bits {
+		rowIDs = append(rowIDs, bit.RowID)
+		columnIDs = append(columnIDs, bit.ColumnID)
+		timestamps = append(timestamps, bit.Timestamp)
+	}
+	return &internal.ImportRequest{
+		Index:      indexName,
+		Frame:      frameName,
+		Slice:      slice,
+		RowIDs:     rowIDs,
+		ColumnIDs:  columnIDs,
+		Timestamps: timestamps,
+	}
+}
+
+// statusToNodeSlicesForIndex finds the hosts which contains slices for the given index
+func statusToNodeSlicesForIndex(status *Status, indexName string) map[uint64]*URI {
+	result := make(map[uint64]*URI)
+	for _, node := range status.Nodes {
+		for _, index := range node.Indexes {
+			if index.Name != indexName {
+				continue
+			}
+			for _, slice := range index.Slices {
+				uri, err := NewURIFromAddress(node.Host)
+				// err will always be nil, but prevent a panic in the odd chance the server returns an invalid URI
+				if err == nil {
+					result[slice] = uri
+				}
+			}
+			break
+		}
+	}
+	return result
+}
+
 // ClientOptions control the properties of client connection to the server
 type ClientOptions struct {
 	SocketTimeout    time.Duration
@@ -307,17 +584,6 @@ type QueryOptions struct {
 	Columns bool
 }
 
-// Schema contains the index and frame metadata.
-type Schema struct {
-	Indexes []*IndexInfo `json:"indexes"`
-}
-
-// IndexInfo represents schema information for an index
-type IndexInfo struct {
-	Name   string       `json:"name"`
-	Frames []*FrameInfo `json:"frames"`
-}
-
 type returnClientInfo uint
 
 const (
@@ -325,3 +591,99 @@ const (
 	rawResponse
 	errorCheckedResponse
 )
+
+type fragmentNode struct {
+	Host         string
+	InternalHost string
+}
+
+type statusRoot struct {
+	Status *Status `json:"status"`
+}
+
+// Status contains the status information from a Pilosa server.
+type Status struct {
+	Nodes []StatusNode
+}
+
+// StatusNode contains node information.
+type StatusNode struct {
+	Host    string
+	Indexes []StatusIndex
+}
+
+// StatusIndex contains index information.
+type StatusIndex struct {
+	Name   string
+	Meta   StatusMeta
+	Frames []StatusFrame
+	Slices []uint64
+}
+
+// StatusFrame contains frame information.
+type StatusFrame struct {
+	Name string
+	Meta StatusMeta
+}
+
+// StatusMeta contains options for a frame or an index.
+type StatusMeta struct {
+	ColumnLabel    string
+	RowLabel       string
+	CacheType      string
+	CacheSize      uint
+	InverseEnabled bool
+	TimeQuantum    string
+}
+
+type viewsInfo struct {
+	Views []string `json:"views"`
+}
+
+type exportReader struct {
+	sliceURIs    map[uint64]*URI
+	frame        *Frame
+	body         []byte
+	bodyIndex    int
+	currentSlice uint64
+	sliceCount   uint64
+	view         string
+}
+
+func newExportReader(sliceURIs map[uint64]*URI, frame *Frame, view string) *exportReader {
+	return &exportReader{
+		sliceURIs:  sliceURIs,
+		frame:      frame,
+		sliceCount: uint64(len(sliceURIs)),
+		view:       view,
+	}
+}
+
+// Read updates the passed array with the exported CSV data and returns the number of bytes read
+func (r *exportReader) Read(p []byte) (n int, err error) {
+	if r.currentSlice >= r.sliceCount {
+		err = io.EOF
+		return
+	}
+	if r.body == nil {
+		uri, _ := r.sliceURIs[r.currentSlice]
+		headers := map[string]string{
+			"Accept": "text/csv",
+		}
+		client := NewClientWithURI(uri)
+		path := fmt.Sprintf("/export?index=%s&frame=%s&slice=%d&view=%s",
+			r.frame.index.Name(), r.frame.Name(), r.currentSlice, r.view)
+		_, r.body, err = client.httpRequest("GET", path, nil, headers, errorCheckedResponse)
+		if err != nil {
+			return
+		}
+		r.bodyIndex = 0
+	}
+	n = copy(p, r.body[r.bodyIndex:])
+	r.bodyIndex += n
+	if n >= len(r.body) {
+		r.body = nil
+		r.currentSlice++
+	}
+	return
+}

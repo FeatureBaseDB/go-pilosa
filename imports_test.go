@@ -30,90 +30,73 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 // DAMAGE.
 
-package pilosa
+package pilosa_test
 
 import (
-	"sync"
+	"errors"
+	"reflect"
+	"strings"
+	"testing"
+
+	pilosa "github.com/pilosa/go-pilosa"
 )
 
-// Cluster contains hosts in a Pilosa cluster.
-type Cluster struct {
-	hosts  []*URI
-	okList []bool
-	mutex  *sync.RWMutex
-}
-
-// DefaultCluster returns the default Cluster.
-func DefaultCluster() *Cluster {
-	return &Cluster{
-		hosts:  make([]*URI, 0),
-		okList: make([]bool, 0),
-		mutex:  &sync.RWMutex{},
-	}
-}
-
-// NewClusterWithHost returns a cluster with the given URIs.
-func NewClusterWithHost(hosts ...*URI) *Cluster {
-	cluster := DefaultCluster()
-	for _, host := range hosts {
-		cluster.AddHost(host)
-	}
-	return cluster
-}
-
-// AddHost adds a host to the cluster.
-func (c *Cluster) AddHost(address *URI) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	c.hosts = append(c.hosts, address)
-	c.okList = append(c.okList, true)
-}
-
-// Host returns a host in the cluster.
-func (c *Cluster) Host() *URI {
-	c.mutex.RLock()
-	var host *URI
-	for i, ok := range c.okList {
-		if ok {
-			host = c.hosts[i]
+func TestCSVBitIterator(t *testing.T) {
+	iterator := pilosa.NewCSVBitIterator(strings.NewReader(`1,10,683793200
+		5,20,683793300
+		3,41,683793385
+	`))
+	bits := []pilosa.Bit{}
+	for {
+		bit, err := iterator.NextBit()
+		if err != nil {
 			break
 		}
+		bits = append(bits, bit)
 	}
-	c.mutex.RUnlock()
-	if host != nil {
-		return host
+	if len(bits) != 3 {
+		t.Fatalf("There should be 3 bits")
 	}
-	c.reset()
-	return host
+	target := []pilosa.Bit{
+		pilosa.Bit{RowID: 1, ColumnID: 10, Timestamp: 683793200},
+		pilosa.Bit{RowID: 5, ColumnID: 20, Timestamp: 683793300},
+		pilosa.Bit{RowID: 3, ColumnID: 41, Timestamp: 683793385},
+	}
+	if !reflect.DeepEqual(target, bits) {
+		t.Fatalf("%v != %v", target, bits)
+	}
 }
 
-// RemoveHost black lists the host with the given URI from the cluster.
-func (c *Cluster) RemoveHost(address *URI) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	for i, uri := range c.hosts {
-		if uri.Equals(address) {
-			c.okList[i] = false
-			break
+func TestCSVBitIteratorInvalidInput(t *testing.T) {
+	invalidInputs := []string{
+		// less than 2 columns
+		"155",
+		// invalid row ID
+		"a5,155",
+		// invalid column ID
+		"155,a5",
+		// invalid timestamp
+		"155,255,a5",
+	}
+	for _, text := range invalidInputs {
+		iterator := pilosa.NewCSVBitIterator(strings.NewReader(text))
+		_, err := iterator.NextBit()
+		if err == nil {
+			t.Fatalf("CSVBitIterator input: %s should fail", text)
 		}
 	}
 }
 
-// Hosts returns all available hosts in the cluster.
-func (c *Cluster) Hosts() []URI {
-	hosts := make([]URI, 0, len(c.hosts))
-	for i, host := range c.hosts {
-		if c.okList[i] {
-			hosts = append(hosts, *host)
-		}
+func TestCSVBitIteratorError(t *testing.T) {
+	iterator := pilosa.NewCSVBitIterator(&BrokenReader{})
+	_, err := iterator.NextBit()
+	if err == nil {
+		t.Fatal("CSVBitIterator should fail with error")
 	}
-	return hosts
 }
 
-func (c *Cluster) reset() {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	for i := range c.okList {
-		c.okList[i] = true
-	}
+type BrokenReader struct{}
+
+func (r BrokenReader) Read(p []byte) (n int, err error) {
+	return 0, errors.New("broken reader")
 }

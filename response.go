@@ -40,10 +40,10 @@ import (
 
 // QueryResponse represents the response from a Pilosa query.
 type QueryResponse struct {
-	results      []*QueryResult
-	columns      []*ColumnItem
-	ErrorMessage string
-	Success      bool
+	ResultList   []*QueryResult `json:"results,omitempty"`
+	ColumnList   []*ColumnItem  `json:"columns,omitempty"`
+	ErrorMessage string         `json:"error-message,omitempty"`
+	Success      bool           `json:"success,omitempty"`
 }
 
 func newQueryResponseFromInternal(response *internal.QueryResponse) (*QueryResponse, error) {
@@ -71,43 +71,43 @@ func newQueryResponseFromInternal(response *internal.QueryResponse) (*QueryRespo
 	}
 
 	return &QueryResponse{
-		results: results,
-		columns: columns,
-		Success: true,
+		ResultList: results,
+		ColumnList: columns,
+		Success:    true,
 	}, nil
 }
 
 // Results returns all results in the response.
 func (qr *QueryResponse) Results() []*QueryResult {
-	return qr.results
+	return qr.ResultList
 }
 
 // Result returns the first result or nil.
 func (qr *QueryResponse) Result() *QueryResult {
-	if len(qr.results) == 0 {
+	if len(qr.ResultList) == 0 {
 		return nil
 	}
-	return qr.results[0]
+	return qr.ResultList[0]
 }
 
 // Columns returns all columns in the response.
 func (qr *QueryResponse) Columns() []*ColumnItem {
-	return qr.columns
+	return qr.ColumnList
 }
 
 // Column returns the first column or nil.
 func (qr *QueryResponse) Column() *ColumnItem {
-	if len(qr.columns) == 0 {
+	if len(qr.ColumnList) == 0 {
 		return nil
 	}
-	return qr.columns[0]
+	return qr.ColumnList[0]
 }
 
 // QueryResult represent one of the results in the response.
 type QueryResult struct {
-	Bitmap     *BitmapResult
-	CountItems []*CountResultItem
-	Count      uint64
+	Bitmap     *BitmapResult      `json:"bitmap,omitempty"`
+	CountItems []*CountResultItem `json:"count-items,omitempty"`
+	Count      uint64             `json:"count,omitempty"`
 }
 
 func newQueryResultFromInternal(result *internal.QueryResult) (*QueryResult, error) {
@@ -188,8 +188,8 @@ func convertInternalAttrsToMap(attrs []*internal.Attr) (attrsMap map[string]inte
 // ColumnItem represents data about a column.
 // Column data is only returned if QueryOptions.Columns was set to true.
 type ColumnItem struct {
-	ID         uint64
-	Attributes map[string]interface{}
+	ID         uint64                 `json:"id,omitempty"`
+	Attributes map[string]interface{} `json:"attributes,omitempty"`
 }
 
 func newColumnItemFromInternal(column *internal.ColumnAttrSet) (*ColumnItem, error) {

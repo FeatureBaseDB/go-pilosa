@@ -6,7 +6,7 @@ all: test
 cover:
 	go test -cover -tags=integration
 
-generate-proto:
+generate:
 	protoc --go_out=. internal/public.proto
 
 test:

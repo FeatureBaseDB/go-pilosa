@@ -33,33 +33,152 @@
 package pilosa
 
 import (
+	"reflect"
 	"testing"
 	"time"
 )
 
-var sampleIndex = mustNewIndex("sample-index", "")
+var schema = NewSchema()
+var sampleIndex = mustNewIndex(schema, "sample-index", "")
 var sampleFrame = mustNewFrame(sampleIndex, "sample-frame", "")
-var projectIndex = mustNewIndex("project-index", "user")
+var projectIndex = mustNewIndex(schema, "project-index", "user")
 var collabFrame = mustNewFrame(projectIndex, "collaboration", "project")
 var b1 = sampleFrame.Bitmap(10)
 var b2 = sampleFrame.Bitmap(20)
 var b3 = sampleFrame.Bitmap(42)
 var b4 = collabFrame.Bitmap(2)
 
+func TestSchemaDiff(t *testing.T) {
+	schema1 := NewSchema()
+	index11, _ := schema1.Index("diff-index1", nil)
+	index11.Frame("frame1-1", nil)
+	index11.Frame("frame1-2", nil)
+	index12, _ := schema1.Index("diff-index2", nil)
+	index12.Frame("frame2-1", nil)
+
+	schema2 := NewSchema()
+	index21, _ := schema2.Index("diff-index1", nil)
+	index21.Frame("another-frame", nil)
+
+	targetDiff12 := NewSchema()
+	targetIndex1, _ := targetDiff12.Index("diff-index1", nil)
+	targetIndex1.Frame("frame1-1", nil)
+	targetIndex1.Frame("frame1-2", nil)
+	targetIndex2, _ := targetDiff12.Index("diff-index2", nil)
+	targetIndex2.Frame("frame2-1", nil)
+
+	diff12 := schema1.diff(schema2)
+	if !reflect.DeepEqual(targetDiff12, diff12) {
+		t.Fatalf("The diff must be correctly calculated")
+	}
+}
+
+func TestSchemaIndexes(t *testing.T) {
+	schema1 := NewSchema()
+	index11, _ := schema1.Index("diff-index1", nil)
+	index12, _ := schema1.Index("diff-index2", nil)
+	indexes := schema1.Indexes()
+	target := map[string]*Index{
+		"diff-index1": index11,
+		"diff-index2": index12,
+	}
+	if !reflect.DeepEqual(target, indexes) {
+		t.Fatalf("calling schema.Indexes should return indexes")
+	}
+}
+
 func TestNewIndex(t *testing.T) {
-	index, err := NewIndex("index-name", nil)
+	index1, err := schema.Index("index-name", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if index.Name() != "index-name" {
+	if index1.Name() != "index-name" {
 		t.Fatalf("index name was not set")
+	}
+	// calling schema.Index again should return the same index
+	index2, err := schema.Index("index-name", nil)
+	if index1 != index2 {
+		t.Fatalf("calling schema.Index again should return the same index")
 	}
 }
 
 func TestNewIndexWithInvalidName(t *testing.T) {
-	_, err := NewIndex("$FOO", nil)
+	_, err := schema.Index("$FOO", nil)
 	if err == nil {
-		t.Fatal()
+		t.Fatal(err)
+	}
+}
+
+func TestIndexCopy(t *testing.T) {
+	indexOptions := &IndexOptions{
+		ColumnLabel: "columnlabel",
+		TimeQuantum: TimeQuantumMonthDay,
+	}
+	index, err := schema.Index("my-index-4copy", indexOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	options := &FrameOptions{
+		RowLabel: "rowlabel",
+	}
+	_, err = index.Frame("my-frame-4copy", options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	copiedIndex := index.copy()
+	if !reflect.DeepEqual(index, copiedIndex) {
+		t.Fatalf("copied index should be equivalent")
+	}
+}
+
+func TestIndexFrames(t *testing.T) {
+	schema1 := NewSchema()
+	index11, _ := schema1.Index("diff-index1", nil)
+	frame11, _ := index11.Frame("frame1-1", nil)
+	frame12, _ := index11.Frame("frame1-2", nil)
+	frames := index11.Frames()
+	target := map[string]*Frame{
+		"frame1-1": frame11,
+		"frame1-2": frame12,
+	}
+	if !reflect.DeepEqual(target, frames) {
+		t.Fatalf("calling index.Frames should return frames")
+	}
+
+}
+
+func TestFrame(t *testing.T) {
+	frame1, err := sampleIndex.Frame("nonexistent-frame", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	frame2, err := sampleIndex.Frame("nonexistent-frame", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if frame1 != frame2 {
+		t.Fatalf("calling index.Frame again should return the same frame")
+	}
+	if frame1.Name() != "nonexistent-frame" {
+		t.Fatalf("calling frame.Name should return frame's name")
+	}
+}
+
+func TestFrameCopy(t *testing.T) {
+	options := &FrameOptions{
+		RowLabel:       "rowlabel",
+		TimeQuantum:    TimeQuantumMonthDayHour,
+		CacheType:      CacheTypeRanked,
+		CacheSize:      123456,
+		InverseEnabled: true,
+	}
+	frame, err := sampleIndex.Frame("my-frame-4copy", options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	copiedFrame := frame.copy()
+	if !reflect.DeepEqual(frame, copiedFrame) {
+		t.Fatalf("copied frame should be equivalent")
 	}
 }
 
@@ -368,18 +487,14 @@ func comparePQL(t *testing.T, target string, q PQLQuery) {
 	}
 }
 
-func mustNewIndex(name string, columnLabel string) (index *Index) {
-	var err error
+func mustNewIndex(schema *Schema, name string, columnLabel string) (index *Index) {
 	var options *IndexOptions
 	if columnLabel != "" {
 		options = &IndexOptions{ColumnLabel: columnLabel}
-		if err != nil {
-			panic(err)
-		}
-		index, err = NewIndex(name, options)
 	} else {
-		index, err = NewIndex(name, nil)
+		options = &IndexOptions{}
 	}
+	index, err := schema.Index(name, options)
 	if err != nil {
 		panic(err)
 	}

@@ -36,12 +36,14 @@ package pilosa
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -202,6 +204,39 @@ func TestOrmCount(t *testing.T) {
 	}
 	if response.Result().Count != 2 {
 		t.Fatalf("Count should be 2")
+	}
+}
+
+func TestIntersectReturns(t *testing.T) {
+	client := getClient()
+	options := &FrameOptions{
+		RowLabel: "segment_id",
+	}
+	frame, err := index.Frame("segments", options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	qry1 := index.BatchQuery(
+		frame.SetBit(2, 10),
+		frame.SetBit(2, 15),
+		frame.SetBit(3, 10),
+		frame.SetBit(3, 20),
+	)
+	client.Query(qry1, nil)
+	qry2 := index.Intersect(frame.Bitmap(2), frame.Bitmap(3))
+	response, err := client.Query(qry2, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Results()) != 1 {
+		t.Fatal("There must be 1 result")
+	}
+	if !reflect.DeepEqual(response.Result().Bitmap.Bits, []uint64{10}) {
+		t.Fatal("Returned bits must be: [10]")
 	}
 }
 
@@ -405,7 +440,7 @@ func TestQueryFails(t *testing.T) {
 
 func TestInvalidHttpRequest(t *testing.T) {
 	client := getClient()
-	_, _, err := client.httpRequest("INVALID METHOD", "/foo", nil, 0)
+	_, _, err := client.httpRequest("INVALID METHOD", "/foo", nil, nil, 0)
 	if err == nil {
 		t.Fatal()
 	}
@@ -459,19 +494,52 @@ func TestSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// go-testindex should be in the schema
-	for _, index := range schema.Indexes {
-		if index.Name == "go-testindex" {
-			// test-frame should be in the schema
-			for _, frame := range index.Frames {
-				if frame.Name == "test-frame" {
-					// OK!
-					return
-				}
-			}
-		}
+	if len(schema.indexes) < 1 {
+		t.Fatalf("There should be at least 1 index in the schema")
 	}
-	t.Fatal("go-testindex or test-frame was not found")
+}
+
+func TestSync(t *testing.T) {
+	client := getClient()
+	remoteIndex, _ := NewIndex("remote-index-1", nil)
+	err := client.EnsureIndex(remoteIndex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remoteFrame, _ := remoteIndex.Frame("remote-frame-1", nil)
+	err = client.EnsureFrame(remoteFrame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema1 := NewSchema()
+	index11, _ := schema1.Index("diff-index1", nil)
+	index11.Frame("frame1-1", nil)
+	index11.Frame("frame1-2", nil)
+	index12, _ := schema1.Index("diff-index2", nil)
+	index12.Frame("frame2-1", nil)
+	schema1.Index(remoteIndex.Name(), nil)
+
+	err = client.SyncSchema(schema1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.DeleteIndex(remoteIndex)
+	client.DeleteIndex(index11)
+	client.DeleteIndex(index12)
+}
+
+func TestSyncFailure(t *testing.T) {
+	server := getMockServer(404, []byte("sorry, not found"), -1)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		panic(err)
+	}
+	client := NewClientWithURI(uri)
+	err = client.SyncSchema(NewSchema())
+	if err == nil {
+		t.Fatal("should have failed")
+	}
 }
 
 func TestErrorRetrievingSchema(t *testing.T) {
@@ -488,8 +556,9 @@ func TestErrorRetrievingSchema(t *testing.T) {
 	}
 }
 
-func TestInvalidSchema(t *testing.T) {
-	server := getMockServer(200, []byte("unserialize this"), -1)
+func TestInvalidSchemaNoNodes(t *testing.T) {
+	data := []byte(`{"status": {"Nodes": []}}`)
+	server := getMockServer(200, data, len(data))
 	defer server.Close()
 	uri, err := NewURIFromAddress(server.URL)
 	if err != nil {
@@ -499,6 +568,326 @@ func TestInvalidSchema(t *testing.T) {
 	_, err = client.Schema()
 	if err == nil {
 		t.Fatal("should have failed")
+	}
+}
+
+func TestInvalidSchemaInvalidIndex(t *testing.T) {
+	data := []byte(`
+		{
+			"status": {
+				"Nodes": [{
+					"Indexes": [{
+						"Name": "**INVALID**"
+					}]
+				}]
+			}
+		}
+	`)
+	server := getMockServer(200, data, len(data))
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		panic(err)
+	}
+	client := NewClientWithURI(uri)
+	_, err = client.Schema()
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func TestInvalidSchemaInvalidFrame(t *testing.T) {
+	data := []byte(`
+		{
+			"status": {
+				"Nodes": [{
+					"Indexes": [{
+						"Name": "myindex",
+						"Frames": [{
+							"Name": "**INVALID**"
+						}]
+					}]
+				}]
+			}
+		}
+	`)
+	server := getMockServer(200, data, len(data))
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		panic(err)
+	}
+	client := NewClientWithURI(uri)
+	_, err = client.Schema()
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func TestCSVImport(t *testing.T) {
+	client := getClient()
+	text := `10,7
+		10,5
+		2,3
+		7,1`
+	iterator := NewCSVBitIterator(strings.NewReader(text))
+	frame, err := index.Frame("importframe", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.ImportFrame(frame, iterator, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	target := []uint64{3, 1, 5}
+	bq := index.BatchQuery(
+		frame.Bitmap(2),
+		frame.Bitmap(7),
+		frame.Bitmap(10),
+	)
+	response, err := client.Query(bq, nil)
+	if len(response.Results()) != 3 {
+		t.Fatalf("Result count should be 3")
+	}
+	for i, result := range response.Results() {
+		br := result.Bitmap
+		if target[i] != br.Bits[0] {
+			t.Fatalf("%d != %d", target[i], br.Bits[0])
+		}
+	}
+}
+
+func TestCSVExport(t *testing.T) {
+	client := getClient()
+	frame, err := index.Frame("exportframe", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.EnsureFrame(frame)
+	_, err = client.Query(index.BatchQuery(
+		frame.SetBit(1, 1),
+		frame.SetBit(1, 10),
+		frame.SetBit(2, 1048577),
+	), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetBits := []Bit{
+		Bit{RowID: 1, ColumnID: 1},
+		Bit{RowID: 1, ColumnID: 10},
+		Bit{RowID: 2, ColumnID: 1048577},
+	}
+	bits := []Bit{}
+	iterator, err := client.ExportFrame(frame, "standard")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		bit, err := iterator.NextBit()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		bits = append(bits, bit)
+	}
+	if !reflect.DeepEqual(targetBits, bits) {
+		t.Fatalf("ExportFrame should export the frame")
+	}
+}
+
+func TestCSVExportFailure(t *testing.T) {
+	server := getMockServer(404, []byte("sorry, not found"), -1)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		panic(err)
+	}
+	client := NewClientWithURI(uri)
+	frame, err := index.Frame("exportframe", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.ExportFrame(frame, "standard")
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func TestExportReaderFailure(t *testing.T) {
+	server := getMockServer(404, []byte("sorry, not found"), -1)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		panic(err)
+	}
+	frame, err := index.Frame("exportframe", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sliceURIs := map[uint64]*URI{
+		0: uri,
+	}
+	reader := newExportReader(sliceURIs, frame, "standard")
+	buf := make([]byte, 1000)
+	_, err = reader.Read(buf)
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func TestFetchFragmentNodes(t *testing.T) {
+	client := getClient()
+	nodes, err := client.fetchFragmentNodes(index.Name(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes) != 1 {
+		t.Fatalf("1 node should be returned")
+	}
+}
+
+func TestFetchStatus(t *testing.T) {
+	client := getClient()
+	status, err := client.status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(status.Nodes) == 0 {
+		t.Fatalf("There should be at least 1 host in the status")
+	}
+	if len(status.Nodes[0].Indexes) == 0 {
+		t.Fatalf("There should be at least 1 index in the node")
+	}
+	if len(status.Nodes[0].Indexes[0].Frames) == 0 {
+		t.Fatalf("There should be at least 1 frame in the index")
+	}
+	if len(status.Nodes[0].Indexes[0].Slices) == 0 {
+		t.Fatalf("There should be at least 1 slice in the index")
+	}
+}
+
+func TestFetchViews(t *testing.T) {
+	client := getClient()
+	options := &FrameOptions{
+		TimeQuantum: "YMD",
+	}
+	frame, err := index.Frame("viewsframe", options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.EnsureFrame(frame)
+	client.Query(frame.SetBitTimestamp(10, 100, time.Now()), nil)
+	views, err := client.Views(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(views) != 4 {
+		t.Fatalf("4 views should have been returned")
+	}
+}
+
+func TestImportBitIteratorError(t *testing.T) {
+	client := getClient()
+	frame, err := index.Frame("not-important", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	iterator := NewCSVBitIterator(&BrokenReader{})
+	err = client.ImportFrame(frame, iterator, 100)
+	if err == nil {
+		t.Fatalf("import frame should fail with broken reader")
+	}
+}
+
+func TestImportFailsOnImportBitsError(t *testing.T) {
+	server := getMockServer(500, []byte{}, 0)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	err = client.importBits("foo", "bar", 0, []Bit{})
+	if err == nil {
+		t.Fatalf("importBits should fail when fetch fragment nodes fails")
+	}
+}
+
+func TestImportFrameFailsIfImportBitsFails(t *testing.T) {
+	data := []byte(`[{"host":"non-existing-domain:9999","internalHost":"10101"}]`)
+	server := getMockServer(200, data, len(data))
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	iterator := NewCSVBitIterator(strings.NewReader("10,7"))
+	frame, err := index.Frame("importframe", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.ImportFrame(frame, iterator, 10)
+	if err == nil {
+		t.Fatalf("ImportFrame should fail if importBits fails")
+	}
+}
+
+func TestImportBitsFailInvalidNodeAddress(t *testing.T) {
+	data := []byte(`[{"host":"10101:","internalHost":"doesn'tmatter"}]`)
+	server := getMockServer(200, data, len(data))
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	err = client.importBits("foo", "bar", 0, []Bit{})
+	if err == nil {
+		t.Fatalf("importBits should fail on invalid node host")
+	}
+}
+
+func TestDecodingFragmentNodesFails(t *testing.T) {
+	server := getMockServer(200, []byte("notjson"), 7)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	_, err = client.fetchFragmentNodes("foo", 0)
+	if err == nil {
+		t.Fatalf("fetchFragmentNodes should fail when response from /fragment/nodes cannot be decoded")
+	}
+}
+
+func TestImportNodeFails(t *testing.T) {
+	server := getMockServer(500, []byte{}, 0)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	importRequest := &internal.ImportRequest{
+		ColumnIDs:  []uint64{},
+		RowIDs:     []uint64{},
+		Timestamps: []int64{},
+		Index:      "foo",
+		Frame:      "bar",
+		Slice:      0,
+	}
+	err = client.importNode(importRequest)
+	if err == nil {
+		t.Fatalf("importNode should fail when posting to /import fails")
 	}
 }
 
@@ -535,6 +924,100 @@ func TestResponseWithInvalidType(t *testing.T) {
 	}
 }
 
+func TestStatusFails(t *testing.T) {
+	server := getMockServer(404, nil, 0)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	_, err = client.status()
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
+func TestStatusUnmarshalFails(t *testing.T) {
+	server := getMockServer(200, []byte("foo"), 3)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	_, err = client.status()
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
+func TestFetchViewsFails(t *testing.T) {
+	server := getMockServer(404, nil, 0)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	frame, _ := index.Frame("viewfail", nil)
+	_, err = client.Views(frame)
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
+func TestFetchViewsUnmarshalFails(t *testing.T) {
+	server := getMockServer(200, []byte("foo"), 3)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	frame, _ := index.Frame("viewfail", nil)
+	_, err = client.Views(frame)
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
+func TestStatusToNodeSlicesForIndex(t *testing.T) {
+	// even though this function isn't really an integration test,
+	// it needs to access statusToNodeSlicesForIndex which is not
+	// available to client_test.go
+
+	status := &Status{
+		Nodes: []StatusNode{
+			StatusNode{
+				Host: ":10101",
+				Indexes: []StatusIndex{
+					StatusIndex{
+						Name:   "index1",
+						Slices: []uint64{0},
+					},
+					StatusIndex{
+						Name:   "index2",
+						Slices: []uint64{0},
+					},
+				},
+			},
+		},
+	}
+	sliceMap := statusToNodeSlicesForIndex(status, "index2")
+	if len(sliceMap) != 1 {
+		t.Fatalf("slice map should have a single item")
+	}
+	if uri, ok := sliceMap[0]; ok {
+		target, _ := NewURIFromAddress(":10101")
+		if !uri.Equals(target) {
+			t.Fatalf("slice map should have the correct URI")
+		}
+	} else {
+		t.Fatalf("slice map should have the correct slice")
+	}
+}
+
 func getClient() *Client {
 	uri, err := NewURIFromAddress(":10101")
 	if err != nil {
@@ -555,4 +1038,10 @@ func getMockServer(statusCode int, response []byte, contentLength int) *httptest
 		}
 	})
 	return httptest.NewServer(handler)
+}
+
+type BrokenReader struct{}
+
+func (r BrokenReader) Read(p []byte) (n int, err error) {
+	return 0, errors.New("broken reader")
 }

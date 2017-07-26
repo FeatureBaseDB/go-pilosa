@@ -18,6 +18,7 @@ Go client for Pilosa high performance distributed bitmap index.
     * `NewClientFromAddresses` convenience function added. Create a client for a
       cluster directly from a slice of strings.
     * Failover for connection errors.
+    * *make* commands are supported on Windows.
     * **Deprecation** `NewIndex`. Use `schema.Index` instead.
     * **Deprecation** `CreateIndex`, `CreateFrame`, `EnsureIndex`, `EnsureFrame`. Use schemas and `client.SyncSchema` instead.
 
@@ -364,8 +365,6 @@ Please check our [Contributor's Guidelines](https://github.com/pilosa/pilosa/CON
 2. Fork this repo and add it as upstream: `git remote add upstream git@github.com:pilosa/go-pilosa.git`.
 3. Make sure all tests pass (use `make test-all`) and be sure that the tests cover all statements in your code (we aim for 100% test coverage).
 4. Commit your code to a feature branch and send a pull request to the `master` branch of our repo.
-
-The sections below assume your platform has `make`. Otherwise you can view the corresponding steps of the `Makefile`.
 
 ### Running tests
 

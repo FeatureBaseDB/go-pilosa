@@ -360,9 +360,9 @@ count := response.Count
 
 ### Importing Data
 
-If you have large amounts of data, it is more efficient to import it to Pilosa instead of several `SetBit` queries. This library supports importing bits of a frame. The target frame must have been created before hand.
+If you have large amounts of data, it is more efficient to import it into Pilosa instead of using multiple SetBit queries. This library supports importing bits into an existing frame.
 
-Before starting the import, create an instance of a struct which implements `BitIterator` and pass it to `client.ImportFrame` function. This library ships with `CSVBitIterator` struct which supports importing bits in the CSV (comma separated values) format:
+Before starting the import, create an instance of a struct which implements `BitIterator` and pass it to the `client.ImportFrame` function. This library ships with the `CSVBitIterator` struct which supports importing bits in the CSV (comma separated values) format:
 ```
 ROW_ID,COLUMN_ID
 ```
@@ -372,7 +372,7 @@ Optionally, a timestamp with GMT time zone can be added:
 ROW_ID,COLUMN_ID,TIMESTAMP
 ```
 
-Note that, each line corresponds to a single bit and the lines end with a new line (`\n` or `\r\n`).
+Note that each line corresponds to a single bit and ends with a new line (`\n` or `\r\n`).
 
 Here's some sample code:
 ```go
@@ -419,9 +419,9 @@ func (it *StatiBitIterator) NextBit(Bit, error) {
 
 ### Exporting Data
 
-You can export a view of a frame from Pilosa using `client.ExportFrame` function which returns a `BitIterator`. use `NextBit` function of this iterator to receive all bits for the specified frame. When there are no more bits, `io.EOF` is returned.
+You can export a view of a frame from Pilosa using `client.ExportFrame` function which returns a `BitIterator`. Use the `NextBit` function of this iterator to receive all bits for the specified frame. When there are no more bits, `io.EOF` is returned.
 
-The `PilosaClient` struct has the `Views` functions which returns views of frame. You can use that function to retrieve view names:
+The `PilosaClient` struct has the `Views` function which returns all of the views for a particular frame. You can use this function to retrieve view names:
 ```go
 views, err := client.Views(frame)
 ```

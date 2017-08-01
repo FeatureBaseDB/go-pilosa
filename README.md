@@ -367,7 +367,7 @@ Before starting the import, create an instance of a struct which implements `Bit
 ROW_ID,COLUMN_ID
 ```
 
-Optionally, a timestamp with GMT time zone can be added:
+Optionally, a timestamp can be added. Note that Pilosa is not time zone aware:
 ```
 ROW_ID,COLUMN_ID,TIMESTAMP
 ```

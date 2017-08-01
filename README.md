@@ -357,6 +357,96 @@ countItems := response.CountItems
 count := response.Count
 ```
 
+## Importing and Exporting Data
+
+### Importing Data
+
+If you have large amounts of data, it is more efficient to import it into Pilosa instead of using multiple SetBit queries. This library supports importing bits into an existing frame.
+
+Before starting the import, create an instance of a struct which implements `BitIterator` and pass it to the `client.ImportFrame` function. This library ships with the `CSVBitIterator` struct which supports importing bits in the CSV (comma separated values) format:
+```
+ROW_ID,COLUMN_ID
+```
+
+Optionally, a timestamp can be added. Note that Pilosa is not time zone aware:
+```
+ROW_ID,COLUMN_ID,TIMESTAMP
+```
+
+Note that each line corresponds to a single bit and ends with a new line (`\n` or `\r\n`).
+
+Here's some sample code:
+```go
+text := `10,7
+    10,5
+    2,3
+    7,1`
+iterator := NewCSVBitIterator(strings.NewReader(text))
+```
+
+After creating the iterator you can pass it to `client.ImportFrame` together with the frame and batch size. The following sample sends batches with size 10000 bits:
+```go
+err = client.ImportFrame(frame, iterator, 10000)
+if err != nil {
+    panic(err)
+}
+```
+
+You can define a custom `BitIterator` by including a function with the signature `NextBit() (Bit, error)` in your struct.
+```go
+type StaticBitIterator struct {
+    NextBit() (Bit, error)
+    bits []Bit
+    index int
+}
+
+func NewStaticBitIterator() *StaticBitIterator {
+    return &StaticBitIterator{
+        bits: []Bit{
+            Bit{RowID: 1, ColumnID: 1, Timestamp: 683793200},
+            Bit{RowID: 5, ColumnID: 20, Timestamp: 683793300},
+            Bit{RowID: 3, ColumnID: 41, Timestamp: 683793385},
+        }
+    }
+}
+
+func (it *StatiBitIterator) NextBit(Bit, error) {
+    if it.index < len(it.bits) {
+        return Bit{}, io.EOF
+    }
+    return it.bits[it.index++], nil
+}
+```
+
+### Exporting Data
+
+You can export a view of a frame from Pilosa using `client.ExportFrame` function which returns a `BitIterator`. Use the `NextBit` function of this iterator to receive all bits for the specified frame. When there are no more bits, `io.EOF` is returned.
+
+The `PilosaClient` struct has the `Views` function which returns all of the views for a particular frame. You can use this function to retrieve view names:
+```go
+views, err := client.Views(frame)
+```
+
+Here's sample code which retrieves bits of the `standard` view:
+
+```go
+bits := []Bit{}
+iterator, err := client.ExportFrame(frame, "standard")
+if err != nil {
+    t.Fatal(err)
+}
+for {
+    bit, err := iterator.NextBit()
+    if err == io.EOF {
+        break
+    }
+    if err != nil {
+        t.Fatal(err)
+    }
+    bits = append(bits, bit)
+}
+```
+
 ## Contribution
 
 Please check our [Contributor's Guidelines](https://github.com/pilosa/pilosa/CONTRIBUTING.md).

@@ -1,6 +1,6 @@
 # Go Client for Pilosa
 
-<a href="https://github.com/pilosa"><img src="https://img.shields.io/badge/pilosa-v0.4.0-blue.svg"></a>
+<a href="https://github.com/pilosa"><img src="https://img.shields.io/badge/pilosa-v0.5.0-blue.svg"></a>
 <a href="https://godoc.org/github.com/pilosa/go-pilosa"><img src="https://godoc.org/github.com/pilosa/go-pilosa?status.svg" alt="GoDoc"></a>
 <a href="https://travis-ci.com/pilosa/go-pilosa"><img src="https://api.travis-ci.com/pilosa/go-pilosa.svg?token=vqssvEWV3KAhu8oVFx9s&branch=master"></a>
 <a href="https://goreportcard.com/report/github.com/pilosa/go-pilosa"><img src="https://goreportcard.com/badge/github.com/pilosa/go-pilosa?updated=1"></a>
@@ -12,7 +12,7 @@ Go client for Pilosa high performance distributed bitmap index.
 
 ## Change Log
 
-* **v0.5.0**:
+* **v0.5.0** (2017-08-03):
     * Supports imports and exports.
     * Introduced schemas. No need to re-define already existing indexes and frames.
     * `NewClientFromAddresses` convenience function added. Create a client for a

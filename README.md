@@ -199,7 +199,7 @@ Frame:
 * `InverseFilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, values ...interface{}) *PQLBitmapQuery`
 * `Range(rowID uint64, start time.Time, end time.Time) *PQLBitmapQuery`
 * `InverseRange(columnID uint64, start time.Time, end time.Time) *PQLBitmapQuery`
-* `SetBitmapAttrs(rowID uint64, attrs map[string]interface{}) *PQLBaseQuery`
+* `SetRowAttrs(rowID uint64, attrs map[string]interface{}) *PQLBaseQuery`
 
 ### Pilosa URI
 
@@ -348,13 +348,13 @@ for column = range response.Columns() {
 * `Count` field to retrieve the number of rows per the given row ID returned from `Count` queries.
 
 ```go
-bitmap := response.Bitmap
+bitmap := result.Bitmap
 bits := bitmap.Bits
 attributes := bitmap.Attributes
 
-countItems := response.CountItems
+countItems := result.CountItems
 
-count := response.Count
+count := result.Count
 ```
 
 ## Importing and Exporting Data

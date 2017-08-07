@@ -303,11 +303,14 @@ func TestTopN(t *testing.T) {
 		"TopN(Bitmap(project=3, frame='collaboration'), frame='sample-frame', n=10, inverse=true)",
 		sampleFrame.InverseBitmapTopN(10, collabFrame.Bitmap(3)))
 	comparePQL(t,
-		"TopN(Bitmap(project=7, frame='collaboration'), frame='sample-frame', n=12, inverse=false, field='category', [80,81])",
+		"TopN(Bitmap(project=7, frame='collaboration'), frame='sample-frame', n=12, inverse=false, field='category', filters=[80,81])",
 		sampleFrame.FilterFieldTopN(12, collabFrame.Bitmap(7), "category", 80, 81))
 	comparePQL(t,
-		"TopN(Bitmap(project=7, frame='collaboration'), frame='sample-frame', n=12, inverse=true, field='category', [80,81])",
+		"TopN(Bitmap(project=7, frame='collaboration'), frame='sample-frame', n=12, inverse=true, field='category', filters=[80,81])",
 		sampleFrame.InverseFilterFieldTopN(12, collabFrame.Bitmap(7), "category", 80, 81))
+	comparePQL(t,
+		"TopN(frame='sample-frame', n=12, inverse=true, field='category', filters=[80,81])",
+		sampleFrame.InverseFilterFieldTopN(12, nil, "category", 80, 81))
 }
 
 func TestFilterFieldTopNInvalidField(t *testing.T) {

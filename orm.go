@@ -542,7 +542,11 @@ func (f *Frame) filterFieldTopN(n uint64, bitmap *PQLBitmapQuery, inverse bool, 
 	if !inverse {
 		inverseStr = "false"
 	}
-	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d, inverse=%s, field='%s', %s)",
+	if bitmap == nil {
+		return NewPQLBitmapQuery(fmt.Sprintf("TopN(frame='%s', n=%d, inverse=%s, field='%s', filters=%s)",
+			f.name, n, inverseStr, field, string(b)), f.index, nil)
+	}
+	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d, inverse=%s, field='%s', filters=%s)",
 		bitmap.serialize(), f.name, n, inverseStr, field, string(b)), f.index, nil)
 }
 

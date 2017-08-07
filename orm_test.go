@@ -310,7 +310,7 @@ func TestTopN(t *testing.T) {
 		sampleFrame.InverseFilterFieldTopN(12, collabFrame.Bitmap(7), "category", 80, 81))
 	comparePQL(t,
 		"TopN(frame='sample-frame', n=12, inverse=true, field='category', filters=[80,81])",
-		sampleFrame.InverseFilterFieldTopN(12, nil, "category", 80, 81))	
+		sampleFrame.InverseFilterFieldTopN(12, nil, "category", 80, 81))
 }
 
 func TestFilterFieldTopNInvalidField(t *testing.T) {

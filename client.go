@@ -61,6 +61,8 @@ type Client struct {
 	cluster *Cluster
 	host    *URI
 	client  *http.Client
+	slice_clients map[string]*Client
+
 }
 
 // DefaultClient creates a client with the default address and options.
@@ -99,6 +101,7 @@ func NewClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 	return &Client{
 		cluster: cluster,
 		client:  newHTTPClient(options.withDefaults()),
+		slice_clients: make(map[string]*Client),
 	}
 }
 
@@ -311,6 +314,23 @@ func (c *Client) ImportFrame(frame *Frame, bitIterator BitIterator, batchSize ui
 	return nil
 }
 
+func (c *Client) getDirectClient(indexName string, slice uint64, host string) (*Client, error) {
+	key := fmt.Sprintf("%s:%d:%s", indexName, slice, host)
+	cacheClient, ok := c.slice_clients[key]
+	if ok {
+		return cacheClient, nil
+	}
+	uri, err := NewURIFromAddress(host)
+	if err != nil {
+		return nil, err
+	}
+	newClient := NewClientWithURI(uri)
+
+	c.slice_clients[key] = newClient
+	return newClient, nil
+}
+
+
 func (c *Client) importBits(indexName string, frameName string, slice uint64, bits []Bit) error {
 	sort.Sort(bitsForSort(bits))
 	nodes, err := c.fetchFragmentNodes(indexName, slice)
@@ -318,11 +338,11 @@ func (c *Client) importBits(indexName string, frameName string, slice uint64, bi
 		return err
 	}
 	for _, node := range nodes {
-		uri, err := NewURIFromAddress(node.Host)
+		client, err := c.getDirectClient(indexName, slice, node.Host)
 		if err != nil {
 			return err
 		}
-		client := NewClientWithURI(uri)
+
 		err = client.importNode(bitsToImportRequest(indexName, frameName, slice, bits))
 		if err != nil {
 			return err

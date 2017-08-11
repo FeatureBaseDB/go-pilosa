@@ -314,8 +314,8 @@ func (c *Client) ImportFrame(frame *Frame, bitIterator BitIterator, batchSize ui
 	return nil
 }
 
-func (c *Client) getDirectClient(indexName string, slice uint64, host string) (*Client, error) {
-	key := fmt.Sprintf("%s:%d:%s", indexName, slice, host)
+func (c *Client) getDirectClient(indexName string, host string) (*Client, error) {
+	key := fmt.Sprintf("%s:%s", indexName, host)
 	cacheClient, ok := c.slice_clients[key]
 	if ok {
 		return cacheClient, nil
@@ -338,7 +338,7 @@ func (c *Client) importBits(indexName string, frameName string, slice uint64, bi
 		return err
 	}
 	for _, node := range nodes {
-		client, err := c.getDirectClient(indexName, slice, node.Host)
+		client, err := c.getDirectClient(indexName, node.Host)
 		if err != nil {
 			return err
 		}

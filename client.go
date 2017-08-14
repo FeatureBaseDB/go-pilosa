@@ -58,11 +58,10 @@ var protobufHeaders = map[string]string{
 
 // Client is the HTTP client for Pilosa server.
 type Client struct {
-	cluster *Cluster
-	host    *URI
-	client  *http.Client
-	slice_clients map[string]*Client
-
+	cluster      *Cluster
+	host         *URI
+	client       *http.Client
+	cacheClients map[string]*Client
 }
 
 // DefaultClient creates a client with the default address and options.
@@ -99,9 +98,9 @@ func NewClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 		options = &ClientOptions{}
 	}
 	return &Client{
-		cluster: cluster,
-		client:  newHTTPClient(options.withDefaults()),
-		slice_clients: make(map[string]*Client),
+		cluster:      cluster,
+		client:       newHTTPClient(options.withDefaults()),
+		cacheClients: make(map[string]*Client),
 	}
 }
 
@@ -314,22 +313,21 @@ func (c *Client) ImportFrame(frame *Frame, bitIterator BitIterator, batchSize ui
 	return nil
 }
 
-func (c *Client) getDirectClient(indexName string, host string) (*Client, error) {
-	key := fmt.Sprintf("%s:%s", indexName, host)
-	cacheClient, ok := c.slice_clients[key]
+func (c *Client) getDirectClient(host string) (*Client, error) {
+	key := host
+	client, ok := c.cacheClients[key]
 	if ok {
-		return cacheClient, nil
+		return client, nil
 	}
 	uri, err := NewURIFromAddress(host)
 	if err != nil {
 		return nil, err
 	}
-	newClient := NewClientWithURI(uri)
+	client = NewClientWithURI(uri)
 
-	c.slice_clients[key] = newClient
-	return newClient, nil
+	c.cacheClients[key] = client
+	return client, nil
 }
-
 
 func (c *Client) importBits(indexName string, frameName string, slice uint64, bits []Bit) error {
 	sort.Sort(bitsForSort(bits))
@@ -338,7 +336,7 @@ func (c *Client) importBits(indexName string, frameName string, slice uint64, bi
 		return err
 	}
 	for _, node := range nodes {
-		client, err := c.getDirectClient(indexName, node.Host)
+		client, err := c.getDirectClient(node.Host)
 		if err != nil {
 			return err
 		}

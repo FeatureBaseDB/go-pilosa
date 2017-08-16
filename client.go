@@ -269,8 +269,13 @@ func (c *Client) Schema() (*Schema, error) {
 	return schema, nil
 }
 
-// ImportFrame imports bits from the given CSV iterator
+// ImportFrame imports bits of a frame from the given CSV iterator
 func (c *Client) ImportFrame(frame *Frame, bitIterator BitIterator, batchSize uint) error {
+	return c.ImportView(frame, "", bitIterator, batchSize)
+}
+
+// ImportView imports bits of a view from the given CSV iterator
+func (c *Client) ImportView(frame *Frame, viewName string, bitIterator BitIterator, batchSize uint) error {
 	const sliceWidth = 1048576
 	linesLeft := true
 	bitGroup := map[uint64][]Bit{}
@@ -297,7 +302,7 @@ func (c *Client) ImportFrame(frame *Frame, bitIterator BitIterator, batchSize ui
 		if currentBatchSize >= batchSize || !linesLeft {
 			for slice, bits := range bitGroup {
 				if len(bits) > 0 {
-					err := c.importBits(indexName, frameName, slice, bits)
+					err := c.importBits(indexName, frameName, viewName, slice, bits)
 					if err != nil {
 						return err
 					}
@@ -311,7 +316,7 @@ func (c *Client) ImportFrame(frame *Frame, bitIterator BitIterator, batchSize ui
 	return nil
 }
 
-func (c *Client) importBits(indexName string, frameName string, slice uint64, bits []Bit) error {
+func (c *Client) importBits(indexName string, frameName string, viewName string, slice uint64, bits []Bit) error {
 	sort.Sort(bitsForSort(bits))
 	nodes, err := c.fetchFragmentNodes(indexName, slice)
 	if err != nil {
@@ -323,7 +328,7 @@ func (c *Client) importBits(indexName string, frameName string, slice uint64, bi
 			return err
 		}
 		client := NewClientWithURI(uri)
-		err = client.importNode(bitsToImportRequest(indexName, frameName, slice, bits))
+		err = client.importNode(bitsToImportRequest(indexName, frameName, viewName, slice, bits))
 		if err != nil {
 			return err
 		}
@@ -365,6 +370,91 @@ func (c *Client) ExportFrame(frame *Frame, view string) (BitIterator, error) {
 	}
 	sliceURIs := statusToNodeSlicesForIndex(status, frame.index.Name())
 	return NewCSVBitIterator(newExportReader(sliceURIs, frame, view)), nil
+}
+
+// FragmentBlockIDs returns block IDs for the given frame and slice.
+// set inverse to false to retrieve row block IDs or true to retrieve column block IDs
+func (c *Client) FragmentBlockIDs(frame *Frame, slice uint64, inverse bool) ([]int, error) {
+	view := "standard"
+	if inverse {
+		view = "inverse"
+	}
+	path := fmt.Sprintf("/fragment/blocks?index=%s&frame=%s&view=%s&slice=%d",
+		frame.index.Name(), frame.Name(), view, slice)
+	_, body, err := c.httpRequest("GET", path, nil, nil, errorCheckedResponse)
+	if err != nil {
+		return nil, err
+	}
+	binfo := fragmentBlockInfo{}
+	err = json.Unmarshal(body, &binfo)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]int, len(binfo.Blocks))
+	for i, block := range binfo.Blocks {
+		result[i] = block.ID
+	}
+	return result, nil
+}
+
+// ExportRowBlockAttrs exports row attributes for a frame block.
+func (c *Client) ExportRowBlockAttrs(frame *Frame, block uint64) (result BlockAttrsResponse, err error) {
+	path := fmt.Sprintf("/block/row-attrs?index=%s&frame=%s&block=%d",
+		frame.index.Name(), frame.Name(), block)
+	_, body, err := c.httpRequest("GET", path, nil, nil, errorCheckedResponse)
+	if err != nil {
+		return
+	}
+	result = BlockAttrsResponse{}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return
+	}
+	return
+}
+
+// ExportColumnBlockAttrs exports row attributes for an index block.
+func (c *Client) ExportColumnBlockAttrs(index *Index, block uint64) (result BlockAttrsResponse, err error) {
+	path := fmt.Sprintf("/block/column-attrs?index=%s&block=%d", index.Name(), block)
+	_, body, err := c.httpRequest("GET", path, nil, nil, errorCheckedResponse)
+	if err != nil {
+		return
+	}
+	result = BlockAttrsResponse{}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return
+	}
+	return
+}
+
+// ImportRowBlockAttrs imports row attributes for a frame block.
+func (c *Client) ImportRowBlockAttrs(frame *Frame, block uint64, attrs BlockAttrs) error {
+	path := fmt.Sprintf("/block/row-attrs?index=%s&frame=%s&block=%d",
+		frame.index.Name(), frame.Name(), block)
+	data, err := json.Marshal(attrs)
+	if err != nil {
+		return err
+	}
+	_, _, err = c.httpRequest("POST", path, data, nil, errorCheckedResponse)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// ImportColumnBlockAttrs imports column attributes for an index block
+func (c *Client) ImportColumnBlockAttrs(index *Index, block uint64, attrs BlockAttrs) error {
+	path := fmt.Sprintf("/block/column-attrs?index=%s&block=%d", index.Name(), block)
+	data, err := json.Marshal(attrs)
+	if err != nil {
+		return err
+	}
+	_, _, err = c.httpRequest("POST", path, data, nil, errorCheckedResponse)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // Views fetches and returns the views of a frame
@@ -510,23 +600,37 @@ func matchError(msg string) error {
 	return nil
 }
 
-func bitsToImportRequest(indexName string, frameName string, slice uint64, bits []Bit) *internal.ImportRequest {
+func bitsToImportRequest(indexName string, frameName string, viewName string, slice uint64, bits []Bit) *internal.ImportRequest {
+	// timestamps are only set for frame imports
+	var timestamps []int64
+	if viewName == "" {
+		timestamps = make([]int64, 0, len(bits))
+	} else {
+		timestamps = nil
+	}
+
 	rowIDs := make([]uint64, 0, len(bits))
 	columnIDs := make([]uint64, 0, len(bits))
-	timestamps := make([]int64, 0, len(bits))
+
 	for _, bit := range bits {
 		rowIDs = append(rowIDs, bit.RowID)
 		columnIDs = append(columnIDs, bit.ColumnID)
-		timestamps = append(timestamps, bit.Timestamp)
+		if timestamps != nil {
+			timestamps = append(timestamps, bit.Timestamp)
+		}
 	}
-	return &internal.ImportRequest{
-		Index:      indexName,
-		Frame:      frameName,
-		Slice:      slice,
-		RowIDs:     rowIDs,
-		ColumnIDs:  columnIDs,
-		Timestamps: timestamps,
+	request := &internal.ImportRequest{
+		Index:     indexName,
+		Frame:     frameName,
+		View:      viewName,
+		Slice:     slice,
+		RowIDs:    rowIDs,
+		ColumnIDs: columnIDs,
 	}
+	if timestamps != nil {
+		request.Timestamps = timestamps
+	}
+	return request
 }
 
 // statusToNodeSlicesForIndex finds the hosts which contains slices for the given index
@@ -686,4 +790,20 @@ func (r *exportReader) Read(p []byte) (n int, err error) {
 		r.currentSlice++
 	}
 	return
+}
+
+type fragmentBlockInfo struct {
+	Blocks []fragmentBlock `json:"blocks"`
+}
+
+type fragmentBlock struct {
+	ID int `json:"id"`
+}
+
+// BlockAttrs contains the attributes for block IDs.
+type BlockAttrs map[uint64]map[string]interface{}
+
+// BlockAttrsResponse is the result from exporting block attributes.
+type BlockAttrsResponse struct {
+	Attrs BlockAttrs `json:"attrs"`
 }

@@ -702,6 +702,288 @@ func TestCSVExport(t *testing.T) {
 	}
 }
 
+func TestFragmentBlocks(t *testing.T) {
+	client := getClient()
+	index, _ := schema.Index("findex", nil)
+	defer func(c *Client, index *Index) {
+		c.DeleteIndex(index)
+	}(client, index)
+	client.EnsureIndex(index)
+	frame, _ := index.Frame("exportframe", &FrameOptions{
+		InverseEnabled: true,
+	})
+	client.EnsureFrame(frame)
+	_, err := client.Query(index.BatchQuery(
+		frame.SetBit(1, 10),
+		frame.SetBit(1000, 500),
+		frame.SetBit(2000, 1048577),
+	), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rowBlockIDs, err := client.FragmentBlockIDs(frame, 0, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetRowBlockIDs := []int{0, 10}
+	if !reflect.DeepEqual(targetRowBlockIDs, rowBlockIDs) {
+		t.Fatalf("%v != %v", targetRowBlockIDs, rowBlockIDs)
+	}
+
+	columnBlockIDs, err := client.FragmentBlockIDs(frame, 0, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetColumnBlockIDs := []int{0, 5, 10485}
+	if !reflect.DeepEqual(targetColumnBlockIDs, columnBlockIDs) {
+		t.Fatalf("%v != %v", targetColumnBlockIDs, columnBlockIDs)
+	}
+}
+
+func TestFragmentBlocksFailure(t *testing.T) {
+	runMockServerClient(404, []byte("sorry, not found"), -1, func(client *Client) {
+		frame, _ := index.Frame("exportframe", nil)
+		_, err := client.FragmentBlockIDs(frame, 0, false)
+		if err == nil {
+			t.Fatal("should have failed")
+		}
+	})
+}
+
+func TestFragmentBlocksFailureInvalidJSON(t *testing.T) {
+	runMockServerClient(200, []byte("invalid json"), -1, func(client *Client) {
+		frame, _ := index.Frame("exportframe", nil)
+		_, err := client.FragmentBlockIDs(frame, 0, false)
+		if err == nil {
+			t.Fatal("should have failed")
+		}
+	})
+}
+
+func TestExportRowBlockAttrs(t *testing.T) {
+	client := getClient()
+	frame, _ := index.Frame("rowattrframe", nil)
+	client.EnsureFrame(frame)
+	attrs := map[string]interface{}{
+		"foo": "bar",
+	}
+	_, err := client.Query(index.BatchQuery(
+		frame.SetBit(1, 10),
+		frame.SetRowAttrs(1, attrs),
+	), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := BlockAttrs{
+		1: {
+			"foo": "bar",
+		},
+	}
+	blockAttrs, err := client.ExportRowBlockAttrs(frame, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(target, blockAttrs.Attrs) {
+		t.Fatalf("%v != %v", target, blockAttrs)
+	}
+}
+
+func TestRowBlockAttrsFailure(t *testing.T) {
+	runMockServerClient(404, []byte("sorry, not found"), -1, func(client *Client) {
+		frame, _ := index.Frame("rowattrframe", nil)
+		_, err := client.ExportRowBlockAttrs(frame, 0)
+		if err == nil {
+			t.Fatal("should have failed")
+		}
+	})
+}
+
+func TestRowBlockAttrsFailureInvalidJSON(t *testing.T) {
+	runMockServerClient(200, []byte("invalid json"), -1, func(client *Client) {
+		frame, _ := index.Frame("rowattrframe", nil)
+		_, err := client.ExportRowBlockAttrs(frame, 0)
+		if err == nil {
+			t.Fatal("should have failed")
+		}
+	})
+}
+
+func TestExportColumnBlockAttrs(t *testing.T) {
+	client := getClient()
+	index, _ := schema.Index("findex", nil)
+	defer func(c *Client, index *Index) {
+		c.DeleteIndex(index)
+	}(client, index)
+	client.EnsureIndex(index)
+	frame, _ := index.Frame("columnattrframe", nil)
+	client.EnsureFrame(frame)
+	attrs := map[string]interface{}{
+		"foo": "bar",
+	}
+	_, err := client.Query(index.BatchQuery(
+		frame.SetBit(1, 10),
+		index.SetColumnAttrs(1, attrs),
+	), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := BlockAttrs{
+		1: {
+			"foo": "bar",
+		},
+	}
+	blockAttrs, err := client.ExportColumnBlockAttrs(index, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(target, blockAttrs.Attrs) {
+		t.Fatalf("%v != %v", target, blockAttrs)
+	}
+}
+
+func TestColumnBlockAttrsFailure(t *testing.T) {
+	runMockServerClient(404, []byte("sorry, not found"), -1, func(client *Client) {
+		_, err := client.ExportColumnBlockAttrs(index, 0)
+		if err == nil {
+			t.Fatal("should have failed")
+		}
+	})
+}
+
+func TestColumnBlockAttrsFailureInvalidJSON(t *testing.T) {
+	runMockServerClient(200, []byte("invalid json"), -1, func(client *Client) {
+		_, err := client.ExportColumnBlockAttrs(index, 0)
+		if err == nil {
+			t.Fatal("should have failed")
+		}
+	})
+}
+
+func TestImportRowBlockAttrs(t *testing.T) {
+	client := getClient()
+	frame, _ := index.Frame("rowattrframe", nil)
+	client.EnsureFrame(frame)
+	_, err := client.Query(frame.SetBit(1, 10), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blockAttrs := BlockAttrs{
+		1: {
+			"foo": "bar",
+		},
+	}
+	err = client.ImportRowBlockAttrs(frame, 0, blockAttrs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := map[string]interface{}{
+		"foo": "bar",
+	}
+	response, err := client.Query(frame.Bitmap(1), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	attrs := response.Result().Bitmap.Attributes
+	if !reflect.DeepEqual(target, attrs) {
+		t.Fatalf("%v != %v", target, attrs)
+	}
+}
+
+func TestImportRowBlockAttrsFailure(t *testing.T) {
+	runMockServerClient(404, []byte("sorry, not found"), -1, func(client *Client) {
+		frame, _ := index.Frame("rowattrframe", nil)
+		blockAttrs := BlockAttrs{
+			1: {
+				"foo": "bar",
+			},
+		}
+		err := client.ImportRowBlockAttrs(frame, 0, blockAttrs)
+		if err == nil {
+			t.Fatal("should have failed")
+		}
+	})
+}
+
+func TestImportRowBlockAttrsFailureInvalidAttrs(t *testing.T) {
+	client := getClient()
+	blockAttrs := BlockAttrs{
+		1: {
+			"foo": func() {},
+		},
+	}
+	err := client.ImportRowBlockAttrs(testFrame, 0, blockAttrs)
+	if err == nil {
+		t.Fatalf("should have failed")
+	}
+}
+
+func TestImportColumnBlockAttrs(t *testing.T) {
+	client := getClient()
+	index, _ := schema.Index("findex", nil)
+	defer func(c *Client, index *Index) {
+		c.DeleteIndex(index)
+	}(client, index)
+	client.EnsureIndex(index)
+	frame, _ := index.Frame("columnattrframe1", &FrameOptions{
+		InverseEnabled: true,
+	})
+	client.EnsureFrame(frame)
+	_, err := client.Query(frame.SetBit(1, 10), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blockAttrs := BlockAttrs{
+		10: {
+			"foo": "bar",
+		},
+	}
+	err = client.ImportColumnBlockAttrs(index, 0, blockAttrs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := map[string]interface{}{
+		"foo": "bar",
+	}
+	response, err := client.Query(frame.InverseBitmap(10), &QueryOptions{
+		Columns: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	attrs := response.Result().Bitmap.Attributes
+	if !reflect.DeepEqual(target, attrs) {
+		t.Fatalf("%v != %v", target, attrs)
+	}
+}
+
+func TestImportColumnBlockAttrsFailure(t *testing.T) {
+	runMockServerClient(404, []byte("sorry, not found"), -1, func(client *Client) {
+		blockAttrs := BlockAttrs{
+			1: {
+				"foo": "bar",
+			},
+		}
+		err := client.ImportColumnBlockAttrs(index, 0, blockAttrs)
+		if err == nil {
+			t.Fatal("should have failed")
+		}
+	})
+}
+
+func TestImportColumnBlockAttrsFailureInvalidAttrs(t *testing.T) {
+	client := getClient()
+	blockAttrs := BlockAttrs{
+		1: {
+			"foo": func() {},
+		},
+	}
+	err := client.ImportColumnBlockAttrs(index, 0, blockAttrs)
+	if err == nil {
+		t.Fatalf("should have failed")
+	}
+}
+
 func TestCSVExportFailure(t *testing.T) {
 	server := getMockServer(404, []byte("sorry, not found"), -1)
 	defer server.Close()
@@ -814,7 +1096,7 @@ func TestImportFailsOnImportBitsError(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := NewClientWithURI(uri)
-	err = client.importBits("foo", "bar", 0, []Bit{})
+	err = client.importBits("foo", "bar", "", 0, []Bit{})
 	if err == nil {
 		t.Fatalf("importBits should fail when fetch fragment nodes fails")
 	}
@@ -849,7 +1131,7 @@ func TestImportBitsFailInvalidNodeAddress(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := NewClientWithURI(uri)
-	err = client.importBits("foo", "bar", 0, []Bit{})
+	err = client.importBits("foo", "bar", "", 0, []Bit{})
 	if err == nil {
 		t.Fatalf("importBits should fail on invalid node host")
 	}
@@ -1018,6 +1300,34 @@ func TestStatusToNodeSlicesForIndex(t *testing.T) {
 	}
 }
 
+func TestBitsToImportRequestWithView(t *testing.T) {
+	bits := []Bit{
+		Bit{
+			RowID:     1,
+			ColumnID:  100,
+			Timestamp: 1000,
+		},
+		Bit{
+			RowID:     10,
+			ColumnID:  1000,
+			Timestamp: 10000,
+		},
+	}
+	target := &internal.ImportRequest{
+		Index:      "index",
+		Frame:      "frame",
+		Slice:      0,
+		View:       "view",
+		RowIDs:     []uint64{1, 10},
+		ColumnIDs:  []uint64{100, 1000},
+		Timestamps: nil,
+	}
+	request := bitsToImportRequest("index", "frame", "view", 0, bits)
+	if !reflect.DeepEqual(target, request) {
+		t.Fatalf("Import request should be created correctly")
+	}
+}
+
 func getClient() *Client {
 	uri, err := NewURIFromAddress(":10101")
 	if err != nil {
@@ -1038,6 +1348,16 @@ func getMockServer(statusCode int, response []byte, contentLength int) *httptest
 		}
 	})
 	return httptest.NewServer(handler)
+}
+
+func runMockServerClient(statusCode int, response []byte, contentLength int, assertFun func(*Client)) {
+	server := getMockServer(statusCode, response, contentLength)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		panic(err)
+	}
+	assertFun(NewClientWithURI(uri))
 }
 
 type BrokenReader struct{}

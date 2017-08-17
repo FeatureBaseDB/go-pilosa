@@ -1018,6 +1018,24 @@ func TestStatusToNodeSlicesForIndex(t *testing.T) {
 	}
 }
 
+func TestClientCache(t *testing.T) {
+	// even though this function isn't really an integration test,
+	// it needs to access getDirectClient which is not
+	// available to client_test.go
+	client := DefaultClient()
+	client2, err := client.getDirectClient("foo.bar:10101")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client3, err := client.getDirectClient("foo.bar:10101")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client2 != client3 {
+		t.Fatal("Should return the same client for the same host")
+	}
+}
+
 func getClient() *Client {
 	uri, err := NewURIFromAddress(":10101")
 	if err != nil {

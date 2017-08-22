@@ -35,7 +35,6 @@ package pilosa
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -46,6 +45,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pilosa/go-pilosa/internal"
+	"github.com/pkg/errors"
 )
 
 const maxHosts = 10
@@ -114,7 +114,10 @@ func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, e
 	if options == nil {
 		options = &QueryOptions{}
 	}
-	data := makeRequestData(query.serialize(), options)
+	data, err := makeRequestData(query.serialize(), options)
+	if err != nil {
+		return nil, errors.Wrap(err, "making request data")
+	}
 	path := fmt.Sprintf("/index/%s/query", query.Index().name)
 	_, buf, err := c.httpRequest("POST", path, data, protobufHeaders, rawResponse)
 	if err != nil {
@@ -428,9 +431,12 @@ func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentN
 }
 
 func (c *Client) importNode(request *internal.ImportRequest) error {
-	data, _ := proto.Marshal(request)
+	data, err := proto.Marshal(request)
+	if err != nil {
+		return errors.Wrap(err, "marshaling to protobuf")
+	}
 	// request.Marshal never returns an error
-	_, _, err := c.httpRequest("POST", "/import", data, protobufHeaders, noResponse)
+	_, _, err = c.httpRequest("POST", "/import", data, protobufHeaders, noResponse)
 	if err != nil {
 		return err
 	}
@@ -582,16 +588,18 @@ func newHTTPClient(options *ClientOptions) *http.Client {
 	}
 }
 
-func makeRequestData(query string, options *QueryOptions) []byte {
+func makeRequestData(query string, options *QueryOptions) ([]byte, error) {
 	request := &internal.QueryRequest{
 		Query:        query,
 		ColumnAttrs:  options.Columns,
 		ExcludeAttrs: options.ExcludeAttrs,
 		ExcludeBits:  options.ExcludeBits,
 	}
-	r, _ := proto.Marshal(request)
-	// request.Marshal never returns an error
-	return r
+	r, err := proto.Marshal(request)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshaling request to protobuf")
+	}
+	return r, nil
 }
 
 func matchError(msg string) error {

@@ -681,9 +681,9 @@ func TestCSVExport(t *testing.T) {
 		t.Fatal(err)
 	}
 	targetBits := []Bit{
-		Bit{RowID: 1, ColumnID: 1},
-		Bit{RowID: 1, ColumnID: 10},
-		Bit{RowID: 2, ColumnID: 1048577},
+		{RowID: 1, ColumnID: 1},
+		{RowID: 1, ColumnID: 10},
+		{RowID: 2, ColumnID: 1048577},
 	}
 	bits := []Bit{}
 	iterator, err := client.ExportFrame(frame, "standard")
@@ -992,14 +992,14 @@ func TestStatusToNodeSlicesForIndex(t *testing.T) {
 
 	status := &Status{
 		Nodes: []StatusNode{
-			StatusNode{
+			{
 				Host: ":10101",
 				Indexes: []StatusIndex{
-					StatusIndex{
+					{
 						Name:   "index1",
 						Slices: []uint64{0},
 					},
-					StatusIndex{
+					{
 						Name:   "index2",
 						Slices: []uint64{0},
 					},

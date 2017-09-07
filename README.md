@@ -12,6 +12,9 @@ Go client for Pilosa high performance distributed bitmap index.
 
 ## Change Log
 
+* **next**:
+    * Dropped support for Go 1.7
+
 * **v0.5.0** (2017-08-03):
     * Supports imports and exports.
     * Introduced schemas. No need to re-define already existing indexes and frames.
@@ -35,7 +38,7 @@ Go client for Pilosa high performance distributed bitmap index.
 
 ## Requirements
 
-* Go 1.7 and higher
+* Go 1.8 and higher
 
 ## Install
 

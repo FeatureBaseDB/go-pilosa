@@ -97,6 +97,9 @@ func TestNewIndex(t *testing.T) {
 	}
 	// calling schema.Index again should return the same index
 	index2, err := schema.Index("index-name", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if index1 != index2 {
 		t.Fatalf("calling schema.Index again should return the same index")
 	}

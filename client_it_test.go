@@ -651,6 +651,9 @@ func TestCSVImport(t *testing.T) {
 		frame.Bitmap(10),
 	)
 	response, err := client.Query(bq, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(response.Results()) != 3 {
 		t.Fatalf("Result count should be 3")
 	}

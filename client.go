@@ -75,7 +75,7 @@ func NewClientWithURI(uri *URI) *Client {
 }
 
 // NewClientFromAddresses creates a client for a cluster specified by `hosts`. Each
-// string in `hosts` is the string represenation of a URI. E.G
+// string in `hosts` is the string representation of a URI. E.G
 // node0.pilosa.com:10101
 func NewClientFromAddresses(addresses []string, options *ClientOptions) (*Client, error) {
 	uris := make([]*URI, len(addresses))

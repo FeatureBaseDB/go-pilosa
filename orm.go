@@ -611,6 +611,7 @@ const (
 	TimeQuantumYearMonthDayHour TimeQuantum = "YMDH"
 )
 
+// CacheType represents cache type for a frame
 type CacheType string
 
 // CacheType constants

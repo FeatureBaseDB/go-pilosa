@@ -59,5 +59,5 @@ var (
 	ErrorInvalidFrameName         = NewError("Invalid frame name")
 	ErrorInvalidLabel             = NewError("Invalid label")
 	ErrorInverseBitmapsNotEnabled = NewError("Inverse bitmaps support was not enabled for this frame")
-	ErrorTriedMaxHosts = NewError("Tried max hosts, still failing")
+	ErrorTriedMaxHosts            = NewError("Tried max hosts, still failing")
 )

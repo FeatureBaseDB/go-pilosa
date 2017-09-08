@@ -58,9 +58,9 @@ func TestCSVBitIterator(t *testing.T) {
 		t.Fatalf("There should be 3 bits")
 	}
 	target := []pilosa.Bit{
-		pilosa.Bit{RowID: 1, ColumnID: 10, Timestamp: 683793200},
-		pilosa.Bit{RowID: 5, ColumnID: 20, Timestamp: 683793300},
-		pilosa.Bit{RowID: 3, ColumnID: 41, Timestamp: 683793385},
+		{RowID: 1, ColumnID: 10, Timestamp: 683793200},
+		{RowID: 5, ColumnID: 20, Timestamp: 683793300},
+		{RowID: 3, ColumnID: 41, Timestamp: 683793385},
 	}
 	if !reflect.DeepEqual(target, bits) {
 		t.Fatalf("%v != %v", target, bits)

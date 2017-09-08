@@ -12,8 +12,10 @@ Go client for Pilosa high performance distributed bitmap index.
 
 ## Change Log
 
-* **next**:
+* **Next**:
     * Dropped support for Go 1.7
+    * Added support for creating range encoded frames.
+    * Added `SetFieldValue`,`Average`, `Sum` and `Xor` calls.
 
 * **v0.5.0** (2017-08-03):
     * Supports imports and exports.

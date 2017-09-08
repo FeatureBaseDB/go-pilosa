@@ -34,6 +34,7 @@ package pilosa
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -351,6 +352,14 @@ func (d *Index) Difference(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
 	return d.bitmapOperation("Difference", bitmaps...)
 }
 
+// Xor creates an Xor query.
+func (d *Index) Xor(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
+	if len(bitmaps) < 2 {
+		return NewPQLBitmapQuery("", d, NewError("Xor operation requires at least 2 bitmaps"))
+	}
+	return d.bitmapOperation("Xor", bitmaps...)
+}
+
 // Count creates a Count query.
 // Returns the number of set bits in the BITMAP_CALL passed in.
 func (d *Index) Count(bitmap *PQLBitmapQuery) *PQLBaseQuery {
@@ -395,6 +404,7 @@ type FrameOptions struct {
 	InverseEnabled bool
 	CacheType      CacheType
 	CacheSize      uint
+	fields         map[string]RangeField
 }
 
 func (options *FrameOptions) withDefaults() (updated *FrameOptions) {
@@ -404,6 +414,9 @@ func (options *FrameOptions) withDefaults() (updated *FrameOptions) {
 	// impose defaults
 	if updated.RowLabel == "" {
 		updated.RowLabel = "rowID"
+	}
+	if updated.fields == nil {
+		updated.fields = map[string]RangeField{}
 	}
 	return
 }
@@ -424,7 +437,36 @@ func (options FrameOptions) String() string {
 	if options.CacheSize != 0 {
 		mopt["cacheSize"] = options.CacheSize
 	}
+	if len(options.fields) > 0 {
+		mopt["rangeEnabled"] = true
+		fields := make([]RangeField, 0, len(options.fields))
+		for _, field := range options.fields {
+			fields = append(fields, field)
+		}
+		mopt["fields"] = fields
+	}
 	return fmt.Sprintf(`{"options": %s}`, encodeMap(mopt))
+}
+
+// AddIntField adds an integer field to the frame options
+func (options *FrameOptions) AddIntField(name string, min int, max int) error {
+	err := validateLabel(name)
+	if err != nil {
+		return err
+	}
+	if max <= min {
+		return errors.New("Max should be greater than min for int fields")
+	}
+	if options.fields == nil {
+		options.fields = map[string]RangeField{}
+	}
+	options.fields[name] = map[string]interface{}{
+		"name": name,
+		"type": "int",
+		"min":  min,
+		"max":  max,
+	}
+	return nil
 }
 
 // Frame structs are used to segment and define different functional characteristics within your entire index.
@@ -576,6 +618,30 @@ func (f *Frame) SetRowAttrs(rowID uint64, attrs map[string]interface{}) *PQLBase
 		f.options.RowLabel, rowID, f.name, attrsString), f.index, nil)
 }
 
+// Average creates an Average query.
+// The corresponding frame should include the field in its options.
+func (f *Frame) Average(bitmap *PQLBitmapQuery, field string) *PQLBaseQuery {
+	return f.rangeQuery("Average", bitmap, field)
+}
+
+// Sum creates a Sum query.
+// The corresponding frame should include the field in its options.
+func (f *Frame) Sum(bitmap *PQLBitmapQuery, field string) *PQLBaseQuery {
+	return f.rangeQuery("Sum", bitmap, field)
+}
+
+// SetIntFieldValue creates a SetFieldValue query.
+func (f *Frame) SetIntFieldValue(columnID uint64, field string, value int) *PQLBaseQuery {
+	qry := fmt.Sprintf("SetFieldValue(frame='%s', %s=%d, %s=%d)", f.name, f.index.options.ColumnLabel, columnID, field, value)
+	return NewPQLBaseQuery(qry, f.index, nil)
+}
+
+func (f *Frame) rangeQuery(call string, bitmap *PQLBitmapQuery, field string) *PQLBaseQuery {
+	qry := fmt.Sprintf("%s(%s, frame='%s', field='%s')", call, bitmap.serialize(), f.name, field)
+	fmt.Println("QRY", qry)
+	return NewPQLBaseQuery(qry, f.index, nil)
+}
+
 func createAttributesString(attrs map[string]interface{}) (string, error) {
 	attrsList := make([]string, 0, len(attrs))
 	for k, v := range attrs {
@@ -620,6 +686,9 @@ const (
 	CacheTypeLRU     CacheType = "lru"
 	CacheTypeRanked  CacheType = "ranked"
 )
+
+// RangeField represents a single field
+type RangeField map[string]interface{}
 
 func encodeMap(m map[string]interface{}) string {
 	result, err := json.Marshal(m)

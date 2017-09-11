@@ -801,8 +801,11 @@ func TestRangeFrame(t *testing.T) {
 	options := &FrameOptions{}
 	options.AddIntField("foo", 10, 20)
 	frame, _ := index.Frame("rangeframe", options)
-	client.EnsureFrame(frame)
-	_, err := client.Query(index.BatchQuery(
+	err := client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.Query(index.BatchQuery(
 		frame.SetBit(1, 10),
 		frame.SetBit(1, 100),
 		frame.SetIntFieldValue(10, "foo", 11),
@@ -811,7 +814,7 @@ func TestRangeFrame(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp, err := client.Query(frame.Sum(frame.Bitmap(1), "foo"), nil)
+	resp, err := client.Query(frame.SumReduce(frame.Bitmap(1), "foo"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

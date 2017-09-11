@@ -426,18 +426,11 @@ func TestSetRowAttrsInvalidAttr(t *testing.T) {
 	}
 }
 
-func TestAverage(t *testing.T) {
+func TestSumReduce(t *testing.T) {
 	b := collabFrame.Bitmap(42)
 	comparePQL(t,
-		"Average(frame='sample-frame', Bitmap(project=42, frame='collaboration'), field='foo')",
-		sampleFrame.Average(b, "foo"))
-}
-
-func TestSum(t *testing.T) {
-	b := collabFrame.Bitmap(42)
-	comparePQL(t,
-		"Sum(frame='sample-frame', Bitmap(project=42, frame='collaboration'), field='foo')",
-		sampleFrame.Sum(b, "foo"))
+		"SumReduce(Bitmap(project=42, frame='collaboration'), frame='sample-frame', field='foo')",
+		sampleFrame.SumReduce(b, "foo"))
 }
 
 func TestBatchQuery(t *testing.T) {

@@ -826,6 +826,37 @@ func TestRangeFrame(t *testing.T) {
 	}
 }
 
+func TestInhibitAttrsBits(t *testing.T) {
+	client := getClient()
+	attrs := map[string]interface{}{
+		"foo": "bar",
+	}
+	_, err := client.Query(index.BatchQuery(
+		testFrame.SetBit(1, 100),
+		testFrame.SetRowAttrs(1, attrs),
+	), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// test exclude attributes.
+	resp, err := client.Query(testFrame.Bitmap(1), &QueryOptions{ExcludeAttrs: true})
+	if len(resp.Result().Bitmap.Bits) != 1 {
+		t.Fatalf("bits should be included")
+	}
+	if len(resp.Result().Bitmap.Attributes) != 0 {
+		t.Fatalf("attributes should be excluded")
+	}
+
+	resp, err = client.Query(testFrame.Bitmap(1), &QueryOptions{ExcludeBits: true})
+	if len(resp.Result().Bitmap.Bits) != 0 {
+		t.Fatalf("bits should be excluded")
+	}
+	if len(resp.Result().Bitmap.Attributes) != 1 {
+		t.Fatalf("attributes should be included")
+	}
+}
+
 func TestImportBitIteratorError(t *testing.T) {
 	client := getClient()
 	frame, err := index.Frame("not-important", nil)

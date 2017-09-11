@@ -828,19 +828,27 @@ func TestRangeFrame(t *testing.T) {
 
 func TestExcludeAttrsBits(t *testing.T) {
 	client := getClient()
+	frame, _ := index.Frame("excludebitsattrsframe", nil)
+	err := client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
 	attrs := map[string]interface{}{
 		"foo": "bar",
 	}
-	_, err := client.Query(index.BatchQuery(
-		testFrame.SetBit(1, 100),
-		testFrame.SetRowAttrs(1, attrs),
+	_, err = client.Query(index.BatchQuery(
+		frame.SetBit(1, 100),
+		frame.SetRowAttrs(1, attrs),
 	), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// test exclude bits.
-	resp, err = client.Query(testFrame.Bitmap(1), &QueryOptions{ExcludeBits: true})
+	resp, err := client.Query(frame.Bitmap(1), &QueryOptions{ExcludeBits: true})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(resp.Result().Bitmap.Bits) != 0 {
 		t.Fatalf("bits should be excluded")
 	}
@@ -849,7 +857,10 @@ func TestExcludeAttrsBits(t *testing.T) {
 	}
 
 	// test exclude attributes.
-	resp, err := client.Query(testFrame.Bitmap(1), &QueryOptions{ExcludeAttrs: true})
+	resp, err = client.Query(frame.Bitmap(1), &QueryOptions{ExcludeAttrs: true})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(resp.Result().Bitmap.Bits) != 1 {
 		t.Fatalf("bits should be included")
 	}

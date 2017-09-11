@@ -187,6 +187,7 @@ Index:
 * `Union(bitmaps *PQLBitmapQuery...) *PQLBitmapQuery`
 * `Intersect(bitmaps *PQLBitmapQuery...) *PQLBitmapQuery`
 * `Difference(bitmaps *PQLBitmapQuery...) *PQLBitmapQuery`
+* `Xor(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery`
 * `Count(bitmap *PQLBitmapQuery) *PQLBaseQuery`
 * `SetColumnAttrs(columnID uint64, attrs map[string]interface{}) *PQLBaseQuery`
 
@@ -206,6 +207,8 @@ Frame:
 * `Range(rowID uint64, start time.Time, end time.Time) *PQLBitmapQuery`
 * `InverseRange(columnID uint64, start time.Time, end time.Time) *PQLBitmapQuery`
 * `SetRowAttrs(rowID uint64, attrs map[string]interface{}) *PQLBaseQuery`
+* `SumReduce(bitmap *PQLBitmapQuery, field string) *PQLBaseQuery`
+* `SetIntFieldValue(columnID uint64, field string, value int) *PQLBaseQuery`
 
 ### Pilosa URI
 

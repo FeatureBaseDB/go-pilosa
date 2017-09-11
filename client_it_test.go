@@ -826,7 +826,7 @@ func TestRangeFrame(t *testing.T) {
 	}
 }
 
-func TestInhibitAttrsBits(t *testing.T) {
+func TestExcludeAttrsBits(t *testing.T) {
 	client := getClient()
 	attrs := map[string]interface{}{
 		"foo": "bar",
@@ -839,6 +839,15 @@ func TestInhibitAttrsBits(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// test exclude bits.
+	resp, err = client.Query(testFrame.Bitmap(1), &QueryOptions{ExcludeBits: true})
+	if len(resp.Result().Bitmap.Bits) != 0 {
+		t.Fatalf("bits should be excluded")
+	}
+	if len(resp.Result().Bitmap.Attributes) != 1 {
+		t.Fatalf("attributes should be included")
+	}
+
 	// test exclude attributes.
 	resp, err := client.Query(testFrame.Bitmap(1), &QueryOptions{ExcludeAttrs: true})
 	if len(resp.Result().Bitmap.Bits) != 1 {
@@ -846,14 +855,6 @@ func TestInhibitAttrsBits(t *testing.T) {
 	}
 	if len(resp.Result().Bitmap.Attributes) != 0 {
 		t.Fatalf("attributes should be excluded")
-	}
-
-	resp, err = client.Query(testFrame.Bitmap(1), &QueryOptions{ExcludeBits: true})
-	if len(resp.Result().Bitmap.Bits) != 0 {
-		t.Fatalf("bits should be excluded")
-	}
-	if len(resp.Result().Bitmap.Attributes) != 1 {
-		t.Fatalf("attributes should be included")
 	}
 }
 

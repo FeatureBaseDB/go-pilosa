@@ -6,7 +6,7 @@ go:
 sudo: required
 group: deprecated-2017Q2
 before_install:
-  - curl -O pilosa https://storage.googleapis.com/pilosa/pilosa-sumreduce && chmod +x pilosa && ./pilosa
+  - curl -o pilosa https://storage.googleapis.com/pilosa/pilosa-sumreduce && chmod +x pilosa && ./pilosa
   - go get github.com/mattn/goveralls
   - go get -u github.com/golang/dep/cmd/dep
 addons:

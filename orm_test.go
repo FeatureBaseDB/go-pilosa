@@ -34,6 +34,8 @@ package pilosa
 
 import (
 	"reflect"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 )
@@ -244,6 +246,12 @@ func TestClearBit(t *testing.T) {
 		collabFrame.ClearBit(10, 20))
 }
 
+func TestSetFieldValue(t *testing.T) {
+	comparePQL(t,
+		"SetFieldValue(frame='collaboration', user=50, foo=15)",
+		collabFrame.SetIntFieldValue(50, "foo", 15))
+}
+
 func TestUnion(t *testing.T) {
 	comparePQL(t,
 		"Union(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'))",
@@ -290,6 +298,18 @@ func TestDifference(t *testing.T) {
 	comparePQL(t,
 		"Difference(Bitmap(rowID=10, frame='sample-frame'))",
 		sampleIndex.Difference(b1))
+}
+
+func TestXor(t *testing.T) {
+	comparePQL(t,
+		"Xor(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'))",
+		sampleIndex.Xor(b1, b2))
+	comparePQL(t,
+		"Xor(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'), Bitmap(rowID=42, frame='sample-frame'))",
+		sampleIndex.Xor(b1, b2, b3))
+	comparePQL(t,
+		"Xor(Bitmap(rowID=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))",
+		sampleIndex.Xor(b1, b4))
 }
 
 func TestTopN(t *testing.T) {
@@ -357,6 +377,12 @@ func TestBitmapOperationInvalidArg(t *testing.T) {
 	if q.Error() == nil {
 		t.Fatalf("should have failed")
 	}
+
+	// not enough bitmaps supplied
+	q = sampleIndex.Xor(b1)
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
 }
 
 func TestSetColumnAttrsTest(t *testing.T) {
@@ -398,6 +424,13 @@ func TestSetRowAttrsInvalidAttr(t *testing.T) {
 	if collabFrame.SetRowAttrs(5, attrs).Error() == nil {
 		t.Fatalf("Should have failed")
 	}
+}
+
+func TestSum(t *testing.T) {
+	b := collabFrame.Bitmap(42)
+	comparePQL(t,
+		"Sum(Bitmap(project=42, frame='collaboration'), frame='sample-frame', field='foo')",
+		sampleFrame.Sum(b, "foo"))
 }
 
 func TestBatchQuery(t *testing.T) {
@@ -464,14 +497,34 @@ func TestFrameOptionsToString(t *testing.T) {
 		CacheType:      CacheTypeRanked,
 		CacheSize:      1000,
 	}
+	err := frameOptions.AddIntField("foo", 10, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = frameOptions.AddIntField("bar", -1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	frame, err := sampleIndex.Frame("stargazer", frameOptions)
 	if err != nil {
 		t.Fatal(err)
 	}
 	jsonString := frame.options.String()
-	targetString := `{"options": {"cacheSize":1000,"cacheType":"ranked","inverseEnabled":true,"rowLabel":"stargazer_id","timeQuantum":"DH"}}`
-	if targetString != jsonString {
+	targetString := `{"options": {"cacheSize":1000,"cacheType":"ranked","fields":[{"max":100,"min":10,"name":"foo","type":"int"},{"max":1,"min":-1,"name":"bar","type":"int"}],"inverseEnabled":true,"rangeEnabled":true,"rowLabel":"stargazer_id","timeQuantum":"DH"}}`
+	if sortedString(targetString) != sortedString(jsonString) {
 		t.Fatalf("`%s` != `%s`", targetString, jsonString)
+	}
+}
+
+func TestAddInvalidField(t *testing.T) {
+	frameOptions := &FrameOptions{}
+	err := frameOptions.AddIntField("?invalid field!", 0, 100)
+	if err == nil {
+		t.Fatalf("Adding a field with an invalid name should have failed")
+	}
+	err = frameOptions.AddIntField("valid", 10, 10)
+	if err == nil {
+		t.Fatalf("Adding a field with max <= min should have failed")
 	}
 }
 
@@ -523,4 +576,10 @@ func mustNewFrame(index *Index, name string, rowLabel string) (frame *Frame) {
 		panic(err)
 	}
 	return
+}
+
+func sortedString(s string) string {
+	arr := strings.Split(s, "")
+	sort.Strings(arr)
+	return strings.Join(arr, "")
 }

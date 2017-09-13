@@ -108,21 +108,32 @@ type QueryResult struct {
 	Bitmap     *BitmapResult      `json:"bitmap,omitempty"`
 	CountItems []*CountResultItem `json:"count-items,omitempty"`
 	Count      uint64             `json:"count,omitempty"`
+	Sum        int64              `json:"sum,omitempty"`
 }
 
 func newQueryResultFromInternal(result *internal.QueryResult) (*QueryResult, error) {
 	var bitmapResult *BitmapResult
 	var err error
+	var sum int64
+	var count uint64
+
 	if result.Bitmap != nil {
 		bitmapResult, err = newBitmapResultFromInternal(result.Bitmap)
 		if err != nil {
 			return nil, err
 		}
 	}
+	if result.SumCount != nil {
+		sum = result.SumCount.Sum
+		count = uint64(result.SumCount.Count)
+	} else {
+		count = result.N
+	}
 	return &QueryResult{
 		Bitmap:     bitmapResult,
 		CountItems: countItemsFromInternal(result.Pairs),
-		Count:      result.N,
+		Count:      count,
+		Sum:        sum,
 	}, nil
 }
 

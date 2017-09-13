@@ -510,8 +510,10 @@ func newHTTPClient(options *ClientOptions) *http.Client {
 
 func makeRequestData(query string, options *QueryOptions) []byte {
 	request := &internal.QueryRequest{
-		Query:       query,
-		ColumnAttrs: options.Columns,
+		Query:        query,
+		ColumnAttrs:  options.Columns,
+		ExcludeAttrs: options.ExcludeAttrs,
+		ExcludeBits:  options.ExcludeBits,
 	}
 	r, _ := proto.Marshal(request)
 	// request.Marshal never returns an error
@@ -600,6 +602,10 @@ func (options *ClientOptions) withDefaults() (updated *ClientOptions) {
 type QueryOptions struct {
 	// Columns enables returning columns in the query response.
 	Columns bool
+	// ExcludeAttrs inhibits returning attributes
+	ExcludeAttrs bool
+	// ExcludeBits inhibits returning bits
+	ExcludeBits bool
 }
 
 type returnClientInfo uint

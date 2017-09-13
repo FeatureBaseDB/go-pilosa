@@ -12,8 +12,11 @@ Go client for Pilosa high performance distributed bitmap index.
 
 ## Change Log
 
-* **next**:
+* **Next**:
     * Dropped support for Go 1.7
+    * Added support for creating range encoded frames.
+    * Added `SetFieldValue`, `Sum` and `Xor` calls.
+    * Added support for excluding bits or attributes from bitmap calls. In order to exclude bits, pass `ExcludeBits: true` in your `QueryOptions`. In order to exclude attributes, pass `ExcludeAttrs: true`.
 
 * **v0.5.0** (2017-08-03):
     * Supports imports and exports.
@@ -184,6 +187,7 @@ Index:
 * `Union(bitmaps *PQLBitmapQuery...) *PQLBitmapQuery`
 * `Intersect(bitmaps *PQLBitmapQuery...) *PQLBitmapQuery`
 * `Difference(bitmaps *PQLBitmapQuery...) *PQLBitmapQuery`
+* `Xor(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery`
 * `Count(bitmap *PQLBitmapQuery) *PQLBaseQuery`
 * `SetColumnAttrs(columnID uint64, attrs map[string]interface{}) *PQLBaseQuery`
 
@@ -203,6 +207,8 @@ Frame:
 * `Range(rowID uint64, start time.Time, end time.Time) *PQLBitmapQuery`
 * `InverseRange(columnID uint64, start time.Time, end time.Time) *PQLBitmapQuery`
 * `SetRowAttrs(rowID uint64, attrs map[string]interface{}) *PQLBaseQuery`
+* `Sum(bitmap *PQLBitmapQuery, field string) *PQLBaseQuery`
+* `SetIntFieldValue(columnID uint64, field string, value int) *PQLBaseQuery`
 
 ### Pilosa URI
 

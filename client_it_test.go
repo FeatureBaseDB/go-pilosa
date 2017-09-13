@@ -796,6 +796,79 @@ func TestFetchViews(t *testing.T) {
 	}
 }
 
+func TestRangeFrame(t *testing.T) {
+	client := getClient()
+	options := &FrameOptions{}
+	options.AddIntField("foo", 10, 20)
+	frame, _ := index.Frame("rangeframe", options)
+	err := client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.Query(index.BatchQuery(
+		frame.SetBit(1, 10),
+		frame.SetBit(1, 100),
+		frame.SetIntFieldValue(10, "foo", 11),
+		frame.SetIntFieldValue(100, "foo", 15),
+	), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := client.Query(frame.Sum(frame.Bitmap(1), "foo"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Result().Sum != 26 {
+		t.Fatalf("Sum 26 != %d", resp.Result().Sum)
+	}
+	if resp.Result().Count != 2 {
+		t.Fatalf("Count 2 != %d", resp.Result().Count)
+	}
+}
+
+func TestExcludeAttrsBits(t *testing.T) {
+	client := getClient()
+	frame, _ := index.Frame("excludebitsattrsframe", nil)
+	err := client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	attrs := map[string]interface{}{
+		"foo": "bar",
+	}
+	_, err = client.Query(index.BatchQuery(
+		frame.SetBit(1, 100),
+		frame.SetRowAttrs(1, attrs),
+	), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// test exclude bits.
+	resp, err := client.Query(frame.Bitmap(1), &QueryOptions{ExcludeBits: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Result().Bitmap.Bits) != 0 {
+		t.Fatalf("bits should be excluded")
+	}
+	if len(resp.Result().Bitmap.Attributes) != 1 {
+		t.Fatalf("attributes should be included")
+	}
+
+	// test exclude attributes.
+	resp, err = client.Query(frame.Bitmap(1), &QueryOptions{ExcludeAttrs: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Result().Bitmap.Bits) != 1 {
+		t.Fatalf("bits should be included")
+	}
+	if len(resp.Result().Bitmap.Attributes) != 0 {
+		t.Fatalf("attributes should be excluded")
+	}
+}
+
 func TestImportBitIteratorError(t *testing.T) {
 	client := getClient()
 	frame, err := index.Frame("not-important", nil)

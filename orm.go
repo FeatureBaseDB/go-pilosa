@@ -618,10 +618,10 @@ func (f *Frame) SetRowAttrs(rowID uint64, attrs map[string]interface{}) *PQLBase
 		f.options.RowLabel, rowID, f.name, attrsString), f.index, nil)
 }
 
-// SumReduce creates a SumReduce query.
+// Sum creates a Sum query.
 // The corresponding frame should include the field in its options.
-func (f *Frame) SumReduce(bitmap *PQLBitmapQuery, field string) *PQLBaseQuery {
-	return f.rangeQuery("SumReduce", bitmap, field)
+func (f *Frame) Sum(bitmap *PQLBitmapQuery, field string) *PQLBaseQuery {
+	return f.rangeQuery("Sum", bitmap, field)
 }
 
 // SetIntFieldValue creates a SetFieldValue query.

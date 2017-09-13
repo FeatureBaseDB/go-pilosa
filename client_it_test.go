@@ -814,7 +814,7 @@ func TestRangeFrame(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp, err := client.Query(frame.SumReduce(frame.Bitmap(1), "foo"), nil)
+	resp, err := client.Query(frame.Sum(frame.Bitmap(1), "foo"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

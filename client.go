@@ -271,7 +271,7 @@ func (c *Client) Schema() (*Schema, error) {
 	return schema, nil
 }
 
-// ImportFrame imports bits from the given CSV iterator
+// ImportFrame imports bits from the given CSV iterator.
 func (c *Client) ImportFrame(frame *Frame, bitIterator BitIterator, batchSize uint) error {
 	const sliceWidth = 1048576
 	linesLeft := true
@@ -306,6 +306,49 @@ func (c *Client) ImportFrame(frame *Frame, bitIterator BitIterator, batchSize ui
 				}
 			}
 			bitGroup = map[uint64][]Bit{}
+			currentBatchSize = 0
+		}
+	}
+
+	return nil
+}
+
+// ImportValueFrame imports field values from the given CSV iterator.
+func (c *Client) ImportValueFrame(frame *Frame, field string, valueIterator ValueIterator, batchSize uint) error {
+	const sliceWidth = 1048576
+	linesLeft := true
+	valGroup := map[uint64][]FieldValue{}
+	var currentBatchSize uint
+	indexName := frame.index.name
+	frameName := frame.name
+	fieldName := field
+
+	for linesLeft {
+		val, err := valueIterator.NextValue()
+		if err == io.EOF {
+			linesLeft = false
+		} else if err != nil {
+			return err
+		}
+
+		slice := val.ColumnID / sliceWidth
+		if sliceArray, ok := valGroup[slice]; ok {
+			valGroup[slice] = append(sliceArray, val)
+		} else {
+			valGroup[slice] = []FieldValue{val}
+		}
+		currentBatchSize++
+		// if the batch is full or there's no line left, start importing values
+		if currentBatchSize >= batchSize || !linesLeft {
+			for slice, vals := range valGroup {
+				if len(vals) > 0 {
+					err := c.importValues(indexName, frameName, slice, fieldName, vals)
+					if err != nil {
+						return err
+					}
+				}
+			}
+			valGroup = map[uint64][]FieldValue{}
 			currentBatchSize = 0
 		}
 	}
@@ -350,6 +393,27 @@ func (c *Client) importBits(indexName string, frameName string, slice uint64, bi
 	return nil
 }
 
+func (c *Client) importValues(indexName string, frameName string, slice uint64, fieldName string, vals []FieldValue) error {
+	sort.Sort(valsForSort(vals))
+	nodes, err := c.fetchFragmentNodes(indexName, slice)
+	if err != nil {
+		return err
+	}
+	for _, node := range nodes {
+		client, err := c.getDirectClient(node.Host)
+		if err != nil {
+			return err
+		}
+
+		err = client.importValueNode(valsToImportRequest(indexName, frameName, slice, fieldName, vals))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentNode, error) {
 	path := fmt.Sprintf("/fragment/nodes?slice=%d&index=%s", slice, indexName)
 	_, body, err := c.httpRequest("GET", path, []byte{}, nil, errorCheckedResponse)
@@ -368,6 +432,17 @@ func (c *Client) importNode(request *internal.ImportRequest) error {
 	data, _ := proto.Marshal(request)
 	// request.Marshal never returns an error
 	_, _, err := c.httpRequest("POST", "/import", data, protobufHeaders, noResponse)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Client) importValueNode(request *internal.ImportValueRequest) error {
+	data, _ := proto.Marshal(request)
+	// request.Marshal never returns an error
+	_, _, err := c.httpRequest("POST", "/import-value", data, protobufHeaders, noResponse)
 	if err != nil {
 		return err
 	}
@@ -546,6 +621,23 @@ func bitsToImportRequest(indexName string, frameName string, slice uint64, bits 
 		RowIDs:     rowIDs,
 		ColumnIDs:  columnIDs,
 		Timestamps: timestamps,
+	}
+}
+
+func valsToImportRequest(indexName string, frameName string, slice uint64, fieldName string, vals []FieldValue) *internal.ImportValueRequest {
+	columnIDs := make([]uint64, 0, len(vals))
+	values := make([]uint64, 0, len(vals))
+	for _, val := range vals {
+		columnIDs = append(columnIDs, val.ColumnID)
+		values = append(values, val.Value)
+	}
+	return &internal.ImportValueRequest{
+		Index:     indexName,
+		Frame:     frameName,
+		Slice:     slice,
+		Field:     fieldName,
+		ColumnIDs: columnIDs,
+		Values:    values,
 	}
 }
 

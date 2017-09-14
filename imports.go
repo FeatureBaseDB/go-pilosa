@@ -71,7 +71,7 @@ func NewCSVBitIterator(reader io.Reader) *CSVBitIterator {
 }
 
 // NextBit iterates on lines of a Reader.
-// Returns io.EOF on end of iteration
+// Returns io.EOF on end of iteration.
 func (c *CSVBitIterator) NextBit() (Bit, error) {
 	if ok := c.scanner.Scan(); ok {
 		c.line++
@@ -107,7 +107,6 @@ func (c *CSVBitIterator) NextBit() (Bit, error) {
 		return Bit{}, err
 	}
 	return Bit{}, io.EOF
-
 }
 
 type bitsForSort []Bit
@@ -126,4 +125,79 @@ func (b bitsForSort) Less(i, j int) bool {
 		return b[i].ColumnID < b[j].ColumnID
 	}
 	return bitCmp < 0
+}
+
+// FieldValues represents the value for a column within a
+// range-encoded frame.
+type FieldValue struct {
+	ColumnID uint64
+	Value    uint64
+}
+
+// ValueIterator structs return field values one by one.
+type ValueIterator interface {
+	NextValue() (FieldValue, error)
+}
+
+// CSVValueIterator reads field values from a Reader.
+// Each line should contain a single field value in the following form:
+// columnID,value
+type CSVValueIterator struct {
+	reader  io.Reader
+	line    int
+	scanner *bufio.Scanner
+}
+
+// NewCSVBitIterator creates a CSVBitIterator from a Reader.
+func NewCSVValueIterator(reader io.Reader) *CSVValueIterator {
+	return &CSVValueIterator{
+		reader:  reader,
+		line:    0,
+		scanner: bufio.NewScanner(reader),
+	}
+}
+
+// NextValue iterates on lines of a Reader.
+// Returns io.EOF on end of iteration.
+func (c *CSVValueIterator) NextValue() (FieldValue, error) {
+	if ok := c.scanner.Scan(); ok {
+		c.line++
+		text := strings.TrimSpace(c.scanner.Text())
+		parts := strings.Split(text, ",")
+		if len(parts) < 2 {
+			return FieldValue{}, fmt.Errorf("Invalid CSV line: %d", c.line)
+		}
+		columnID, err := strconv.Atoi(parts[0])
+		if err != nil {
+			return FieldValue{}, fmt.Errorf("Invalid column ID at line: %d", c.line)
+		}
+		value, err := strconv.Atoi(parts[1])
+		if err != nil {
+			return FieldValue{}, fmt.Errorf("Invalid value at line: %d", c.line)
+		}
+		fieldValue := FieldValue{
+			ColumnID: uint64(columnID),
+			Value:    uint64(value),
+		}
+		return fieldValue, nil
+	}
+	err := c.scanner.Err()
+	if err != nil {
+		return FieldValue{}, err
+	}
+	return FieldValue{}, io.EOF
+}
+
+type valsForSort []FieldValue
+
+func (v valsForSort) Len() int {
+	return len(v)
+}
+
+func (v valsForSort) Swap(i, j int) {
+	v[i], v[j] = v[j], v[i]
+}
+
+func (v valsForSort) Less(i, j int) bool {
+	return v[i].ColumnID < v[j].ColumnID
 }

@@ -808,7 +808,8 @@ func TestExportReaderFailure(t *testing.T) {
 	sliceURIs := map[uint64]*URI{
 		0: uri,
 	}
-	reader := newExportReader(sliceURIs, frame, "standard")
+	client := NewClientWithURI(uri)
+	reader := newExportReader(client, sliceURIs, frame, "standard")
 	buf := make([]byte, 1000)
 	_, err = reader.Read(buf)
 	if err == nil {
@@ -1094,7 +1095,7 @@ func TestImportNodeFails(t *testing.T) {
 		Frame:      "bar",
 		Slice:      0,
 	}
-	err = client.importNode(importRequest)
+	err = client.importNode(uri, importRequest)
 	if err == nil {
 		t.Fatalf("importNode should fail when posting to /import fails")
 	}

@@ -4,7 +4,7 @@
 all: test
 
 cover:
-	go test -cover -tags=integration
+	go test -cover -tags=integration -coverprofile=coverage.out
 
 generate:
 	protoc --go_out=. internal/public.proto

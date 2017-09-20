@@ -17,6 +17,7 @@ Go client for Pilosa high performance distributed bitmap index.
     * Added support for creating range encoded frames.
     * Added `SetFieldValue`, `Sum` and `Xor` calls.
     * Added support for excluding bits or attributes from bitmap calls. In order to exclude bits, pass `ExcludeBits: true` in your `QueryOptions`. In order to exclude attributes, pass `ExcludeAttrs: true`.
+    * Customizable CSV time stamp format.
 
 * **v0.5.0** (2017-08-03):
     * Supports imports and exports.

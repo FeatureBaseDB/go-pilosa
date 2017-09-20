@@ -122,6 +122,8 @@ func newQueryResultFromInternal(result *internal.QueryResult) (*QueryResult, err
 		if err != nil {
 			return nil, err
 		}
+	} else {
+		bitmapResult = &BitmapResult{}
 	}
 	if result.SumCount != nil {
 		sum = result.SumCount.Sum

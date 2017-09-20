@@ -116,6 +116,40 @@ func TestClientReturnsResponse(t *testing.T) {
 	}
 }
 
+func TestResponseDefaults(t *testing.T) {
+	assertResult := func(r *QueryResult) {
+		if r.Bitmap == nil {
+			t.Fatalf("Default should be set for bitmap result")
+		}
+		if r.CountItems == nil {
+			t.Fatalf("CountItems should be set for bitmap result")
+		}
+	}
+
+	client := getClient()
+
+	frame, _ := index.Frame("defaults-frame", nil)
+	err := client.CreateFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := client.Query(frame.TopN(5), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := response.Result()
+	assertResult(result)
+
+	response, err = client.Query(frame.Bitmap(99999), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result = response.Result()
+	assertResult(result)
+
+}
+
 func TestQueryWithColumns(t *testing.T) {
 	Reset()
 	client := getClient()

@@ -38,6 +38,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Bit defines a single Pilosa bit.
@@ -56,9 +57,10 @@ type BitIterator interface {
 // Each line should contain a single bit in the following form:
 // rowID,columnID[,timestamp]
 type CSVBitIterator struct {
-	reader  io.Reader
-	line    int
-	scanner *bufio.Scanner
+	reader          io.Reader
+	line            int
+	scanner         *bufio.Scanner
+	timestampFormat string
 }
 
 // NewCSVBitIterator creates a CSVBitIterator from a Reader.
@@ -67,6 +69,15 @@ func NewCSVBitIterator(reader io.Reader) *CSVBitIterator {
 		reader:  reader,
 		line:    0,
 		scanner: bufio.NewScanner(reader),
+	}
+}
+
+func NewCSVBitIteratorWithTimestampFormat(reader io.Reader, timestampFormat string) *CSVBitIterator {
+	return &CSVBitIterator{
+		reader:          reader,
+		line:            0,
+		scanner:         bufio.NewScanner(reader),
+		timestampFormat: timeFormat,
 	}
 }
 
@@ -90,9 +101,17 @@ func (c *CSVBitIterator) NextBit() (Bit, error) {
 		}
 		timestamp := 0
 		if len(parts) == 3 {
-			timestamp, err = strconv.Atoi(parts[2])
-			if err != nil {
-				return Bit{}, fmt.Errorf("Invalid timestamp at line: %d", c.line)
+			if c.timestampFormat == "" {
+				timestamp, err = strconv.Atoi(parts[2])
+				if err != nil {
+					return Bit{}, fmt.Errorf("Invalid timestamp at line: %d", c.line)
+				}
+			} else {
+				t, err := time.Parse(c.timestampFormat, parts[2])
+				if err != nil {
+					return Bit{}, fmt.Errorf("Invalid timestamp at line: %d", c.line)
+				}
+				timestamp = int(t.Unix())
 			}
 		}
 		bit := Bit{

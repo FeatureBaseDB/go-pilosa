@@ -34,6 +34,7 @@ package pilosa_test
 
 import (
 	"errors"
+	"io"
 	"reflect"
 	"strings"
 	"testing"
@@ -44,13 +45,15 @@ import (
 func TestCSVBitIterator(t *testing.T) {
 	iterator := pilosa.NewCSVBitIterator(strings.NewReader(`1,10,683793200
 		5,20,683793300
-		3,41,683793385
-	`))
+		3,41,683793385`))
 	bits := []pilosa.Bit{}
 	for {
 		bit, err := iterator.NextBit()
-		if err != nil {
+		if err == io.EOF {
 			break
+		}
+		if err != nil {
+			t.Fatal(err)
 		}
 		bits = append(bits, bit)
 	}
@@ -64,6 +67,44 @@ func TestCSVBitIterator(t *testing.T) {
 	}
 	if !reflect.DeepEqual(target, bits) {
 		t.Fatalf("%v != %v", target, bits)
+	}
+}
+
+func TestCSVBitIteratorWithTimestampFormat(t *testing.T) {
+	format := "2014-07-16T20:55"
+	iterator := pilosa.NewCSVBitIteratorWithTimestampFormat(strings.NewReader(`1,10,1991-09-02T09:33
+		5,20,1991-09-02T09:35
+		3,41,1991-09-02T09:36`), format)
+	bits := []pilosa.Bit{}
+	for {
+		bit, err := iterator.NextBit()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		bits = append(bits, bit)
+	}
+	if len(bits) != 3 {
+		t.Fatalf("There should be 3 bits")
+	}
+	target := []pilosa.Bit{
+		{RowID: 1, ColumnID: 10, Timestamp: 683803980},
+		{RowID: 5, ColumnID: 20, Timestamp: 683804100},
+		{RowID: 3, ColumnID: 41, Timestamp: 683804160},
+	}
+	if !reflect.DeepEqual(target, bits) {
+		t.Fatalf("%v != %v", target, bits)
+	}
+}
+
+func TestCSVBitIteratorWithTimestampFormatFail(t *testing.T) {
+	format := "2014-07-16"
+	iterator := pilosa.NewCSVBitIteratorWithTimestampFormat(strings.NewReader(`1,10,X`), format)
+	_, err := iterator.NextBit()
+	if err == nil {
+		t.Fatalf("Should have failed")
 	}
 }
 

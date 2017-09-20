@@ -665,6 +665,43 @@ func TestCSVImport(t *testing.T) {
 	}
 }
 
+func TestValueCSVImport(t *testing.T) {
+	client := getClient()
+	text := `10,7
+		7,1`
+	iterator := NewCSVValueIterator(strings.NewReader(text))
+	frameOptions := &FrameOptions{}
+	frameOptions.AddIntField("foo", 0, 100)
+	frame, err := index.Frame("importvalueframe", frameOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bq := index.BatchQuery(
+		frame.SetBit(1, 10),
+		frame.SetBit(1, 7),
+	)
+	response, err := client.Query(bq, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.ImportValueFrame(frame, "foo", iterator, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err = client.Query(frame.Sum(frame.Bitmap(1), "foo"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := int64(8)
+	if target != response.Result().Sum {
+		t.Fatalf("%d != %d", target, response.Result().Sum)
+	}
+}
+
 func TestCSVExport(t *testing.T) {
 	client := getClient()
 	frame, err := index.Frame("exportframe", nil)
@@ -882,6 +919,19 @@ func TestImportBitIteratorError(t *testing.T) {
 	}
 }
 
+func TestImportValueIteratorError(t *testing.T) {
+	client := getClient()
+	frame, err := index.Frame("not-important", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	iterator := NewCSVValueIterator(&BrokenReader{})
+	err = client.ImportValueFrame(frame, "foo", iterator, 100)
+	if err == nil {
+		t.Fatalf("import value frame should fail with broken reader")
+	}
+}
+
 func TestImportFailsOnImportBitsError(t *testing.T) {
 	server := getMockServer(500, []byte{}, 0)
 	defer server.Close()
@@ -893,6 +943,20 @@ func TestImportFailsOnImportBitsError(t *testing.T) {
 	err = client.importBits("foo", "bar", 0, []Bit{})
 	if err == nil {
 		t.Fatalf("importBits should fail when fetch fragment nodes fails")
+	}
+}
+
+func TestValueImportFailsOnImportValueError(t *testing.T) {
+	server := getMockServer(500, []byte{}, 0)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	err = client.importValues("foo", "bar", 0, "foo", []FieldValue{})
+	if err == nil {
+		t.Fatalf("importValues should fail when fetch fragment nodes fails")
 	}
 }
 
@@ -916,6 +980,26 @@ func TestImportFrameFailsIfImportBitsFails(t *testing.T) {
 	}
 }
 
+func TestImportValueFrameFailsIfImportValuesFails(t *testing.T) {
+	data := []byte(`[{"host":"non-existing-domain:9999","internalHost":"10101"}]`)
+	server := getMockServer(200, data, len(data))
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	iterator := NewCSVValueIterator(strings.NewReader("10,7"))
+	frame, err := index.Frame("importframe", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.ImportValueFrame(frame, "foo", iterator, 10)
+	if err == nil {
+		t.Fatalf("ImportValueFrame should fail if importValues fails")
+	}
+}
+
 func TestImportBitsFailInvalidNodeAddress(t *testing.T) {
 	data := []byte(`[{"host":"10101:","internalHost":"doesn'tmatter"}]`)
 	server := getMockServer(200, data, len(data))
@@ -928,6 +1012,21 @@ func TestImportBitsFailInvalidNodeAddress(t *testing.T) {
 	err = client.importBits("foo", "bar", 0, []Bit{})
 	if err == nil {
 		t.Fatalf("importBits should fail on invalid node host")
+	}
+}
+
+func TestImportValuesFailInvalidNodeAddress(t *testing.T) {
+	data := []byte(`[{"host":"10101:","internalHost":"doesn'tmatter"}]`)
+	server := getMockServer(200, data, len(data))
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	err = client.importValues("foo", "bar", 0, "foo", []FieldValue{})
+	if err == nil {
+		t.Fatalf("importValues should fail on invalid node host")
 	}
 }
 

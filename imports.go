@@ -127,7 +127,7 @@ func (b bitsForSort) Less(i, j int) bool {
 	return bitCmp < 0
 }
 
-// FieldValues represents the value for a column within a
+// FieldValue represents the value for a column within a
 // range-encoded frame.
 type FieldValue struct {
 	ColumnID uint64
@@ -148,7 +148,7 @@ type CSVValueIterator struct {
 	scanner *bufio.Scanner
 }
 
-// NewCSVBitIterator creates a CSVBitIterator from a Reader.
+// NewCSVValueIterator creates a CSVValueIterator from a Reader.
 func NewCSVValueIterator(reader io.Reader) *CSVValueIterator {
 	return &CSVValueIterator{
 		reader:  reader,

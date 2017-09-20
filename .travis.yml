@@ -5,8 +5,10 @@ go:
   - master
 sudo: required
 group: deprecated-2017Q2
+services:
+  - docker
 before_install:
-  - curl -o pilosa https://storage.googleapis.com/pilosa/pilosa-sumreduce && chmod +x pilosa && ./pilosa server &
+  - docker run -d -p 10101:10101 pilosa/pilosa:v0.6.0
   - go get github.com/mattn/goveralls
   - go get -u github.com/golang/dep/cmd/dep
 addons:

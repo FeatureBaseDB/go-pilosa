@@ -49,6 +49,7 @@ import (
 )
 
 const maxHosts = 10
+const sliceWidth = 1048576
 
 // // both Content-Type and Accept headers must be set for protobuf content
 var protobufHeaders = map[string]string{
@@ -273,7 +274,6 @@ func (c *Client) Schema() (*Schema, error) {
 
 // ImportFrame imports bits from the given CSV iterator.
 func (c *Client) ImportFrame(frame *Frame, bitIterator BitIterator, batchSize uint) error {
-	const sliceWidth = 1048576
 	linesLeft := true
 	bitGroup := map[uint64][]Bit{}
 	var currentBatchSize uint
@@ -315,7 +315,6 @@ func (c *Client) ImportFrame(frame *Frame, bitIterator BitIterator, batchSize ui
 
 // ImportValueFrame imports field values from the given CSV iterator.
 func (c *Client) ImportValueFrame(frame *Frame, field string, valueIterator ValueIterator, batchSize uint) error {
-	const sliceWidth = 1048576
 	linesLeft := true
 	valGroup := map[uint64][]FieldValue{}
 	var currentBatchSize uint

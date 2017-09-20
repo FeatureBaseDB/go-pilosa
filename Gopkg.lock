@@ -7,9 +7,15 @@
   packages = ["proto"]
   revision = "888eb0692c857ec880338addf316bd662d5e630e"
 
+[[projects]]
+  name = "github.com/pkg/errors"
+  packages = ["."]
+  revision = "645ef00459ed84a119197bfb8d8205042c6df63d"
+  version = "v0.8.0"
+
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "99ae9a8db8c1345b9acbd75c1585531f802b79692c95b37f31ad73dc6c47b337"
+  inputs-digest = "6c664b4e7ef95e3c205dfe2258ebaec3838f5b8bb19a44f5f89903269ce2fa67"
   solver-name = "gps-cdcl"
   solver-version = 1

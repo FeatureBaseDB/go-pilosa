@@ -1,8 +1,12 @@
 package pilosa
 
 import (
+	"bytes"
+	"io/ioutil"
+	"net/http"
 	"reflect"
 	"testing"
+	"testing/iotest"
 )
 
 func TestNewClientFromAddresses(t *testing.T) {
@@ -52,4 +56,23 @@ func TestMakeRequestData(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected err with too large query, but got %v", resp)
 	}
+}
+
+func TestAnyError(t *testing.T) {
+	err := anyError(
+		&http.Response{StatusCode: 400,
+			Body: ioutil.NopCloser(iotest.TimeoutReader(bytes.NewBuffer([]byte("asdf"))))},
+		nil)
+	if err == nil {
+		t.Fatalf("should have gotten an error")
+	}
+
+	err = anyError(
+		&http.Response{StatusCode: 400,
+			Body: ioutil.NopCloser(bytes.NewBuffer([]byte("index already exists\n")))},
+		nil)
+	if err != ErrorIndexExists {
+		t.Fatalf("should have gotten ErrorIndexExists, but got %v", err)
+	}
+
 }

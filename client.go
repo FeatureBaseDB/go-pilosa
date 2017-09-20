@@ -475,12 +475,12 @@ func (c *Client) patchFrameTimeQuantum(frame *Frame) error {
 func (c *Client) status() (*Status, error) {
 	_, data, err := c.httpRequest("GET", "/status", nil, nil, errorCheckedResponse)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "requesting /status")
 	}
 	root := &statusRoot{}
 	err = json.Unmarshal(data, root)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "unmarshaling /status data")
 	}
 	return root.Status, nil
 }

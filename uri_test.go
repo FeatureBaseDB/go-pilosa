@@ -32,9 +32,7 @@
 
 package pilosa
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestDefaultURI(t *testing.T) {
 	uri := DefaultURI()
@@ -76,7 +74,7 @@ func TestURIFromAddress(t *testing.T) {
 func TestInvalidAddress(t *testing.T) {
 	var uri *URI
 	var err error
-	addresses := []string{"foo:bar", "http://foo:", "foo:", ":bar"}
+	addresses := []string{"foo:bar", "http://foo:", "foo:", ":bar", "http://pilosa.com:129999999999999999999999993"}
 	for _, addr := range addresses {
 		uri, err = NewURIFromAddress(addr)
 		if uri != nil || err == nil {

@@ -690,7 +690,7 @@ func (options *ClientOptions) withDefaults() (updated *ClientOptions) {
 	*updated = *options
 	// impose defaults
 	if updated.SocketTimeout <= 0 {
-		updated.SocketTimeout = time.Second * 10000
+		updated.SocketTimeout = time.Second * 300
 	}
 	if updated.ConnectTimeout <= 0 {
 		updated.ConnectTimeout = time.Second * 60

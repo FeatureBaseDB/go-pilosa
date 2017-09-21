@@ -929,6 +929,54 @@ func TestRangeFrame(t *testing.T) {
 	}
 }
 
+func TestCreateIntField(t *testing.T) {
+	client := getClient()
+	options := &FrameOptions{RangeEnabled: true}
+	frame, _ := index.Frame("rangeframe-addfield", options)
+	err := client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.CreateIntField(frame, "foo", 10, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.Query(index.BatchQuery(
+		frame.SetBit(1, 10),
+		frame.SetBit(1, 100),
+		frame.SetIntFieldValue(10, "foo", 11),
+		frame.SetIntFieldValue(100, "foo", 15),
+	), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := client.Query(frame.Sum(frame.Bitmap(1), "foo"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Result().Sum != 26 {
+		t.Fatalf("Sum 26 != %d", resp.Result().Sum)
+	}
+	if resp.Result().Count != 2 {
+		t.Fatalf("Count 2 != %d", resp.Result().Count)
+	}
+}
+
+func TestDeleteField(t *testing.T) {
+	client := getClient()
+	options := &FrameOptions{}
+	options.AddIntField("foo", 10, 20)
+	frame, _ := index.Frame("rangeframe-deletefield", options)
+	err := client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.DeleteField(frame, "foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestExcludeAttrsBits(t *testing.T) {
 	client := getClient()
 	frame, _ := index.Frame("excludebitsattrsframe", nil)
@@ -1233,6 +1281,36 @@ func TestFetchViewsUnmarshalFails(t *testing.T) {
 	client := NewClientWithURI(uri)
 	frame, _ := index.Frame("viewfail", nil)
 	_, err = client.Views(frame)
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
+func TestCreateIntFieldFails(t *testing.T) {
+	server := getMockServer(404, nil, 0)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	frame, _ := index.Frame("rangeframe-addfield", nil)
+	err = client.CreateIntField(frame, "foo", 10, 20)
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
+func TestDeleteFieldFails(t *testing.T) {
+	server := getMockServer(404, nil, 0)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	frame, _ := index.Frame("rangeframe-deletefield", nil)
+	err = client.DeleteField(frame, "foo")
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}

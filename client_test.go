@@ -55,3 +55,13 @@ func TestQueryWithError(t *testing.T) {
 		t.Fatalf("Should have failed")
 	}
 }
+
+func TestCreateIntFieldWithInvalidName(t *testing.T) {
+	client := pilosa.DefaultClient()
+	index, _ := pilosa.NewIndex("foo", nil)
+	frame, _ := index.Frame("foo", nil)
+	err := client.CreateIntField(frame, "??invalid$$", 10, 20)
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}

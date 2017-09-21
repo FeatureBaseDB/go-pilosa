@@ -33,11 +33,12 @@
 package pilosa
 
 import (
-	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 var addressRegexp = regexp.MustCompile("^(([+a-z]+):\\/\\/)?([0-9a-z.-]+)?(:([0-9]+))?$")
@@ -135,12 +136,15 @@ func parseAddress(address string) (uri *URI, err error) {
 	}
 	var port = 10101
 	if m[5] != "" {
-		port, _ = strconv.Atoi(m[5])
+		port, err = strconv.Atoi(m[5])
+		if err != nil {
+			return nil, errors.Wrap(err, "converting port string to int")
+		}
 	}
 	uri = &URI{
 		scheme: scheme,
 		host:   host,
 		port:   uint16(port),
 	}
-	return
+	return uri, nil
 }

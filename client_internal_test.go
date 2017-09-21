@@ -1,8 +1,12 @@
 package pilosa
 
 import (
+	"bytes"
+	"io/ioutil"
+	"net/http"
 	"reflect"
 	"testing"
+	"testing/iotest"
 )
 
 func TestNewClientFromAddresses(t *testing.T) {
@@ -35,4 +39,40 @@ func TestNewClientFromAddresses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Got error when creating empty client from addresses: %v", err)
 	}
+}
+
+func TestMakeRequestData(t *testing.T) {
+	q := make([]byte, 2<<30)
+	q[0] = 'a'
+	p := PQLBaseQuery{
+		pql: string(q),
+	}
+	uri, err := NewURIFromAddress("localhost:10101")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cli := NewClientWithURI(uri)
+	resp, err := cli.Query(&p, nil)
+	if err == nil {
+		t.Fatalf("expected err with too large query, but got %v", resp)
+	}
+}
+
+func TestAnyError(t *testing.T) {
+	err := anyError(
+		&http.Response{StatusCode: 400,
+			Body: ioutil.NopCloser(iotest.TimeoutReader(bytes.NewBuffer([]byte("asdf"))))},
+		nil)
+	if err == nil {
+		t.Fatalf("should have gotten an error")
+	}
+
+	err = anyError(
+		&http.Response{StatusCode: 400,
+			Body: ioutil.NopCloser(bytes.NewBuffer([]byte("index already exists\n")))},
+		nil)
+	if err != ErrorIndexExists {
+		t.Fatalf("should have gotten ErrorIndexExists, but got %v", err)
+	}
+
 }

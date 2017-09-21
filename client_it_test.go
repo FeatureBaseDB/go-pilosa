@@ -411,6 +411,16 @@ func TestQueryWithEmptyClusterFails(t *testing.T) {
 	}
 }
 
+func TestMaxHostsFail(t *testing.T) {
+	uri, _ := NewURIFromAddress("does-not-resolve.foo.bar")
+	cluster := NewClusterWithHost(uri, uri, uri, uri)
+	client := NewClientWithCluster(cluster, nil)
+	_, err := client.Query(index.RawQuery("foo"), nil)
+	if err != ErrorTriedMaxHosts {
+		t.Fatalf("ErrorTriedMaxHosts error should be returned")
+	}
+}
+
 func TestQueryInverseBitmap(t *testing.T) {
 	client := getClient()
 	options := &FrameOptions{
@@ -808,7 +818,29 @@ func TestExportReaderFailure(t *testing.T) {
 	sliceURIs := map[uint64]*URI{
 		0: uri,
 	}
-	reader := newExportReader(sliceURIs, frame, "standard")
+	client := NewClientWithURI(uri)
+	reader := newExportReader(client, sliceURIs, frame, "standard")
+	buf := make([]byte, 1000)
+	_, err = reader.Read(buf)
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func TestExportReaderReadBodyFailure(t *testing.T) {
+	server := getMockServer(200, []byte("not important"), 100)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	frame, err := index.Frame("exportframe", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sliceURIs := map[uint64]*URI{0: uri}
+	client := NewClientWithURI(uri)
+	reader := newExportReader(client, sliceURIs, frame, "standard")
 	buf := make([]byte, 1000)
 	_, err = reader.Read(buf)
 	if err == nil {
@@ -1094,9 +1126,24 @@ func TestImportNodeFails(t *testing.T) {
 		Frame:      "bar",
 		Slice:      0,
 	}
-	err = client.importNode(importRequest)
+	err = client.importNode(uri, importRequest)
 	if err == nil {
 		t.Fatalf("importNode should fail when posting to /import fails")
+	}
+}
+
+func TestImportNodeProtobufMarshalFails(t *testing.T) {
+	// even though this function isn't really an integration test,
+	// it needs to access importNode which is not
+	// available to client_test.go
+	client := getClient()
+	uri, err := NewURIFromAddress("http://does-not-matter.foo.bar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.importNode(uri, nil)
+	if err == nil {
+		t.Fatalf("Should have failed")
 	}
 }
 
@@ -1224,24 +1271,6 @@ func TestStatusToNodeSlicesForIndex(t *testing.T) {
 		}
 	} else {
 		t.Fatalf("slice map should have the correct slice")
-	}
-}
-
-func TestClientCache(t *testing.T) {
-	// even though this function isn't really an integration test,
-	// it needs to access getDirectClient which is not
-	// available to client_test.go
-	client := DefaultClient()
-	client2, err := client.getDirectClient("foo.bar:10101")
-	if err != nil {
-		t.Fatal(err)
-	}
-	client3, err := client.getDirectClient("foo.bar:10101")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if client2 != client3 {
-		t.Fatal("Should return the same client for the same host")
 	}
 }
 

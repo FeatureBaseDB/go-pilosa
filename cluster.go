@@ -72,7 +72,7 @@ func (c *Cluster) AddHost(address *URI) {
 
 // Host returns a host in the cluster.
 func (c *Cluster) Host() *URI {
-	c.mutex.RLock()
+	c.mutex.Lock()
 	var host *URI
 	for i, _ := range c.okList {
 		idx := (i + c.lastHostIdx) % len(c.okList)
@@ -82,8 +82,8 @@ func (c *Cluster) Host() *URI {
 			break
 		}
 	}
-	c.mutex.RUnlock()
 	c.lastHostIdx++
+	c.mutex.Unlock()
 	if host != nil {
 		return host
 	}

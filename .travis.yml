@@ -5,10 +5,9 @@ go:
   - master
 sudo: required
 group: deprecated-2017Q2
-services:
-  - docker
 before_install:
-  - docker run -d -p 10101:10101 pilosa/pilosa:v0.6.0
+  - wget https://s3.amazonaws.com/build.pilosa.com/pilosa-master-linux-amd64.tar.gz && tar xf pilosa-master-linux-amd64.tar.gz
+  - ./pilosa-master-linux-amd64/pilosa server &
   - go get github.com/mattn/goveralls
   - go get -u github.com/golang/dep/cmd/dep
 addons:

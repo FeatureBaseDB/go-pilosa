@@ -38,9 +38,10 @@ import (
 
 // Cluster contains hosts in a Pilosa cluster.
 type Cluster struct {
-	hosts  []*URI
-	okList []bool
-	mutex  *sync.RWMutex
+	hosts       []*URI
+	okList      []bool
+	mutex       *sync.RWMutex
+	lastHostIdx int
 }
 
 // DefaultCluster returns the default Cluster.
@@ -71,15 +72,18 @@ func (c *Cluster) AddHost(address *URI) {
 
 // Host returns a host in the cluster.
 func (c *Cluster) Host() *URI {
-	c.mutex.RLock()
+	c.mutex.Lock()
 	var host *URI
-	for i, ok := range c.okList {
+	for i, _ := range c.okList {
+		idx := (i + c.lastHostIdx) % len(c.okList)
+		ok := c.okList[idx]
 		if ok {
-			host = c.hosts[i]
+			host = c.hosts[idx]
 			break
 		}
 	}
-	c.mutex.RUnlock()
+	c.lastHostIdx++
+	c.mutex.Unlock()
 	if host != nil {
 		return host
 	}

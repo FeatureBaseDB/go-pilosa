@@ -404,6 +404,7 @@ type FrameOptions struct {
 	InverseEnabled bool
 	CacheType      CacheType
 	CacheSize      uint
+	RangeEnabled   bool
 	fields         map[string]RangeField
 }
 
@@ -437,6 +438,9 @@ func (options FrameOptions) String() string {
 	if options.CacheSize != 0 {
 		mopt["cacheSize"] = options.CacheSize
 	}
+	if options.RangeEnabled {
+		mopt["rangeEnabled"] = true
+	}
 	if len(options.fields) > 0 {
 		mopt["rangeEnabled"] = true
 		fields := make([]RangeField, 0, len(options.fields))
@@ -450,22 +454,14 @@ func (options FrameOptions) String() string {
 
 // AddIntField adds an integer field to the frame options
 func (options *FrameOptions) AddIntField(name string, min int, max int) error {
-	err := validateLabel(name)
+	field, err := newIntRangeField(name, min, max)
 	if err != nil {
 		return err
-	}
-	if max <= min {
-		return errors.New("Max should be greater than min for int fields")
 	}
 	if options.fields == nil {
 		options.fields = map[string]RangeField{}
 	}
-	options.fields[name] = map[string]interface{}{
-		"name": name,
-		"type": "int",
-		"min":  min,
-		"max":  max,
-	}
+	options.fields[name] = field
 	return nil
 }
 
@@ -682,6 +678,22 @@ const (
 
 // RangeField represents a single field
 type RangeField map[string]interface{}
+
+func newIntRangeField(name string, min int, max int) (RangeField, error) {
+	err := validateLabel(name)
+	if err != nil {
+		return nil, err
+	}
+	if max <= min {
+		return nil, errors.New("Max should be greater than min for int fields")
+	}
+	return map[string]interface{}{
+		"name": name,
+		"type": "int",
+		"min":  min,
+		"max":  max,
+	}, nil
+}
 
 func encodeMap(m map[string]interface{}) string {
 	result, err := json.Marshal(m)

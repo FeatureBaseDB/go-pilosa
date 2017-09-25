@@ -45,17 +45,31 @@ Usage:
 	// Create a Client instance
 	client := pilosa.DefaultClient()
 
-	// Create an Index instance
-	index, err := NewIndex("repository", nil)
+	// Create a Schema instance
+	schema, err := client.Schema()
 	if err != nil {
 		panic(err)
 	}
 
+	// Create an Index instance
+	index, err := schema.Index("repository", nil)
+	if err != nil {
+		panic(err)
+	}
+
+	// Create a Frame instance
 	stargazer, err := index.Frame("stargazer", nil)
 	if err != nil {
 		panic(err)
 	}
 
+	// Sync the schema with the server-side, so non-existing indexes/frames are created on the server-side.
+	err = client.SyncSchema(schema)
+	if err != nil {
+		panic(err)
+	}
+
+	// Execute a query
 	response, err := client.Query(stargazer.Bitmap(5), nil)
 	if err != nil {
 		panic(err)

@@ -201,6 +201,7 @@ func (q *PQLBatchQuery) Add(query PQLQuery) {
 }
 
 // IndexOptions contains options to customize Index structs and column queries.
+// *Deprecation*: `ColumnLabel` field is deprecated and will be removed in a future release.
 type IndexOptions struct {
 	ColumnLabel string
 	TimeQuantum TimeQuantum
@@ -396,6 +397,7 @@ type FrameInfo struct {
 }
 
 // FrameOptions contains options to customize Frame objects and frame queries.
+// *Deprecation*: `RowLabel` field is deprecated and will be removed in a future release.
 type FrameOptions struct {
 	RowLabel string
 	// If a Frame has a time quantum, then Views are generated for each of the defined time segments.

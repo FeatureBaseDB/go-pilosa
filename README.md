@@ -13,11 +13,12 @@ Go client for Pilosa high performance distributed bitmap index.
 ## Change Log
 
 * **Next**:
-    * Dropped support for Go 1.7
+    * Dropped support for Go 1.7.
     * Added support for creating range encoded frames.
     * Added `SetFieldValue`, `Sum` and `Xor` calls.
     * Added support for excluding bits or attributes from bitmap calls. In order to exclude bits, pass `ExcludeBits: true` in your `QueryOptions`. In order to exclude attributes, pass `ExcludeAttrs: true`.
-    * Customizable CSV time stamp format.
+    * Customizable CSV timestamp format.
+    * **Deprecation** Row and column labels are deprecated, and will be removed in a future release of this library. Do not use `ColumnLabel` option for `IndexOptions` and `RowLabel` for `FrameOption`. See: https://github.com/pilosa/pilosa/issues/752 for more info.
 
 * **v0.5.0** (2017-08-03):
     * Supports imports and exports.
@@ -37,8 +38,8 @@ Go client for Pilosa high performance distributed bitmap index.
     * Inverse enabled status of frames is not checked on the client side.
 
 * **v0.3.1** (2017-05-01):
-    * Initial version
-    * Supports Pilosa Server v0.3.1
+    * Initial version.
+    * Supports Pilosa Server v0.3.1.
 
 ## Requirements
 
@@ -122,18 +123,17 @@ schema := NewSchema()
 repository, err := NewIndex("repository", nil)
 ```
 
-Indexes support changing the column label and time quantum. In order to apply these custom options, pass an `IndexOptions` struct as the second argument to `NewIndex`:
+Indexes support changing the time quantum. In order to apply these custom options, pass an `IndexOptions` struct as the second argument to `NewIndex`:
 
 ```go
 options := &pilosa.IndexOptions{
-    ColumnLabel: "repo_id",
     TimeQuantum: TimeQuantumYearMonth,
 }
 
 repository, err := schema.Index("repository", options);
 ```
 
-Frames definitions are created with a call to `Frame` function of an index:
+Frame definitions are created with a call to `Frame` function of an index:
 
 ```go
 stargazer, err := repository.Frame("stargazer", nil)
@@ -143,7 +143,7 @@ Similar to index objects, you can pass custom options to frames:
 
 ```go
 stargazerOptions, err := &pilosa.FrameOptions{
-    RowLabel: "stargazer_id",
+    InverseEnabled: true,
     TimeQuantum: TimeQuantumYearMonthDay,
 }
 
@@ -157,7 +157,7 @@ Once you have indexes and frame structs created, you can create queries for them
 For instance, `Bitmap` queries work on rows; use a frame object to create those queries:
 
 ```go
-bitmapQuery := stargazer.Bitmap(1, 100)  // corresponds to PQL: Bitmap(frame='stargazer', stargazer_id=1)
+bitmapQuery := stargazer.Bitmap(1, 100)  // corresponds to PQL: Bitmap(frame='stargazer', row=1)
 ```
 
 `Union` queries work on columns; use the index object to create them:
@@ -166,7 +166,7 @@ bitmapQuery := stargazer.Bitmap(1, 100)  // corresponds to PQL: Bitmap(frame='st
 query := repository.Union(bitmapQuery1, bitmapQuery2)
 ```
 
-In order to increase througput, you may want to batch queries sent to the Pilosa server. The `index.BatchQuery` function is used for that purpose:
+In order to increase throughput, you may want to batch queries sent to the Pilosa server. The `index.BatchQuery` function is used for that purpose:
 
 ```go
 query := repository.BatchQuery(
@@ -178,7 +178,7 @@ query := repository.BatchQuery(
 The recommended way of creating query structs is, using dedicated methods attached to index and frame objects. But sometimes it would be desirable to send raw queries to Pilosa. You can use `index.RawQuery` method for that. Note that query string is not validated before sending to the server:
 
 ```go
-query := repository.RawQuery("Bitmap(frame='stargazer', stargazer_id=5)")
+query := repository.RawQuery("Bitmap(frame='stargazer', row=5)")
 ```
 
 Please check [Pilosa documentation](https://www.pilosa.com/docs) for PQL details. Here is a list of methods corresponding to PQL calls:

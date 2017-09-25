@@ -18,7 +18,7 @@ Go client for Pilosa high performance distributed bitmap index.
     * Added `SetFieldValue`, `Sum` and `Xor` calls.
     * Added support for excluding bits or attributes from bitmap calls. In order to exclude bits, pass `ExcludeBits: true` in your `QueryOptions`. In order to exclude attributes, pass `ExcludeAttrs: true`.
     * Customizable CSV timestamp format.
-    * **Deprecation** Row and column labels are deprecated, and will be removed in a future release of this library. Do not use `ColumnLabel` option for `IndexOptions` and `RowLabel` for `FrameOption`. See: https://github.com/pilosa/pilosa/issues/752 for more info.
+    * **Deprecation** Row and column labels are deprecated, and will be removed in a future release of this library. Do not use `ColumnLabel` option for `IndexOptions` and `RowLabel` for `FrameOption` for new code. See: https://github.com/pilosa/pilosa/issues/752 for more info.
 
 * **v0.5.0** (2017-08-03):
     * Supports imports and exports.

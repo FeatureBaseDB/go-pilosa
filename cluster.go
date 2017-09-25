@@ -74,7 +74,7 @@ func (c *Cluster) AddHost(address *URI) {
 func (c *Cluster) Host() *URI {
 	c.mutex.Lock()
 	var host *URI
-	for i, _ := range c.okList {
+	for i := range c.okList {
 		idx := (i + c.lastHostIdx) % len(c.okList)
 		ok := c.okList[idx]
 		if ok {

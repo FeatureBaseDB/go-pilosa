@@ -72,6 +72,7 @@ func NewCSVBitIterator(reader io.Reader) *CSVBitIterator {
 	}
 }
 
+// NewCSVBitIteratorWithTimestampFormat creates a CSVBitIterator from a Reader with a custom timestamp format.
 func NewCSVBitIteratorWithTimestampFormat(reader io.Reader, timestampFormat string) *CSVBitIterator {
 	return &CSVBitIterator{
 		reader:          reader,

@@ -336,6 +336,55 @@ func TestTopN(t *testing.T) {
 		sampleFrame.InverseFilterFieldTopN(12, nil, "category", 80, 81))
 }
 
+func TestFieldLT(t *testing.T) {
+	comparePQL(t,
+		"Range(frame='sample-frame', foo < 10)",
+		sampleFrame.Field("foo").LT(10))
+}
+
+func TestFieldLTE(t *testing.T) {
+	comparePQL(t,
+		"Range(frame='sample-frame', foo <= 10)",
+		sampleFrame.Field("foo").LTE(10))
+}
+
+func TestFieldGT(t *testing.T) {
+	comparePQL(t,
+		"Range(frame='sample-frame', foo > 10)",
+		sampleFrame.Field("foo").GT(10))
+}
+
+func TestFieldGTE(t *testing.T) {
+	comparePQL(t,
+		"Range(frame='sample-frame', foo >= 10)",
+		sampleFrame.Field("foo").GTE(10))
+}
+
+func TestFieldBetween(t *testing.T) {
+	comparePQL(t,
+		"Range(frame='sample-frame', foo >< [10,20])",
+		sampleFrame.Field("foo").Between(10, 20))
+}
+
+func TestFieldSum(t *testing.T) {
+	comparePQL(t,
+		"Sum(Bitmap(rowID=10, frame='sample-frame'), frame='sample-frame', field='foo')",
+		sampleFrame.Field("foo").Sum(sampleFrame.Bitmap(10)))
+}
+
+func TestFieldBSetIntValue(t *testing.T) {
+	comparePQL(t,
+		"SetFieldValue(frame='sample-frame', columnID=10, foo=20)",
+		sampleFrame.Field("foo").SetIntValue(10, 20))
+}
+
+func TestFieldInvalidName(t *testing.T) {
+	q := sampleFrame.Field("??foo").LT(10)
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+}
+
 func TestFilterFieldTopNInvalidField(t *testing.T) {
 	q := sampleFrame.FilterFieldTopN(12, collabFrame.Bitmap(7), "$invalid$", 80, 81)
 	if q.Error() == nil {

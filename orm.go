@@ -302,11 +302,8 @@ func (d *Index) Frame(name string, options *FrameOptions) (*Frame, error) {
 	if err := validateLabel(options.RowLabel); err != nil {
 		return nil, err
 	}
-	frame := &Frame{
-		name:    name,
-		index:   d,
-		options: options,
-	}
+	frame := newFrame(name, d)
+	frame.options = options
 	d.frames[name] = frame
 	return frame, nil
 }
@@ -407,7 +404,7 @@ type FrameOptions struct {
 	CacheType      CacheType
 	CacheSize      uint
 	RangeEnabled   bool
-	fields         map[string]RangeField
+	fields         map[string]rangeField
 }
 
 func (options *FrameOptions) withDefaults() (updated *FrameOptions) {
@@ -419,7 +416,7 @@ func (options *FrameOptions) withDefaults() (updated *FrameOptions) {
 		updated.RowLabel = "rowID"
 	}
 	if updated.fields == nil {
-		updated.fields = map[string]RangeField{}
+		updated.fields = map[string]rangeField{}
 	}
 	return
 }
@@ -445,7 +442,7 @@ func (options FrameOptions) String() string {
 	}
 	if len(options.fields) > 0 {
 		mopt["rangeEnabled"] = true
-		fields := make([]RangeField, 0, len(options.fields))
+		fields := make([]rangeField, 0, len(options.fields))
 		for _, field := range options.fields {
 			fields = append(fields, field)
 		}
@@ -461,7 +458,7 @@ func (options *FrameOptions) AddIntField(name string, min int, max int) error {
 		return err
 	}
 	if options.fields == nil {
-		options.fields = map[string]RangeField{}
+		options.fields = map[string]rangeField{}
 	}
 	options.fields[name] = field
 	return nil
@@ -474,6 +471,16 @@ type Frame struct {
 	name    string
 	index   *Index
 	options *FrameOptions
+	fields  map[string]*RangeField
+}
+
+func newFrame(name string, index *Index) *Frame {
+	return &Frame{
+		name:    name,
+		index:   index,
+		options: &FrameOptions{},
+		fields:  make(map[string]*RangeField),
+	}
 }
 
 // Name returns the name of the frame
@@ -482,12 +489,9 @@ func (f *Frame) Name() string {
 }
 
 func (f *Frame) copy() *Frame {
-	frame := &Frame{
-		name:    f.name,
-		index:   f.index,
-		options: &FrameOptions{},
-	}
+	frame := newFrame(f.name, f.index)
 	*frame.options = *f.options
+	// don't bother with copying the fields.
 	return frame
 }
 
@@ -618,19 +622,28 @@ func (f *Frame) SetRowAttrs(rowID uint64, attrs map[string]interface{}) *PQLBase
 
 // Sum creates a Sum query.
 // The corresponding frame should include the field in its options.
+// *Deprecated* Use `frame.Sum(bitmap)` instead.
 func (f *Frame) Sum(bitmap *PQLBitmapQuery, field string) *PQLBaseQuery {
-	return f.rangeQuery("Sum", bitmap, field)
+	return f.Field(field).Sum(bitmap)
 }
 
 // SetIntFieldValue creates a SetFieldValue query.
+// *Deprecated* Use `frame.SetIntValue(columnID, value)` instead.
 func (f *Frame) SetIntFieldValue(columnID uint64, field string, value int) *PQLBaseQuery {
-	qry := fmt.Sprintf("SetFieldValue(frame='%s', %s=%d, %s=%d)", f.name, f.index.options.ColumnLabel, columnID, field, value)
-	return NewPQLBaseQuery(qry, f.index, nil)
+	return f.Field(field).SetIntValue(columnID, value)
 }
 
-func (f *Frame) rangeQuery(call string, bitmap *PQLBitmapQuery, field string) *PQLBaseQuery {
-	qry := fmt.Sprintf("%s(%s, frame='%s', field='%s')", call, bitmap.serialize(), f.name, field)
-	return NewPQLBaseQuery(qry, f.index, nil)
+// Field returns a field to operate on.
+func (f *Frame) Field(name string) *RangeField {
+	field := f.fields[name]
+	if field == nil {
+		field = newRangeField(f, name)
+		// do not cache fields with error
+		if field.err == nil {
+			f.fields[name] = field
+		}
+	}
+	return field
 }
 
 func createAttributesString(attrs map[string]interface{}) (string, error) {
@@ -678,10 +691,11 @@ const (
 	CacheTypeRanked  CacheType = "ranked"
 )
 
-// RangeField represents a single field
-type RangeField map[string]interface{}
+// rangeField represents a single field.
+// TODO: rename.
+type rangeField map[string]interface{}
 
-func newIntRangeField(name string, min int, max int) (RangeField, error) {
+func newIntRangeField(name string, min int, max int) (rangeField, error) {
 	err := validateLabel(name)
 	if err != nil {
 		return nil, err
@@ -695,6 +709,67 @@ func newIntRangeField(name string, min int, max int) (RangeField, error) {
 		"min":  min,
 		"max":  max,
 	}, nil
+}
+
+// RangeField enables writing queries for range encoded fields.
+type RangeField struct {
+	frame *Frame
+	name  string
+	err   error
+}
+
+func newRangeField(frame *Frame, name string) *RangeField {
+	err := validateLabel(name)
+	return &RangeField{
+		frame: frame,
+		name:  name,
+		err:   err,
+	}
+}
+
+// LT creates a less than query.
+func (field *RangeField) LT(n int) *PQLBitmapQuery {
+	return field.binaryOperation("<", n)
+}
+
+// LTE creates a less than or equal query.
+func (field *RangeField) LTE(n int) *PQLBitmapQuery {
+	return field.binaryOperation("<=", n)
+}
+
+// GT creates a greater than query.
+func (field *RangeField) GT(n int) *PQLBitmapQuery {
+	return field.binaryOperation(">", n)
+}
+
+// GTE creates a greater than or equal query.
+func (field *RangeField) GTE(n int) *PQLBitmapQuery {
+	return field.binaryOperation(">=", n)
+}
+
+// Between creates a between query.
+func (field *RangeField) Between(a int, b int) *PQLBitmapQuery {
+	qry := fmt.Sprintf("Range(frame='%s', %s >< [%d,%d])", field.frame.name, field.name, a, b)
+	return NewPQLBitmapQuery(qry, field.frame.index, field.err)
+}
+
+// Sum creates a sum query.
+func (field *RangeField) Sum(bitmap *PQLBitmapQuery) *PQLBaseQuery {
+	qry := fmt.Sprintf("Sum(%s, frame='%s', field='%s')", bitmap.serialize(), field.frame.name, field.name)
+	return NewPQLBaseQuery(qry, field.frame.index, field.err)
+}
+
+// SetIntValue creates a SetValue query.
+func (field *RangeField) SetIntValue(columnID uint64, value int) *PQLBaseQuery {
+	index := field.frame.index
+	qry := fmt.Sprintf("SetFieldValue(frame='%s', %s=%d, %s=%d)",
+		field.frame.name, index.options.ColumnLabel, columnID, field.name, value)
+	return NewPQLBaseQuery(qry, index, nil)
+}
+
+func (field *RangeField) binaryOperation(op string, n int) *PQLBitmapQuery {
+	qry := fmt.Sprintf("Range(frame='%s', %s %s %d)", field.frame.name, field.name, op, n)
+	return NewPQLBitmapQuery(qry, field.frame.index, field.err)
 }
 
 func encodeMap(m map[string]interface{}) string {

@@ -927,6 +927,17 @@ func TestRangeFrame(t *testing.T) {
 	if resp.Result().Count != 2 {
 		t.Fatalf("Count 2 != %d", resp.Result().Count)
 	}
+
+	resp, err = client.Query(frame.Field("foo").LT(15), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Result().Bitmap.Bits) != 1 {
+		t.Fatalf("Count 1 != %d", len(resp.Result().Bitmap.Bits))
+	}
+	if resp.Result().Bitmap.Bits[0] != 10 {
+		t.Fatalf("Bit 10 != %d", resp.Result().Bitmap.Bits[0])
+	}
 }
 
 func TestCreateIntField(t *testing.T) {

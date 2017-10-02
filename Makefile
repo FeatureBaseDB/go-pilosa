@@ -7,7 +7,7 @@ cover:
 	go test -cover -tags=integration
 
 generate:
-	protoc --go_out=. internal/public.proto
+	protoc --go_out=. gopilosa_pbuf/public.proto
 
 test:
 	go test

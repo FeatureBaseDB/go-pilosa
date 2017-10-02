@@ -36,7 +36,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/pilosa/go-pilosa/internal"
+	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
 )
 
 func TestNewBitmapResultFromInternal(t *testing.T) {
@@ -47,13 +47,13 @@ func TestNewBitmapResultFromInternal(t *testing.T) {
 		"height":     1.83,
 	}
 	targetBits := []uint64{5, 10}
-	attrs := []*internal.Attr{
+	attrs := []*pbuf.Attr{
 		{Key: "name", StringValue: "some string", Type: 1},
 		{Key: "age", IntValue: 95, Type: 2},
 		{Key: "registered", BoolValue: true, Type: 3},
 		{Key: "height", FloatValue: 1.83, Type: 4},
 	}
-	bitmap := &internal.Bitmap{
+	bitmap := &pbuf.Bitmap{
 		Attrs: attrs,
 		Bits:  []uint64{5, 10},
 	}
@@ -81,21 +81,21 @@ func TestNewQueryResponseFromInternal(t *testing.T) {
 	targetCountItems := []*CountResultItem{
 		{ID: 10, Count: 100},
 	}
-	attrs := []*internal.Attr{
+	attrs := []*pbuf.Attr{
 		{Key: "name", StringValue: "some string", Type: 1},
 		{Key: "age", IntValue: 95, Type: 2},
 		{Key: "registered", BoolValue: true, Type: 3},
 		{Key: "height", FloatValue: 1.83, Type: 4},
 	}
-	bitmap := &internal.Bitmap{
+	bitmap := &pbuf.Bitmap{
 		Attrs: attrs,
 		Bits:  []uint64{5, 10},
 	}
-	pairs := []*internal.Pair{
+	pairs := []*pbuf.Pair{
 		{Key: 10, Count: 100},
 	}
-	response := &internal.QueryResponse{
-		Results: []*internal.QueryResult{
+	response := &pbuf.QueryResponse{
+		Results: []*pbuf.QueryResult{
 			{Bitmap: bitmap},
 			{Pairs: pairs},
 		},
@@ -131,7 +131,7 @@ func TestNewQueryResponseFromInternal(t *testing.T) {
 }
 
 func TestNewQueryResponseWithErrorFromInternal(t *testing.T) {
-	response := &internal.QueryResponse{
+	response := &pbuf.QueryResponse{
 		Err: "some error",
 	}
 	qr, err := newQueryResponseFromInternal(response)
@@ -150,21 +150,21 @@ func TestNewQueryResponseWithErrorFromInternal(t *testing.T) {
 }
 
 func TestNewQueryResponseFromInternalFailure(t *testing.T) {
-	attrs := []*internal.Attr{
+	attrs := []*pbuf.Attr{
 		{Key: "name", StringValue: "some string", Type: 99},
 	}
-	bitmap := &internal.Bitmap{
+	bitmap := &pbuf.Bitmap{
 		Attrs: attrs,
 	}
-	response := &internal.QueryResponse{
-		Results: []*internal.QueryResult{{Bitmap: bitmap}},
+	response := &pbuf.QueryResponse{
+		Results: []*pbuf.QueryResult{{Bitmap: bitmap}},
 	}
 	qr, err := newQueryResponseFromInternal(response)
 	if qr != nil && err == nil {
 		t.Fatalf("Should have failed")
 	}
-	response = &internal.QueryResponse{
-		ColumnAttrSets: []*internal.ColumnAttrSet{{ID: 1, Attrs: attrs}},
+	response = &pbuf.QueryResponse{
+		ColumnAttrSets: []*pbuf.ColumnAttrSet{{ID: 1, Attrs: attrs}},
 	}
 	qr, err = newQueryResponseFromInternal(response)
 	if qr != nil && err == nil {

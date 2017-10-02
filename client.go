@@ -34,6 +34,7 @@ package pilosa
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -616,6 +617,7 @@ func newHTTPClient(options *ClientOptions) *http.Client {
 		Dial: (&net.Dialer{
 			Timeout: options.ConnectTimeout,
 		}).Dial,
+		TLSClientConfig:     options.TLSConfig,
 		MaxIdleConnsPerHost: options.PoolSizePerRoute,
 		MaxIdleConns:        options.TotalPoolSize,
 	}
@@ -712,6 +714,7 @@ type ClientOptions struct {
 	ConnectTimeout   time.Duration
 	PoolSizePerRoute int
 	TotalPoolSize    int
+	TLSConfig        *tls.Config
 }
 
 func (options *ClientOptions) withDefaults() (updated *ClientOptions) {
@@ -730,6 +733,9 @@ func (options *ClientOptions) withDefaults() (updated *ClientOptions) {
 	}
 	if updated.TotalPoolSize <= 100 {
 		updated.TotalPoolSize = 100
+	}
+	if updated.TLSConfig == nil {
+		updated.TLSConfig = &tls.Config{}
 	}
 	return
 }

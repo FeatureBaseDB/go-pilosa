@@ -35,7 +35,7 @@ package pilosa
 import (
 	"errors"
 
-	"github.com/pilosa/go-pilosa/internal"
+	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
 )
 
 // QueryResponse represents the response from a Pilosa query.
@@ -46,7 +46,7 @@ type QueryResponse struct {
 	Success      bool           `json:"success,omitempty"`
 }
 
-func newQueryResponseFromInternal(response *internal.QueryResponse) (*QueryResponse, error) {
+func newQueryResponseFromInternal(response *pbuf.QueryResponse) (*QueryResponse, error) {
 	if response.Err != "" {
 		return &QueryResponse{
 			ErrorMessage: response.Err,
@@ -111,7 +111,7 @@ type QueryResult struct {
 	Sum        int64              `json:"sum,omitempty"`
 }
 
-func newQueryResultFromInternal(result *internal.QueryResult) (*QueryResult, error) {
+func newQueryResultFromInternal(result *pbuf.QueryResult) (*QueryResult, error) {
 	var bitmapResult *BitmapResult
 	var err error
 	var sum int64
@@ -145,7 +145,7 @@ type CountResultItem struct {
 	Count uint64
 }
 
-func countItemsFromInternal(items []*internal.Pair) []*CountResultItem {
+func countItemsFromInternal(items []*pbuf.Pair) []*CountResultItem {
 	result := make([]*CountResultItem, 0, len(items))
 	for _, v := range items {
 		result = append(result, &CountResultItem{ID: v.Key, Count: v.Count})
@@ -159,7 +159,7 @@ type BitmapResult struct {
 	Bits       []uint64
 }
 
-func newBitmapResultFromInternal(bitmap *internal.Bitmap) (*BitmapResult, error) {
+func newBitmapResultFromInternal(bitmap *pbuf.Bitmap) (*BitmapResult, error) {
 	attrs, err := convertInternalAttrsToMap(bitmap.Attrs)
 	if err != nil {
 		return nil, err
@@ -178,7 +178,7 @@ const (
 	floatType  = 4
 )
 
-func convertInternalAttrsToMap(attrs []*internal.Attr) (attrsMap map[string]interface{}, err error) {
+func convertInternalAttrsToMap(attrs []*pbuf.Attr) (attrsMap map[string]interface{}, err error) {
 	attrsMap = make(map[string]interface{}, len(attrs))
 	for _, attr := range attrs {
 		switch attr.Type {
@@ -205,7 +205,7 @@ type ColumnItem struct {
 	Attributes map[string]interface{} `json:"attributes,omitempty"`
 }
 
-func newColumnItemFromInternal(column *internal.ColumnAttrSet) (*ColumnItem, error) {
+func newColumnItemFromInternal(column *pbuf.ColumnAttrSet) (*ColumnItem, error) {
 	attrs, err := convertInternalAttrsToMap(column.Attrs)
 	if err != nil {
 		return nil, err

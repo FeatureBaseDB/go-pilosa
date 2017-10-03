@@ -35,7 +35,7 @@ package pilosa_test
 import (
 	"testing"
 
-	pilosa "github.com/pilosa/go-pilosa"
+	"github.com/pilosa/go-pilosa"
 )
 
 func TestQueryWithError(t *testing.T) {

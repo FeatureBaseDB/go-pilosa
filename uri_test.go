@@ -202,7 +202,7 @@ func compare(t *testing.T, uri *URI, scheme string, host string, port uint16) {
 	}
 }
 
-type uriItem = []struct {
+type uriItem []struct {
 	address string
 	scheme  string
 	host    string

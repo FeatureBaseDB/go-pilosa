@@ -12,6 +12,9 @@ Go client for Pilosa high performance distributed bitmap index.
 
 ## Change Log
 
+* **Next**
+    * IPv6 support.
+
 * **v0.7.0** (2017-10-04):
     * Dropped support for Go 1.7.
     * Added support for creating range encoded frames.

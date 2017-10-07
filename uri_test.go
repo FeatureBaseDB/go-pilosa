@@ -202,20 +202,15 @@ func compare(t *testing.T, uri *URI, scheme string, host string, port uint16) {
 	}
 }
 
-type uriItem []struct {
+type uriItem struct {
 	address string
 	scheme  string
 	host    string
 	port    uint16
 }
 
-func validFixture() uriItem {
-	var test = []struct {
-		address string
-		scheme  string
-		host    string
-		port    uint16
-	}{
+func validFixture() []uriItem {
+	var test = []uriItem{
 		{"http+protobuf://index1.pilosa.com:3333", "http+protobuf", "index1.pilosa.com", 3333},
 		{"index1.pilosa.com:3333", "http", "index1.pilosa.com", 3333},
 		{"https://index1.pilosa.com", "https", "index1.pilosa.com", 10101},

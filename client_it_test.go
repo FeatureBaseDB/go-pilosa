@@ -48,7 +48,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/pilosa/go-pilosa/internal"
+	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
 )
 
 var index *Index
@@ -1177,7 +1177,7 @@ func TestImportNodeFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := NewClientWithURI(uri)
-	importRequest := &internal.ImportRequest{
+	importRequest := &pbuf.ImportRequest{
 		ColumnIDs:  []uint64{},
 		RowIDs:     []uint64{},
 		Timestamps: []int64{},
@@ -1207,12 +1207,12 @@ func TestImportNodeProtobufMarshalFails(t *testing.T) {
 }
 
 func TestResponseWithInvalidType(t *testing.T) {
-	qr := &internal.QueryResponse{
+	qr := &pbuf.QueryResponse{
 		Err: "",
-		ColumnAttrSets: []*internal.ColumnAttrSet{
+		ColumnAttrSets: []*pbuf.ColumnAttrSet{
 			{
 				ID: 0,
-				Attrs: []*internal.Attr{
+				Attrs: []*pbuf.Attr{
 					{
 						Type:        9999,
 						StringValue: "NOVAL",
@@ -1220,7 +1220,7 @@ func TestResponseWithInvalidType(t *testing.T) {
 				},
 			},
 		},
-		Results: []*internal.QueryResult{},
+		Results: []*pbuf.QueryResult{},
 	}
 	data, err := proto.Marshal(qr)
 	if err != nil {

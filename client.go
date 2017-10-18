@@ -45,7 +45,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/pilosa/go-pilosa/internal"
+	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
 	"github.com/pkg/errors"
 )
 
@@ -121,7 +121,7 @@ func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, e
 	if err != nil {
 		return nil, err
 	}
-	iqr := &internal.QueryResponse{}
+	iqr := &pbuf.QueryResponse{}
 	err = proto.Unmarshal(buf, iqr)
 	if err != nil {
 		return nil, err
@@ -440,7 +440,7 @@ func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentN
 	return fragmentNodes, nil
 }
 
-func (c *Client) importNode(uri *URI, request *internal.ImportRequest) error {
+func (c *Client) importNode(uri *URI, request *pbuf.ImportRequest) error {
 	data, err := proto.Marshal(request)
 	if err != nil {
 		return errors.Wrap(err, "marshaling to protobuf")
@@ -452,7 +452,7 @@ func (c *Client) importNode(uri *URI, request *internal.ImportRequest) error {
 	return errors.Wrap(resp.Body.Close(), "closing import response body")
 }
 
-func (c *Client) importValueNode(uri *URI, request *internal.ImportValueRequest) error {
+func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest) error {
 	data, _ := proto.Marshal(request)
 	// request.Marshal never returns an error
 	_, err := c.doRequest(uri, "POST", "/import-value", protobufHeaders, bytes.NewReader(data))
@@ -628,7 +628,7 @@ func newHTTPClient(options *ClientOptions) *http.Client {
 }
 
 func makeRequestData(query string, options *QueryOptions) ([]byte, error) {
-	request := &internal.QueryRequest{
+	request := &pbuf.QueryRequest{
 		Query:        query,
 		ColumnAttrs:  options.Columns,
 		ExcludeAttrs: options.ExcludeAttrs,
@@ -651,7 +651,7 @@ func matchError(msg string) error {
 	return nil
 }
 
-func bitsToImportRequest(indexName string, frameName string, slice uint64, bits []Bit) *internal.ImportRequest {
+func bitsToImportRequest(indexName string, frameName string, slice uint64, bits []Bit) *pbuf.ImportRequest {
 	rowIDs := make([]uint64, 0, len(bits))
 	columnIDs := make([]uint64, 0, len(bits))
 	timestamps := make([]int64, 0, len(bits))
@@ -660,7 +660,7 @@ func bitsToImportRequest(indexName string, frameName string, slice uint64, bits 
 		columnIDs = append(columnIDs, bit.ColumnID)
 		timestamps = append(timestamps, bit.Timestamp)
 	}
-	return &internal.ImportRequest{
+	return &pbuf.ImportRequest{
 		Index:      indexName,
 		Frame:      frameName,
 		Slice:      slice,
@@ -670,14 +670,14 @@ func bitsToImportRequest(indexName string, frameName string, slice uint64, bits 
 	}
 }
 
-func valsToImportRequest(indexName string, frameName string, slice uint64, fieldName string, vals []FieldValue) *internal.ImportValueRequest {
+func valsToImportRequest(indexName string, frameName string, slice uint64, fieldName string, vals []FieldValue) *pbuf.ImportValueRequest {
 	columnIDs := make([]uint64, 0, len(vals))
 	values := make([]uint64, 0, len(vals))
 	for _, val := range vals {
 		columnIDs = append(columnIDs, val.ColumnID)
 		values = append(values, val.Value)
 	}
-	return &internal.ImportValueRequest{
+	return &pbuf.ImportValueRequest{
 		Index:     indexName,
 		Frame:     frameName,
 		Slice:     slice,

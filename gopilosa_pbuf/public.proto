@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package internal;
+package gopilosa_pbuf;
 
 message Bitmap {
 	repeated uint64 Bits = 1;

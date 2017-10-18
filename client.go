@@ -397,6 +397,7 @@ func (c *Client) importBits(indexName string, frameName string, slice uint64, bi
 		if err != nil {
 			return err
 		}
+		uri.SetScheme(node.Scheme)
 		err = c.importNode(uri, bitsToImportRequest(indexName, frameName, slice, bits))
 		if err != nil {
 			return err
@@ -417,6 +418,7 @@ func (c *Client) importValues(indexName string, frameName string, slice uint64, 
 		if err != nil {
 			return err
 		}
+		uri.SetScheme(node.Scheme)
 		err = c.importValueNode(uri, valsToImportRequest(indexName, frameName, slice, fieldName, vals))
 		if err != nil {
 			return err
@@ -469,7 +471,7 @@ func (c *Client) ExportFrame(frame *Frame, view string) (BitIterator, error) {
 	if err != nil {
 		return nil, err
 	}
-	sliceURIs := statusToNodeSlicesForIndex(status, frame.index.Name())
+	sliceURIs := c.statusToNodeSlicesForIndex(status, frame.index.Name())
 	return NewCSVBitIterator(newExportReader(c, sliceURIs, frame, view)), nil
 }
 
@@ -599,6 +601,31 @@ func (c *Client) doRequest(host *URI, method, path string, headers map[string]st
 	return c.client.Do(req)
 }
 
+// statusToNodeSlicesForIndex finds the hosts which contains slices for the given index
+func (c *Client) statusToNodeSlicesForIndex(status *Status, indexName string) map[uint64]*URI {
+	// /status endpoint doesn't return the node scheme yet, default to the scheme of the current URI
+	// TODO: remove the following when /status endpoint returns the scheme for nodes
+	scheme := c.cluster.hosts[0].Scheme()
+	result := make(map[uint64]*URI)
+	for _, node := range status.Nodes {
+		for _, index := range node.Indexes {
+			if index.Name != indexName {
+				continue
+			}
+			for _, slice := range index.Slices {
+				uri, err := NewURIFromAddress(node.Host)
+				// err will always be nil, but prevent a panic in the odd chance the server returns an invalid URI
+				if err == nil {
+					uri.SetScheme(scheme)
+					result[slice] = uri
+				}
+			}
+			break
+		}
+	}
+	return result
+}
+
 func makeRequest(host *URI, method, path string, headers map[string]string, reader io.Reader) (*http.Request, error) {
 	request, err := http.NewRequest(method, host.Normalize()+path, reader)
 	if err != nil {
@@ -687,27 +714,6 @@ func valsToImportRequest(indexName string, frameName string, slice uint64, field
 	}
 }
 
-// statusToNodeSlicesForIndex finds the hosts which contains slices for the given index
-func statusToNodeSlicesForIndex(status *Status, indexName string) map[uint64]*URI {
-	result := make(map[uint64]*URI)
-	for _, node := range status.Nodes {
-		for _, index := range node.Indexes {
-			if index.Name != indexName {
-				continue
-			}
-			for _, slice := range index.Slices {
-				uri, err := NewURIFromAddress(node.Host)
-				// err will always be nil, but prevent a panic in the odd chance the server returns an invalid URI
-				if err == nil {
-					result[slice] = uri
-				}
-			}
-			break
-		}
-	}
-	return result
-}
-
 // ClientOptions control the properties of client connection to the server
 type ClientOptions struct {
 	SocketTimeout    time.Duration
@@ -759,6 +765,7 @@ const (
 )
 
 type fragmentNode struct {
+	Scheme       string
 	Host         string
 	InternalHost string
 }
@@ -774,6 +781,7 @@ type Status struct {
 
 // StatusNode contains node information.
 type StatusNode struct {
+	Scheme  string
 	Host    string
 	Indexes []StatusIndex
 }

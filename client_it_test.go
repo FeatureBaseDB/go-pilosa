@@ -1371,7 +1371,7 @@ func TestStatusToNodeSlicesForIndex(t *testing.T) {
 }
 
 func getClient() *Client {
-	uri, err := NewURIFromAddress("https://:10101")
+	uri, err := NewURIFromAddress("http://:10101")
 	if err != nil {
 		panic(err)
 	}

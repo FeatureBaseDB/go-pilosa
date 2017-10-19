@@ -47,6 +47,7 @@ import (
 	"testing"
 	"time"
 
+	"crypto/tls"
 	"github.com/golang/protobuf/proto"
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
 )
@@ -1332,10 +1333,16 @@ func TestStatusToNodeSlicesForIndex(t *testing.T) {
 	// it needs to access statusToNodeSlicesForIndex which is not
 	// available to client_test.go
 
+	uri, err := NewURIFromAddress("https://:10101")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
 	status := &Status{
 		Nodes: []StatusNode{
 			{
-				Host: ":10101",
+				Scheme: "https",
+				Host:   ":10101",
 				Indexes: []StatusIndex{
 					{
 						Name:   "index1",
@@ -1349,12 +1356,12 @@ func TestStatusToNodeSlicesForIndex(t *testing.T) {
 			},
 		},
 	}
-	sliceMap := statusToNodeSlicesForIndex(status, "index2")
+	sliceMap := client.statusToNodeSlicesForIndex(status, "index2")
 	if len(sliceMap) != 1 {
 		t.Fatalf("slice map should have a single item")
 	}
 	if uri, ok := sliceMap[0]; ok {
-		target, _ := NewURIFromAddress(":10101")
+		target, _ := NewURIFromAddress("https://:10101")
 		if !uri.Equals(target) {
 			t.Fatalf("slice map should have the correct URI")
 		}
@@ -1364,11 +1371,12 @@ func TestStatusToNodeSlicesForIndex(t *testing.T) {
 }
 
 func getClient() *Client {
-	uri, err := NewURIFromAddress(":10101")
+	uri, err := NewURIFromAddress("http://:10101")
 	if err != nil {
 		panic(err)
 	}
-	return NewClientWithURI(uri)
+	cluster := NewClusterWithHost(uri)
+	return NewClientWithCluster(cluster, &ClientOptions{TLSConfig: &tls.Config{InsecureSkipVerify: true}})
 }
 
 func getMockServer(statusCode int, response []byte, contentLength int) *httptest.Server {

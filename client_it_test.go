@@ -36,8 +36,9 @@ package pilosa
 
 import (
 	"bytes"
-		"crypto/tls"
+	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -1367,6 +1368,42 @@ func TestStatusToNodeSlicesForIndex(t *testing.T) {
 		}
 	} else {
 		t.Fatalf("slice map should have the correct slice")
+	}
+}
+
+func TestHttpRequest(t *testing.T) {
+	client := getClient()
+	reqData := []byte("")
+	framePath := fmt.Sprintf("/index/%s/frame/%s", index.Name(), "http-test-frame")
+	_, _, err := client.HttpPost(framePath, reqData, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = client.HttpGet("/status", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = client.HttpDelete(framePath, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestHttpRequestWithoutPathFails(t *testing.T) {
+	client := getClient()
+	data := []byte("some data")
+	headers := map[string]string{"Foo": "Bar"}
+	_, _, err := client.HttpPost("", data, headers)
+	if err == nil {
+		t.Fatalf("HttpPostRequest without path should fail")
+	}
+	_, _, err = client.HttpGet("", data, headers)
+	if err == nil {
+		t.Fatalf("HttpGetRequest without path should fail")
+	}
+	_, _, err = client.HttpDelete("", data, headers)
+	if err == nil {
+		t.Fatalf("HttpDeleteRequest without path should fail")
 	}
 }
 

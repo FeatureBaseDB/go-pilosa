@@ -630,9 +630,6 @@ func (c *Client) doRequest(host *URI, method, path string, headers map[string]st
 
 // statusToNodeSlicesForIndex finds the hosts which contains slices for the given index
 func (c *Client) statusToNodeSlicesForIndex(status *Status, indexName string) map[uint64]*URI {
-	// /status endpoint doesn't return the node scheme yet, default to the scheme of the current URI
-	// TODO: remove the following when /status endpoint returns the scheme for nodes
-	scheme := c.cluster.hosts[0].Scheme()
 	result := make(map[uint64]*URI)
 	for _, node := range status.Nodes {
 		for _, index := range node.Indexes {
@@ -643,7 +640,7 @@ func (c *Client) statusToNodeSlicesForIndex(status *Status, indexName string) ma
 				uri, err := NewURIFromAddress(node.Host)
 				// err will always be nil, but prevent a panic in the odd chance the server returns an invalid URI
 				if err == nil {
-					uri.SetScheme(scheme)
+					uri.SetScheme(node.Scheme)
 					result[slice] = uri
 				}
 			}

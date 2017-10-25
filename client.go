@@ -518,37 +518,19 @@ func (c *Client) status() (*Status, error) {
 	return root.Status, nil
 }
 
-// HttpGet sends a GET request to the Pilosa server.
+// HttpGet sends an HTTP request to the Pilosa server.
 // **NOTE**: This function is experimental and may be removed in later revisions.
-func (c *Client) HttpGet(path string, data []byte, headers map[string]string) (*http.Response, []byte, error) {
-	if path == "" {
-		return nil, nil, errors.New("Path is required for GET request")
-	}
-	return c.httpRequest("GET", path, data, headers, errorCheckedResponse)
-}
-
-// HttpPost sends a POST request to the Pilosa server.
-// **NOTE**: This function is experimental and may be removed in later revisions.
-func (c *Client) HttpPost(path string, data []byte, headers map[string]string) (*http.Response, []byte, error) {
-	if path == "" {
-		return nil, nil, errors.New("Path is required for POST request")
-	}
-	return c.httpRequest("POST", path, data, headers, errorCheckedResponse)
-}
-
-// HttpDelete sends a DELETE request to the Pilosa server.
-// **NOTE**: This function is experimental and may be removed in later revisions.
-func (c *Client) HttpDelete(path string, data []byte, headers map[string]string) (*http.Response, []byte, error) {
-	if path == "" {
-		return nil, nil, errors.New("Path is required for DELETE request")
-	}
-	return c.httpRequest("DELETE", path, data, headers, errorCheckedResponse)
+func (c *Client) HttpRequest(method string, path string, data []byte, headers map[string]string) (*http.Response, []byte, error) {
+	return c.httpRequest(method, path, data, headers, rawResponse)
 }
 
 // httpRequest makes a request to the cluster - use this when you want the
 // client to choose a host, and it doesn't matter if the request goes to a
 // specific host
 func (c *Client) httpRequest(method string, path string, data []byte, headers map[string]string, returnResponse returnClientInfo) (*http.Response, []byte, error) {
+	if path == "" {
+		return nil, nil, errors.New("Path is required for HTTP request")
+	}
 	if data == nil {
 		data = []byte{}
 	}

@@ -38,7 +38,6 @@ import (
 	"bytes"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -295,7 +294,7 @@ func TestTopNReturns(t *testing.T) {
 	)
 	client.Query(qry, nil)
 	// XXX: The following is required to make this test pass. See: https://github.com/pilosa/pilosa/issues/625
-	client.HttpPost("/recalculate-caches", nil, nil)
+	client.HttpRequest("POST", "/recalculate-caches", nil, nil)
 	response, err := client.Query(frame.TopN(2), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -1373,17 +1372,7 @@ func TestStatusToNodeSlicesForIndex(t *testing.T) {
 
 func TestHttpRequest(t *testing.T) {
 	client := getClient()
-	reqData := []byte("")
-	framePath := fmt.Sprintf("/index/%s/frame/%s", index.Name(), "http-test-frame")
-	_, _, err := client.HttpPost(framePath, reqData, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, _, err = client.HttpGet("/status", nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, _, err = client.HttpDelete(framePath, nil, nil)
+	_, _, err := client.HttpRequest("GET", "/status", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1393,17 +1382,9 @@ func TestHttpRequestWithoutPathFails(t *testing.T) {
 	client := getClient()
 	data := []byte("some data")
 	headers := map[string]string{"Foo": "Bar"}
-	_, _, err := client.HttpPost("", data, headers)
+	_, _, err := client.HttpRequest("GET", "", data, headers)
 	if err == nil {
 		t.Fatalf("HttpPostRequest without path should fail")
-	}
-	_, _, err = client.HttpGet("", data, headers)
-	if err == nil {
-		t.Fatalf("HttpGetRequest without path should fail")
-	}
-	_, _, err = client.HttpDelete("", data, headers)
-	if err == nil {
-		t.Fatalf("HttpDeleteRequest without path should fail")
 	}
 }
 

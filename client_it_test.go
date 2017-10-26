@@ -1378,16 +1378,6 @@ func TestHttpRequest(t *testing.T) {
 	}
 }
 
-func TestHttpRequestWithoutPathFails(t *testing.T) {
-	client := getClient()
-	data := []byte("some data")
-	headers := map[string]string{"Foo": "Bar"}
-	_, _, err := client.HttpRequest("GET", "", data, headers)
-	if err == nil {
-		t.Fatalf("HttpPostRequest without path should fail")
-	}
-}
-
 func getClient() *Client {
 	uri, err := NewURIFromAddress(getPilosaBindAddress())
 	if err != nil {

@@ -528,9 +528,6 @@ func (c *Client) HttpRequest(method string, path string, data []byte, headers ma
 // client to choose a host, and it doesn't matter if the request goes to a
 // specific host
 func (c *Client) httpRequest(method string, path string, data []byte, headers map[string]string, returnResponse returnClientInfo) (*http.Response, []byte, error) {
-	if path == "" {
-		return nil, nil, errors.New("Path is required for HTTP request")
-	}
 	if data == nil {
 		data = []byte{}
 	}

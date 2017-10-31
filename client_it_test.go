@@ -36,6 +36,7 @@ package pilosa
 
 import (
 	"bytes"
+	"crypto/tls"
 	"errors"
 	"io"
 	"net/http"
@@ -47,7 +48,6 @@ import (
 	"testing"
 	"time"
 
-	"crypto/tls"
 	"github.com/golang/protobuf/proto"
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
 )
@@ -294,7 +294,7 @@ func TestTopNReturns(t *testing.T) {
 	)
 	client.Query(qry, nil)
 	// XXX: The following is required to make this test pass. See: https://github.com/pilosa/pilosa/issues/625
-	time.Sleep(10 * time.Second)
+	client.HttpRequest("POST", "/recalculate-caches", nil, nil)
 	response, err := client.Query(frame.TopN(2), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -1370,13 +1370,31 @@ func TestStatusToNodeSlicesForIndex(t *testing.T) {
 	}
 }
 
+func TestHttpRequest(t *testing.T) {
+	client := getClient()
+	_, _, err := client.HttpRequest("GET", "/status", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func getClient() *Client {
-	uri, err := NewURIFromAddress("http://:10101")
+	uri, err := NewURIFromAddress(getPilosaBindAddress())
 	if err != nil {
 		panic(err)
 	}
 	cluster := NewClusterWithHost(uri)
 	return NewClientWithCluster(cluster, &ClientOptions{TLSConfig: &tls.Config{InsecureSkipVerify: true}})
+}
+
+func getPilosaBindAddress() string {
+	for _, kvStr := range os.Environ() {
+		kv := strings.SplitN(kvStr, "=", 2)
+		if kv[0] == "PILOSA_BIND" {
+			return kv[1]
+		}
+	}
+	return "http://:10101"
 }
 
 func getMockServer(statusCode int, response []byte, contentLength int) *httptest.Server {

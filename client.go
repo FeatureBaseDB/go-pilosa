@@ -518,6 +518,12 @@ func (c *Client) status() (*Status, error) {
 	return root.Status, nil
 }
 
+// HttpGet sends an HTTP request to the Pilosa server.
+// **NOTE**: This function is experimental and may be removed in later revisions.
+func (c *Client) HttpRequest(method string, path string, data []byte, headers map[string]string) (*http.Response, []byte, error) {
+	return c.httpRequest(method, path, data, headers, rawResponse)
+}
+
 // httpRequest makes a request to the cluster - use this when you want the
 // client to choose a host, and it doesn't matter if the request goes to a
 // specific host
@@ -603,9 +609,6 @@ func (c *Client) doRequest(host *URI, method, path string, headers map[string]st
 
 // statusToNodeSlicesForIndex finds the hosts which contains slices for the given index
 func (c *Client) statusToNodeSlicesForIndex(status *Status, indexName string) map[uint64]*URI {
-	// /status endpoint doesn't return the node scheme yet, default to the scheme of the current URI
-	// TODO: remove the following when /status endpoint returns the scheme for nodes
-	scheme := c.cluster.hosts[0].Scheme()
 	result := make(map[uint64]*URI)
 	for _, node := range status.Nodes {
 		for _, index := range node.Indexes {
@@ -616,7 +619,7 @@ func (c *Client) statusToNodeSlicesForIndex(status *Status, indexName string) ma
 				uri, err := NewURIFromAddress(node.Host)
 				// err will always be nil, but prevent a panic in the odd chance the server returns an invalid URI
 				if err == nil {
-					uri.SetScheme(scheme)
+					uri.SetScheme(node.Scheme)
 					result[slice] = uri
 				}
 			}

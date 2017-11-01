@@ -702,7 +702,7 @@ func bitsToImportRequest(indexName string, frameName string, slice uint64, bits 
 
 func valsToImportRequest(indexName string, frameName string, slice uint64, fieldName string, vals []FieldValue) *pbuf.ImportValueRequest {
 	columnIDs := make([]uint64, 0, len(vals))
-	values := make([]uint64, 0, len(vals))
+	values := make([]int64, 0, len(vals))
 	for _, val := range vals {
 		columnIDs = append(columnIDs, val.ColumnID)
 		values = append(values, val.Value)

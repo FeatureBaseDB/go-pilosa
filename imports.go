@@ -151,7 +151,7 @@ func (b bitsForSort) Less(i, j int) bool {
 // range-encoded frame.
 type FieldValue struct {
 	ColumnID uint64
-	Value    uint64
+	Value    int64
 }
 
 // ValueIterator structs return field values one by one.
@@ -197,7 +197,7 @@ func (c *CSVValueIterator) NextValue() (FieldValue, error) {
 		}
 		fieldValue := FieldValue{
 			ColumnID: uint64(columnID),
-			Value:    uint64(value),
+			Value:    int64(value),
 		}
 		return fieldValue, nil
 	}

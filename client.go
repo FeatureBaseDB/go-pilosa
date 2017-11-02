@@ -286,19 +286,35 @@ func (c *Client) Schema() (*Schema, error) {
 			return nil, err
 		}
 		for _, frameInfo := range indexInfo.Frames {
+			fields := make(map[string]rangeField)
 			frameOptions := &FrameOptions{
 				RowLabel:       frameInfo.Meta.RowLabel,
 				CacheSize:      frameInfo.Meta.CacheSize,
 				CacheType:      CacheType(frameInfo.Meta.CacheType),
 				InverseEnabled: frameInfo.Meta.InverseEnabled,
 				TimeQuantum:    TimeQuantum(frameInfo.Meta.TimeQuantum),
+				RangeEnabled:   frameInfo.Meta.RangeEnabled,
 			}
-			_, err := index.Frame(frameInfo.Name, frameOptions)
+			for _, fieldInfo := range frameInfo.Meta.Fields {
+				fields[fieldInfo.Name] = map[string]interface{}{
+					"Name": fieldInfo.Name,
+					"Type": fieldInfo.Type,
+					"Max":  fieldInfo.Max,
+					"Min":  fieldInfo.Min,
+				}
+			}
+			frameOptions.fields = fields
+			fram, err := index.Frame(frameInfo.Name, frameOptions)
 			if err != nil {
 				return nil, err
 			}
+			for name, _ := range fields {
+				ff := fram.Field(name)
+				if ff.err != nil {
+					return nil, errors.Wrap(err, "fielding frame")
+				}
+			}
 		}
-
 	}
 	return schema, nil
 }
@@ -810,7 +826,16 @@ type StatusMeta struct {
 	CacheType      string
 	CacheSize      uint
 	InverseEnabled bool
+	RangeEnabled   bool
+	Fields         []StatusField
 	TimeQuantum    string
+}
+
+type StatusField struct {
+	Name string
+	Type string
+	Max  int64
+	Min  int64
 }
 
 type viewsInfo struct {

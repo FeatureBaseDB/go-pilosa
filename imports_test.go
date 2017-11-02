@@ -110,7 +110,7 @@ func TestCSVBitIteratorWithTimestampFormatFail(t *testing.T) {
 
 func TestCSVValueIterator(t *testing.T) {
 	iterator := pilosa.NewCSVValueIterator(strings.NewReader(`1,10
-		5,20
+		5,-20
 		3,41
 	`))
 	values := []pilosa.FieldValue{}
@@ -126,7 +126,7 @@ func TestCSVValueIterator(t *testing.T) {
 	}
 	target := []pilosa.FieldValue{
 		{ColumnID: 1, Value: 10},
-		{ColumnID: 5, Value: 20},
+		{ColumnID: 5, Value: -20},
 		{ColumnID: 3, Value: 41},
 	}
 	if !reflect.DeepEqual(target, values) {

@@ -37,7 +37,6 @@ package pilosa
 import (
 	"bytes"
 	"crypto/tls"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -47,6 +46,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/golang/protobuf/proto"
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
@@ -61,7 +62,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	testFrame, err = index.Frame("test-frame", nil)
+	testFrame, err = index.Frame("test-frame", &FrameOptions{RangeEnabled: true})
 	if err != nil {
 		panic(err)
 	}
@@ -82,6 +83,10 @@ func Setup() {
 	if err != nil {
 		panic(err)
 	}
+	err = client.CreateIntField(testFrame, "testfield", 0, 1000)
+	if err != nil {
+		panic(errors.Wrap(err, "creating int field"))
+	}
 }
 
 func TearDown() {
@@ -95,8 +100,7 @@ func TearDown() {
 func Reset() {
 	client := getClient()
 	client.DeleteIndex(index)
-	client.CreateIndex(index)
-	client.CreateFrame(testFrame)
+	Setup()
 }
 
 func TestCreateDefaultClient(t *testing.T) {
@@ -301,7 +305,7 @@ func TestTopNReturns(t *testing.T) {
 	}
 	items := response.Result().CountItems
 	if len(items) != 2 {
-		t.Fatalf("There should be 2 count items")
+		t.Fatalf("There should be 2 count items: %v", items)
 	}
 	item := items[0]
 	if item.ID != 10 {

@@ -33,6 +33,7 @@
 package pilosa
 
 import (
+	"fmt"
 	"reflect"
 	"sort"
 	"strings"
@@ -86,6 +87,15 @@ func TestSchemaIndexes(t *testing.T) {
 	}
 	if !reflect.DeepEqual(target, indexes) {
 		t.Fatalf("calling schema.Indexes should return indexes")
+	}
+}
+
+func TestSchemaToString(t *testing.T) {
+	schema1 := NewSchema()
+	index, _ := schema1.Index("test-index", nil)
+	target := fmt.Sprintf(`map[string]*pilosa.Index{"test-index":(*pilosa.Index)(%p)}`, index)
+	if target != schema1.String() {
+		t.Fatalf("%s != %s", target, schema1.String())
 	}
 }
 
@@ -149,7 +159,15 @@ func TestIndexFrames(t *testing.T) {
 	if !reflect.DeepEqual(target, frames) {
 		t.Fatalf("calling index.Frames should return frames")
 	}
+}
 
+func TestIndexToString(t *testing.T) {
+	schema1 := NewSchema()
+	index, _ := schema1.Index("test-index", nil)
+	target := fmt.Sprintf(`&pilosa.Index{name:"test-index", options:(*pilosa.IndexOptions)(%p), frames:map[string]*pilosa.Frame{}}`, index.options)
+	if target != index.String() {
+		t.Fatalf("%s != %s", target, index.String())
+	}
 }
 
 func TestFrame(t *testing.T) {
@@ -196,6 +214,29 @@ func TestNewFrameWithInvalidName(t *testing.T) {
 	if err == nil {
 		t.Fatal("Creating frames with invalid row labels should fail")
 	}
+}
+
+func TestFrameToString(t *testing.T) {
+	schema1 := NewSchema()
+	index, _ := schema1.Index("test-index", nil)
+	frame, _ := index.Frame("test-frame", nil)
+	target := fmt.Sprintf(`&pilosa.Frame{name:"test-frame", index:(*pilosa.Index)(%p), options:(*pilosa.FrameOptions)(%p), fields:map[string]*pilosa.RangeField{}}`,
+		frame.index, frame.options)
+	if target != frame.String() {
+		t.Fatalf("%s != %s", target, frame.String())
+	}
+}
+
+func TestFrameFields(t *testing.T) {
+	schema1 := NewSchema()
+	index, _ := schema1.Index("test-index", nil)
+	frame, _ := index.Frame("test-frame", nil)
+	field := frame.Field("some-field")
+	target := map[string]*RangeField{"some-field": field}
+	if !reflect.DeepEqual(target, frame.Fields()) {
+		t.Fatalf("%s != %s", target, frame.Fields())
+	}
+
 }
 
 func TestBitmap(t *testing.T) {

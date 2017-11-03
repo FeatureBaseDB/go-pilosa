@@ -308,10 +308,10 @@ func (c *Client) Schema() (*Schema, error) {
 			if err != nil {
 				return nil, err
 			}
-			for name, _ := range fields {
+			for name := range fields {
 				ff := fram.Field(name)
 				if ff.err != nil {
-					return nil, errors.Wrap(err, "fielding frame")
+					return nil, errors.Wrap(ff.err, "fielding frame")
 				}
 			}
 		}

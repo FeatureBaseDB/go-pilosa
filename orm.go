@@ -661,7 +661,7 @@ func (f *Frame) Field(name string) *RangeField {
 	return field
 }
 
-// Frames return a copy of the frames in this index
+// Fields return a copy of the fields in this frame
 func (f *Frame) Fields() map[string]*RangeField {
 	result := make(map[string]*RangeField)
 	for k, v := range f.fields {

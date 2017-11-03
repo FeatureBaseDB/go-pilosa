@@ -47,10 +47,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-
+	"encoding/json"
 	"github.com/golang/protobuf/proto"
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
+	"github.com/pkg/errors"
 )
 
 var index *Index
@@ -1379,6 +1379,45 @@ func TestHttpRequest(t *testing.T) {
 	_, _, err := client.HttpRequest("GET", "/status", nil, nil)
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestInvalidFieldInStatus(t *testing.T) {
+	responseMap := map[string]interface{}{
+		"status": map[string]interface{}{
+			"Nodes": []map[string]interface{}{map[string]interface{}{
+				"Host":   "localhost:10101",
+				"Scheme": "http",
+				"Indexes": []map[string]interface{}{map[string]interface{}{
+					"Name": "sample-index",
+					"Frames": []map[string]interface{}{map[string]interface{}{
+						"Name": "foo",
+						"Meta": map[string]interface{}{
+							"Fields": []map[string]interface{}{map[string]interface{}{
+								"Name": "$$invalid",
+								"Type": "int",
+								"Min":  0,
+								"Max":  100,
+							}},
+						}},
+					}},
+				}},
+			}},
+	}
+	response, err := json.Marshal(responseMap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := getMockServer(200, response, -1)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	_, err = client.Schema()
+	if err == nil {
+		t.Fatalf("should have failed")
 	}
 }
 

@@ -34,6 +34,7 @@ package pilosa
 
 import (
 	"errors"
+	"fmt"
 
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
 )
@@ -143,6 +144,10 @@ func newQueryResultFromInternal(result *pbuf.QueryResult) (*QueryResult, error) 
 type CountResultItem struct {
 	ID    uint64
 	Count uint64
+}
+
+func (c *CountResultItem) String() string {
+	return fmt.Sprintf("%d:%d", c.ID, c.Count)
 }
 
 func countItemsFromInternal(items []*pbuf.Pair) []*CountResultItem {

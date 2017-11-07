@@ -48,6 +48,10 @@ type Schema struct {
 	indexes map[string]*Index
 }
 
+func (s *Schema) String() string {
+	return fmt.Sprintf("%#v", s.indexes)
+}
+
 // NewSchema creates a new Schema
 func NewSchema() *Schema {
 	return &Schema{
@@ -237,6 +241,10 @@ type Index struct {
 	name    string
 	options *IndexOptions
 	frames  map[string]*Frame
+}
+
+func (idx *Index) String() string {
+	return fmt.Sprintf("%#v", idx)
 }
 
 // NewIndex creates an index with a name and options.
@@ -474,6 +482,10 @@ type Frame struct {
 	fields  map[string]*RangeField
 }
 
+func (f *Frame) String() string {
+	return fmt.Sprintf("%#v", f)
+}
+
 func newFrame(name string, index *Index) *Frame {
 	return &Frame{
 		name:    name,
@@ -491,7 +503,10 @@ func (f *Frame) Name() string {
 func (f *Frame) copy() *Frame {
 	frame := newFrame(f.name, f.index)
 	*frame.options = *f.options
-	// don't bother with copying the fields.
+	frame.fields = make(map[string]*RangeField)
+	for k, v := range f.fields {
+		frame.fields[k] = v
+	}
 	return frame
 }
 
@@ -644,6 +659,15 @@ func (f *Frame) Field(name string) *RangeField {
 		}
 	}
 	return field
+}
+
+// Fields return a copy of the fields in this frame
+func (f *Frame) Fields() map[string]*RangeField {
+	result := make(map[string]*RangeField)
+	for k, v := range f.fields {
+		result[k] = v
+	}
+	return result
 }
 
 func createAttributesString(attrs map[string]interface{}) (string, error) {

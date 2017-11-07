@@ -37,7 +37,6 @@ package pilosa
 import (
 	"bytes"
 	"crypto/tls"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -48,8 +47,10 @@ import (
 	"testing"
 	"time"
 
+	"encoding/json"
 	"github.com/golang/protobuf/proto"
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
+	"github.com/pkg/errors"
 )
 
 var index *Index
@@ -61,7 +62,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	testFrame, err = index.Frame("test-frame", nil)
+	testFrame, err = index.Frame("test-frame", &FrameOptions{RangeEnabled: true})
 	if err != nil {
 		panic(err)
 	}
@@ -82,6 +83,10 @@ func Setup() {
 	if err != nil {
 		panic(err)
 	}
+	err = client.CreateIntField(testFrame, "testfield", 0, 1000)
+	if err != nil {
+		panic(errors.Wrap(err, "creating int field"))
+	}
 }
 
 func TearDown() {
@@ -95,8 +100,7 @@ func TearDown() {
 func Reset() {
 	client := getClient()
 	client.DeleteIndex(index)
-	client.CreateIndex(index)
-	client.CreateFrame(testFrame)
+	Setup()
 }
 
 func TestCreateDefaultClient(t *testing.T) {
@@ -301,7 +305,7 @@ func TestTopNReturns(t *testing.T) {
 	}
 	items := response.Result().CountItems
 	if len(items) != 2 {
-		t.Fatalf("There should be 2 count items")
+		t.Fatalf("There should be 2 count items: %v", items)
 	}
 	item := items[0]
 	if item.ID != 10 {
@@ -1375,6 +1379,45 @@ func TestHttpRequest(t *testing.T) {
 	_, _, err := client.HttpRequest("GET", "/status", nil, nil)
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestInvalidFieldInStatus(t *testing.T) {
+	responseMap := map[string]interface{}{
+		"status": map[string]interface{}{
+			"Nodes": []map[string]interface{}{map[string]interface{}{
+				"Host":   "localhost:10101",
+				"Scheme": "http",
+				"Indexes": []map[string]interface{}{map[string]interface{}{
+					"Name": "sample-index",
+					"Frames": []map[string]interface{}{map[string]interface{}{
+						"Name": "foo",
+						"Meta": map[string]interface{}{
+							"Fields": []map[string]interface{}{map[string]interface{}{
+								"Name": "$$invalid",
+								"Type": "int",
+								"Min":  0,
+								"Max":  100,
+							}},
+						}},
+					}},
+				}},
+			}},
+	}
+	response, err := json.Marshal(responseMap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := getMockServer(200, response, -1)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	_, err = client.Schema()
+	if err == nil {
+		t.Fatalf("should have failed")
 	}
 }
 

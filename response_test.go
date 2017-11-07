@@ -170,5 +170,12 @@ func TestNewQueryResponseFromInternalFailure(t *testing.T) {
 	if qr != nil && err == nil {
 		t.Fatalf("Should have failed")
 	}
+}
 
+func TestCountResultItemToString(t *testing.T) {
+	item := &CountResultItem{ID: 100, Count: 50}
+	target := "100:50"
+	if target != item.String() {
+		t.Fatalf("%s != %s", target, item.String())
+	}
 }

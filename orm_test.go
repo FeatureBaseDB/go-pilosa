@@ -234,7 +234,7 @@ func TestFrameFields(t *testing.T) {
 	field := frame.Field("some-field")
 	target := map[string]*RangeField{"some-field": field}
 	if !reflect.DeepEqual(target, frame.Fields()) {
-		t.Fatalf("%s != %s", target, frame.Fields())
+		t.Fatalf("%v != %v", target, frame.Fields())
 	}
 
 }

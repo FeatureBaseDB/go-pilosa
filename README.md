@@ -88,7 +88,7 @@ myframe, err := myindex.Frame("myframe", nil)
 err = client.SyncSchema(schema)
 
 // Send a SetBit query. PilosaException is thrown if execution of the query fails.
-err = client.Query(myframe.SetBit(5, 42), nil)
+response, err := client.Query(myframe.SetBit(5, 42), nil)
 
 // Send a Bitmap query. PilosaException is thrown if execution of the query fails.
 response, err = client.Query(myframe.Bitmap(5), nil)
@@ -106,11 +106,15 @@ response, err = client.Query(
     myindex.BatchQuery(
         myframe.Bitmap(5),
         myframe.Bitmap(10),
-    ), nil
+    ), nil,
 )
+if err != nil {
+    fmt.Println(err)
+}
 
-for _, result := range reponse.Results() {
+for _, result := range response.Results() {
     // Act on the result
+    fmt.Println(result)
 }
 
 ```

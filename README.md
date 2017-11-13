@@ -60,7 +60,7 @@ go get github.com/pilosa/go-pilosa
 After that, you can import that in your code using:
 
 ```go
-import pilosa "pilosa/go-pilosa"
+import "github.com/pilosa/go-pilosa"
 ```
 
 ## Usage

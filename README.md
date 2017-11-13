@@ -194,10 +194,10 @@ index, _ := schema.Index("animals", nil)
 frameOptions := &pilosa.FrameOptions{}
 frameOptions.AddIntField("captivity", 0, 956)
 frame, _ := index.Frame("traits", frameOptions)
-client.syncSchema(schema)
+client.SyncSchema(schema)
 ``` 
 
-If the frame with the necessary field already exist on the server, you don't need to create the field instance, `client.syncSchema(schema)` would load that to `schema`. You can then add some data:
+If the frame with the necessary field already exist on the server, you don't need to create the field instance, `client.SyncSchema(schema)` would load that to `schema`. You can then add some data:
 ```go
 // Add the captivity values to the field.
 captivity := frame.Field("captivity")
@@ -221,11 +221,11 @@ client.Query(query, nil)
 Let's write a range query:
 ```go
 // Query for all animals with more than 100 specimens
-response, _ := client.Query(captivity.GT(100))
+response, _ := client.Query(captivity.GT(100), nil)
 fmt.Println("%v", response.Result().Bitmap.Bits)
 
 // Query for the total number of animals in captivity
-response, _ := client.Query(captivity.Sum(nil))
+response, _ := client.Query(captivity.Sum(nil), nil)
 fmt.Println(response.Result().Sum)
 ```
 

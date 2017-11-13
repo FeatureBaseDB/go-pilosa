@@ -186,6 +186,51 @@ The recommended way of creating query structs is, using dedicated methods attach
 query := repository.RawQuery("Bitmap(frame='stargazer', row=5)")
 ```
 
+This client supports [Range encoded fields](https://www.pilosa.com/docs/latest/query-language/#range-bsi). Read [Range Encoded Bitmaps](https://www.pilosa.com/blog/range-encoded-bitmaps/) blog post for more information about the BSI implementation of range encoding in Pilosa.
+
+In order to use range encoded fields, a frame should be created with one or more integer fields. Each field should have their minimums and maximums set. Here's how you would do that using this library:
+```go
+index, _ := schema.Index("animals", nil)
+frameOptions := &pilosa.FrameOptions{}
+frameOptions.AddIntField("captivity", 0, 956)
+frame, _ := index.Frame("traits", frameOptions)
+client.syncSchema(schema)
+``` 
+
+If the frame with the necessary field already exist on the server, you don't need to create the field instance, `client.syncSchema(schema)` would load that to `schema`. You can then add some data:
+```go
+// Add the captivity values to the field.
+captivity := frame.Field("captivity")
+query := index.BatchQuery(
+	captivity.SetIntValue(1, 3),
+	captivity.SetIntValue(2, 392),
+	captivity.SetIntValue(3, 47),
+	captivity.SetIntValue(4, 956),
+	captivity.SetIntValue(5, 219),
+	captivity.SetIntValue(6, 14),
+	captivity.SetIntValue(7, 47),
+	captivity.SetIntValue(8, 504),
+	captivity.SetIntValue(9, 21),
+	captivity.SetIntValue(10, 0),
+	captivity.SetIntValue(11, 123),
+	captivity.SetIntValue(12, 318),
+)
+client.Query(query, nil)
+```
+
+Let's write a range query:
+```go
+// Query for all animals with more than 100 specimens
+response, _ := client.Query(captivity.GT(100))
+fmt.Println("%v", response.Result().Bitmap.Bits)
+
+// Query for the total number of animals in captivity
+response, _ := client.Query(captivity.Sum(nil))
+fmt.Println(response.Result().Sum)
+```
+
+See the *Field* functions further below for the list of functions that can be used with a `RangeField`.
+
 Please check [Pilosa documentation](https://www.pilosa.com/docs) for PQL details. Here is a list of methods corresponding to PQL calls:
 
 Index:
@@ -214,7 +259,17 @@ Frame:
 * `InverseRange(columnID uint64, start time.Time, end time.Time) *PQLBitmapQuery`
 * `SetRowAttrs(rowID uint64, attrs map[string]interface{}) *PQLBaseQuery`
 * `Sum(bitmap *PQLBitmapQuery, field string) *PQLBaseQuery`
-* `SetIntFieldValue(columnID uint64, field string, value int) *PQLBaseQuery`
+* (**deprecated**) `SetIntFieldValue(columnID uint64, field string, value int) *PQLBaseQuery`
+
+Field:
+
+* `LT(n int) *PQLBitmapQuery`
+* `LTE(n int) *PQLBitmapQuery`
+* `GT(n int) *PQLBitmapQuery`
+* `GTE(n int) *PQLBitmapQuery`
+* `Between(a int, b int) *PQLBitmapQuery`
+* `Sum(bitmap *PQLBitmapQuery) *PQLBaseQuery`
+* `SetIntValue(columnID uint64, value int) *PQLBaseQuery`
 
 ### Pilosa URI
 

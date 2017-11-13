@@ -411,6 +411,9 @@ func TestFieldSum(t *testing.T) {
 	comparePQL(t,
 		"Sum(Bitmap(rowID=10, frame='sample-frame'), frame='sample-frame', field='foo')",
 		sampleFrame.Field("foo").Sum(sampleFrame.Bitmap(10)))
+	comparePQL(t,
+		"Sum(frame='sample-frame', field='foo')",
+		sampleFrame.Field("foo").Sum(nil))
 }
 
 func TestFieldBSetIntValue(t *testing.T) {

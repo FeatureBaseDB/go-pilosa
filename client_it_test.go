@@ -916,8 +916,8 @@ func TestRangeFrame(t *testing.T) {
 	_, err = client.Query(index.BatchQuery(
 		frame.SetBit(1, 10),
 		frame.SetBit(1, 100),
-		frame.SetIntFieldValue(10, "foo", 11),
-		frame.SetIntFieldValue(100, "foo", 15),
+		frame.Field("foo").SetIntValue(10, 11),
+		frame.Field("foo").SetIntValue(100, 15),
 	), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -1418,6 +1418,41 @@ func TestInvalidFieldInStatus(t *testing.T) {
 	_, err = client.Schema()
 	if err == nil {
 		t.Fatalf("should have failed")
+	}
+}
+
+func TestSyncSchemaCantCreateIndex(t *testing.T) {
+	server := getMockServer(404, nil, 0)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	schema = NewSchema()
+	schema.Index("foo", nil)
+	err = client.syncSchema(schema, NewSchema())
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
+func TestSyncSchemaCantCreateFrame(t *testing.T) {
+	server := getMockServer(404, nil, 0)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	schema = NewSchema()
+	index, _ := schema.Index("foo", nil)
+	index.Frame("fooframe", nil)
+	serverSchema := NewSchema()
+	serverSchema.Index("foo", nil)
+	err = client.syncSchema(schema, serverSchema)
+	if err == nil {
+		t.Fatalf("Should have failed")
 	}
 }
 

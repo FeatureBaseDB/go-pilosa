@@ -779,7 +779,11 @@ func (field *RangeField) Between(a int, b int) *PQLBitmapQuery {
 
 // Sum creates a sum query.
 func (field *RangeField) Sum(bitmap *PQLBitmapQuery) *PQLBaseQuery {
-	qry := fmt.Sprintf("Sum(%s, frame='%s', field='%s')", bitmap.serialize(), field.frame.name, field.name)
+	bitmapStr := ""
+	if bitmap != nil {
+		bitmapStr = fmt.Sprintf("%s, ", bitmap.serialize())
+	}
+	qry := fmt.Sprintf("Sum(%sframe='%s', field='%s')", bitmapStr, field.frame.name, field.name)
 	return NewPQLBaseQuery(qry, field.frame.index, field.err)
 }
 

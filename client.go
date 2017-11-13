@@ -233,21 +233,32 @@ func (c *Client) DeleteFrame(frame *Frame) error {
 // creates the indexes and frames in the schema on the server side.
 // This function does not delete indexes and the frames on the server side nor in the schema.
 func (c *Client) SyncSchema(schema *Schema) error {
-	var err error
 	serverSchema, err := c.Schema()
 	if err != nil {
 		return err
 	}
+
+	return c.syncSchema(schema, serverSchema)
+}
+
+func (c *Client) syncSchema(schema *Schema, serverSchema *Schema) error {
+	var err error
 
 	// find out local - remote schema
 	diffSchema := schema.diff(serverSchema)
 	// create the indexes and frames which doesn't exist on the server side
 	for indexName, index := range diffSchema.indexes {
 		if _, ok := serverSchema.indexes[indexName]; !ok {
-			c.EnsureIndex(index)
+			err = c.EnsureIndex(index)
+			if err != nil {
+				return err
+			}
 		}
 		for _, frame := range index.frames {
-			c.EnsureFrame(frame)
+			err = c.EnsureFrame(frame)
+			if err != nil {
+				return err
+			}
 		}
 	}
 

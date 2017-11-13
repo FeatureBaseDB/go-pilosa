@@ -916,8 +916,8 @@ func TestRangeFrame(t *testing.T) {
 	_, err = client.Query(index.BatchQuery(
 		frame.SetBit(1, 10),
 		frame.SetBit(1, 100),
-		frame.SetIntFieldValue(10, "foo", 11),
-		frame.SetIntFieldValue(100, "foo", 15),
+		frame.Field("foo").SetIntValue(10, 11),
+		frame.Field("foo").SetIntValue(100, 15),
 	), nil)
 	if err != nil {
 		t.Fatal(err)

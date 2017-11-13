@@ -191,7 +191,7 @@ This client supports [Range encoded fields](https://www.pilosa.com/docs/latest/q
 In order to use range encoded fields, a frame should be created with one or more integer fields. Each field should have their minimums and maximums set. Here's how you would do that using this library:
 ```go
 index, _ := schema.Index("animals", nil)
-frameOptions := &pilosa.FrameOptions{}
+frameOptions := &pilosa.FrameOptions{InverseEnabled=true}
 frameOptions.AddIntField("captivity", 0, 956)
 frame, _ := index.Frame("traits", frameOptions)
 client.SyncSchema(schema)
@@ -204,7 +204,8 @@ captivity := frame.Field("captivity")
 data := []int{3, 392, 47, 956, 219, 14, 47, 504, 21, 0, 123, 318}
 query := index.BatchQuery()
 for i, x := range data {
-	query.Add(captivity.SetIntValue(uint64(i + 1), x))
+	column := uint64(i + 1)
+	query.Add(captivity.SetIntValue(column, x))
 }
 client.Query(query, nil)
 ```
@@ -216,9 +217,21 @@ response, _ := client.Query(captivity.GT(100), nil)
 fmt.Println("%v", response.Result().Bitmap.Bits)
 
 // Query for the total number of animals in captivity
-response, _ := client.Query(captivity.Sum(nil), nil)
+response, _ = client.Query(captivity.Sum(nil), nil)
 fmt.Println(response.Result().Sum)
 ```
+
+It's possible to pass a bitmap query to `Sum`, so only columns where a row is set are filtered in:
+```go
+// Let's run a few setbit queries first
+client.Query(index.BatchQuery(
+		frame.SetBit(42, 1),
+		frame.SetBit(42, 6),
+	), nil)
+// Query for the total number of animals in captivity where row 42 is set
+response, _ = client.Query(captivity.Sum(frame.Bitmap(42)), nil)
+fmt.Println(response.Result().Sum)
+``` 
 
 See the *Field* functions further below for the list of functions that can be used with a `RangeField`.
 

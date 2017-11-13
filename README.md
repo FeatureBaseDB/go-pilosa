@@ -201,20 +201,11 @@ If the frame with the necessary field already exist on the server, you don't nee
 ```go
 // Add the captivity values to the field.
 captivity := frame.Field("captivity")
-query := index.BatchQuery(
-	captivity.SetIntValue(1, 3),
-	captivity.SetIntValue(2, 392),
-	captivity.SetIntValue(3, 47),
-	captivity.SetIntValue(4, 956),
-	captivity.SetIntValue(5, 219),
-	captivity.SetIntValue(6, 14),
-	captivity.SetIntValue(7, 47),
-	captivity.SetIntValue(8, 504),
-	captivity.SetIntValue(9, 21),
-	captivity.SetIntValue(10, 0),
-	captivity.SetIntValue(11, 123),
-	captivity.SetIntValue(12, 318),
-)
+data := []int{3, 392, 47, 956, 219, 14, 47, 504, 21, 0, 123, 318}
+query := index.BatchQuery()
+for i, x := range data {
+	query.Add(captivity.SetIntValue(uint64(i + 1), x))
+}
 client.Query(query, nil)
 ```
 

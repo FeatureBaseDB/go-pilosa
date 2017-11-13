@@ -1421,6 +1421,41 @@ func TestInvalidFieldInStatus(t *testing.T) {
 	}
 }
 
+func TestSyncSchemaCantCreateIndex(t *testing.T) {
+	server := getMockServer(404, nil, 0)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	schema = NewSchema()
+	schema.Index("foo", nil)
+	err = client.syncSchema(schema, NewSchema())
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
+func TestSyncSchemaCantCreateFrame(t *testing.T) {
+	server := getMockServer(404, nil, 0)
+	defer server.Close()
+	uri, err := NewURIFromAddress(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := NewClientWithURI(uri)
+	schema = NewSchema()
+	index, _ := schema.Index("foo", nil)
+	index.Frame("fooframe", nil)
+	serverSchema := NewSchema()
+	serverSchema.Index("foo", nil)
+	err = client.syncSchema(schema, serverSchema)
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
 func getClient() *Client {
 	uri, err := NewURIFromAddress(getPilosaBindAddress())
 	if err != nil {

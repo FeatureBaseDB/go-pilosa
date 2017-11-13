@@ -191,13 +191,13 @@ This client supports [Range encoded fields](https://www.pilosa.com/docs/latest/q
 In order to use range encoded fields, a frame should be created with one or more integer fields. Each field should have their minimums and maximums set. Here's how you would do that using this library:
 ```go
 index, _ := schema.Index("animals", nil)
-frameOptions := &pilosa.FrameOptions{InverseEnabled=true}
+frameOptions := &pilosa.FrameOptions{}
 frameOptions.AddIntField("captivity", 0, 956)
 frame, _ := index.Frame("traits", frameOptions)
 client.SyncSchema(schema)
 ``` 
 
-If the frame with the necessary field already exist on the server, you don't need to create the field instance, `client.SyncSchema(schema)` would load that to `schema`. You can then add some data:
+If the frame with the necessary field already exists on the server, you don't need to create the field instance, `client.SyncSchema(schema)` would load that to `schema`. You can then add some data:
 ```go
 // Add the captivity values to the field.
 captivity := frame.Field("captivity")
@@ -214,7 +214,7 @@ Let's write a range query:
 ```go
 // Query for all animals with more than 100 specimens
 response, _ := client.Query(captivity.GT(100), nil)
-fmt.Println("%v", response.Result().Bitmap.Bits)
+fmt.Println(response.Result().Bitmap.Bits)
 
 // Query for the total number of animals in captivity
 response, _ = client.Query(captivity.Sum(nil), nil)

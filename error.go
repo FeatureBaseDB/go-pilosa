@@ -74,4 +74,5 @@ var (
 	ErrAddrURIClusterExpected = NewError("Addresses, URIs or a cluster is expected")
 	ErrInvalidQueryOption     = NewError("Invalid query option")
 	ErrInvalidIndexOption     = NewError("Invalid index option")
+	ErrInvalidFrameOption     = NewError("Invalid frame option")
 )

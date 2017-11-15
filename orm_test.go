@@ -33,6 +33,7 @@
 package pilosa
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"sort"
@@ -590,29 +591,40 @@ func TestInvalidRowLabelFails(t *testing.T) {
 }
 
 func TestFrameOptionsToString(t *testing.T) {
-	frameOptions := &FrameOptions{
-		RowLabel:       "stargazer_id",
-		TimeQuantum:    TimeQuantumDayHour,
-		InverseEnabled: true,
-		CacheType:      CacheTypeRanked,
-		CacheSize:      1000,
-	}
-	err := frameOptions.AddIntField("foo", 10, 100)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = frameOptions.AddIntField("bar", -1, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	frame, err := sampleIndex.Frame("stargazer", frameOptions)
+	frame, err := sampleIndex.Frame("stargazer",
+		TimeQuantumDayHour,
+		InverseEnabled(true),
+		RangeEnabled(true), // unnecessary, just to be able to have one less test
+		CacheTypeRanked,
+		CacheSize(1000),
+		IntField("foo", 10, 100),
+		IntField("bar", -1, 1))
 	if err != nil {
 		t.Fatal(err)
 	}
 	jsonString := frame.options.String()
-	targetString := `{"options": {"cacheSize":1000,"cacheType":"ranked","fields":[{"max":100,"min":10,"name":"foo","type":"int"},{"max":1,"min":-1,"name":"bar","type":"int"}],"inverseEnabled":true,"rangeEnabled":true,"rowLabel":"stargazer_id","timeQuantum":"DH"}}`
+	targetString := `{"options": {"cacheSize":1000,"cacheType":"ranked","fields":[{"max":100,"min":10,"name":"foo","type":"int"},{"max":1,"min":-1,"name":"bar","type":"int"}],"inverseEnabled":true,"rangeEnabled":true,"rowLabel":"rowID","timeQuantum":"DH"}}`
 	if sortedString(targetString) != sortedString(jsonString) {
 		t.Fatalf("`%s` != `%s`", targetString, jsonString)
+	}
+}
+
+func TestInvalidFrameOption(t *testing.T) {
+	_, err := sampleIndex.Frame("invalid-frame-opt", 1)
+	if err == nil {
+		t.Fatalf("should have failed")
+	}
+	_, err = sampleIndex.Frame("invalid-frame-opt", TimeQuantumDayHour, nil)
+	if err == nil {
+		t.Fatalf("should have failed")
+	}
+	_, err = sampleIndex.Frame("invalid-frame-opt", TimeQuantumDayHour, &FrameOptions{})
+	if err == nil {
+		t.Fatalf("should have failed")
+	}
+	_, err = sampleIndex.Frame("invalid-frame-opt", FrameOptionErr(0))
+	if err == nil {
+		t.Fatalf("should have failed")
 	}
 }
 
@@ -692,4 +704,10 @@ func sortedString(s string) string {
 	arr := strings.Split(s, "")
 	sort.Strings(arr)
 	return strings.Join(arr, "")
+}
+
+func FrameOptionErr(int) FrameOption {
+	return func(*FrameOptions) error {
+		return errors.New("Some error")
+	}
 }

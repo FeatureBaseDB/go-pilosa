@@ -103,6 +103,42 @@ func NewClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 	}
 }
 
+// NewClient creates a client with the given address, URI, or cluster and options.
+func NewClient(addrUriOrCluster interface{}, options ...ClientOption) (*Client, error) {
+	var cluster *Cluster
+	clientOptions := &ClientOptions{}
+	err := clientOptions.addOptions(options...)
+	if err != nil {
+		return nil, err
+	}
+
+	switch u := addrUriOrCluster.(type) {
+	case string:
+		uri, err := NewURIFromAddress(u)
+		if err != nil {
+			return nil, err
+		}
+		cluster = NewClusterWithHost(uri)
+	case []string:
+		return NewClientFromAddresses(u, clientOptions)
+	case *URI:
+		cluster = NewClusterWithHost(u)
+	case []*URI:
+		cluster = NewClusterWithHost(u...)
+	case *Cluster:
+		cluster = u
+	case nil:
+		cluster = NewClusterWithHost()
+	default:
+		return nil, ErrAddrURIClusterExpected
+	}
+
+	return &Client{
+		cluster: cluster,
+		client:  newHTTPClient(clientOptions.withDefaults()),
+	}, nil
+}
+
 // Query runs the given query against the server with the given options.
 // Pass nil for default options.
 func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, error) {
@@ -169,7 +205,7 @@ func (c *Client) CreateFrame(frame *Frame) error {
 // EnsureIndex creates an index on the server if it does not exist.
 func (c *Client) EnsureIndex(index *Index) error {
 	err := c.CreateIndex(index)
-	if err == ErrorIndexExists {
+	if err == ErrIndexExists {
 		return nil
 	}
 	return err
@@ -178,7 +214,7 @@ func (c *Client) EnsureIndex(index *Index) error {
 // EnsureFrame creates a frame on the server if it doesn't exists.
 func (c *Client) EnsureFrame(frame *Frame) error {
 	err := c.CreateFrame(frame)
-	if err == ErrorFrameExists {
+	if err == ErrFrameExists {
 		return nil
 	}
 	return err
@@ -461,7 +497,7 @@ func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentN
 	if err != nil {
 		return nil, err
 	}
-	fragmentNodes := []fragmentNode{}
+	var fragmentNodes []fragmentNode
 	err = json.Unmarshal(body, &fragmentNodes)
 	if err != nil {
 		return nil, err
@@ -567,7 +603,7 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 		// get a host from the cluster
 		host := c.cluster.Host()
 		if host == nil {
-			return nil, nil, ErrorEmptyCluster
+			return nil, nil, ErrEmptyCluster
 		}
 
 		response, err = c.doRequest(host, method, path, headers, reader)
@@ -577,7 +613,7 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 		c.cluster.RemoveHost(host)
 	}
 	if response == nil {
-		return nil, nil, ErrorTriedMaxHosts
+		return nil, nil, ErrTriedMaxHosts
 	}
 	defer response.Body.Close()
 	// TODO: Optimize buffer creation
@@ -701,9 +737,9 @@ func makeRequestData(query string, options *QueryOptions) ([]byte, error) {
 func matchError(msg string) error {
 	switch msg {
 	case "index already exists\n":
-		return ErrorIndexExists
+		return ErrIndexExists
 	case "frame already exists\n":
-		return ErrorFrameExists
+		return ErrFrameExists
 	}
 	return nil
 }
@@ -753,6 +789,53 @@ type ClientOptions struct {
 	TLSConfig        *tls.Config
 }
 
+func (co *ClientOptions) addOptions(options ...ClientOption) error {
+	for _, option := range options {
+		err := option(co)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type ClientOption func(options *ClientOptions) error
+
+func SocketTimeout(timeout time.Duration) ClientOption {
+	return func(options *ClientOptions) error {
+		options.SocketTimeout = timeout
+		return nil
+	}
+}
+
+func ConnectTimeout(timeout time.Duration) ClientOption {
+	return func(options *ClientOptions) error {
+		options.ConnectTimeout = timeout
+		return nil
+	}
+}
+
+func PoolSizePerRoute(size int) ClientOption {
+	return func(options *ClientOptions) error {
+		options.PoolSizePerRoute = size
+		return nil
+	}
+}
+
+func TotalPoolSize(size int) ClientOption {
+	return func(options *ClientOptions) error {
+		options.TotalPoolSize = size
+		return nil
+	}
+}
+
+func TLSConfig(config *tls.Config) ClientOption {
+	return func(options *ClientOptions) error {
+		options.TLSConfig = config
+		return nil
+	}
+}
+
 func (options *ClientOptions) withDefaults() (updated *ClientOptions) {
 	// copy options so the original is not updated
 	updated = &ClientOptions{}
@@ -767,7 +850,7 @@ func (options *ClientOptions) withDefaults() (updated *ClientOptions) {
 	if updated.PoolSizePerRoute <= 0 {
 		updated.PoolSizePerRoute = 10
 	}
-	if updated.TotalPoolSize <= 100 {
+	if updated.TotalPoolSize <= 0 {
 		updated.TotalPoolSize = 100
 	}
 	if updated.TLSConfig == nil {

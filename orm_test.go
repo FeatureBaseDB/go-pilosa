@@ -621,6 +621,16 @@ func TestAddInvalidField(t *testing.T) {
 	}
 }
 
+func TestCreateIntFieldWithInvalidName(t *testing.T) {
+	client := DefaultClient()
+	index, _ := NewIndex("foo", nil)
+	frame, _ := index.Frame("foo", nil)
+	err := client.CreateIntField(frame, "??invalid$$", 10, 20)
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
 func TestEncodeMapPanicsOnMarshalFailure(t *testing.T) {
 	defer func() {
 		recover()

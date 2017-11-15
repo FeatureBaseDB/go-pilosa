@@ -30,18 +30,19 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 // DAMAGE.
 
-package pilosa_test
+package pilosa
 
 import (
+	"crypto/tls"
+	"errors"
+	"reflect"
 	"testing"
-
-	"github.com/pilosa/go-pilosa"
 )
 
 func TestQueryWithError(t *testing.T) {
 	var err error
-	client := pilosa.DefaultClient()
-	index, err := pilosa.NewIndex("foo", nil)
+	client := DefaultClient()
+	index, err := NewIndex("foo", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,12 +57,81 @@ func TestQueryWithError(t *testing.T) {
 	}
 }
 
-func TestCreateIntFieldWithInvalidName(t *testing.T) {
-	client := pilosa.DefaultClient()
-	index, _ := pilosa.NewIndex("foo", nil)
-	frame, _ := index.Frame("foo", nil)
-	err := client.CreateIntField(frame, "??invalid$$", 10, 20)
+func TestClientOptions(t *testing.T) {
+	targets := []*ClientOptions{
+		{SocketTimeout: 10},
+		{ConnectTimeout: 5},
+		{PoolSizePerRoute: 7},
+		{TotalPoolSize: 17},
+		{TLSConfig: &tls.Config{InsecureSkipVerify: true}},
+	}
+	optionsList := [][]ClientOption{
+		{SocketTimeout(10)},
+		{ConnectTimeout(5)},
+		{PoolSizePerRoute(7)},
+		{TotalPoolSize(17)},
+		{TLSConfig(&tls.Config{InsecureSkipVerify: true})},
+	}
+
+	for i := 0; i < len(targets); i++ {
+		options := &ClientOptions{}
+		options.addOptions(optionsList[i]...)
+		target := targets[i]
+		if !reflect.DeepEqual(target, options) {
+			t.Fatalf("%v != %v", target, options)
+		}
+	}
+}
+
+func TestNewClientWithErrorredOption(t *testing.T) {
+	_, err := NewClient(":8888", ErrOption(0))
 	if err == nil {
 		t.Fatalf("Should have failed")
+	}
+}
+
+func TestNewClient(t *testing.T) {
+	client, err := NewClient(":9999")
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := []*URI{URIFromAddress(":9999")}
+	if !reflect.DeepEqual(target, client.cluster.hosts) {
+		t.Fatalf("%v != %v", target, client.cluster.hosts)
+	}
+	client, err = NewClient(":invalid")
+	if err == nil {
+		t.Fatalf("should have failed")
+	}
+
+	client, err = NewClient([]*URI{URIFromAddress(":9999"), URIFromAddress(":8888")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	target = []*URI{URIFromAddress(":9999"), URIFromAddress(":8888")}
+	if !reflect.DeepEqual(target, client.cluster.hosts) {
+		t.Fatalf("%v != %v", target, client.cluster.hosts)
+	}
+
+	client, err = NewClient(DefaultCluster())
+	if err != nil {
+		t.Fatal(err)
+	}
+	target = []*URI{}
+	if !reflect.DeepEqual(target, client.cluster.hosts) {
+		t.Fatalf("%v != %v", target, client.cluster.hosts)
+	}
+}
+
+func TestNewClientWithInvalidAddr(t *testing.T) {
+	_, err := NewClient(10)
+	if err != ErrAddrURIClusterExpected {
+		t.Fatalf("%v != %v", ErrAddrURIClusterExpected, err)
+	}
+}
+
+func ErrOption(int) ClientOption {
+	return func(*ClientOptions) error {
+		return errors.New("Some error")
 	}
 }

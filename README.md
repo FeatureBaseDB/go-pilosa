@@ -266,7 +266,7 @@ Frame:
 * `Range(rowID uint64, start time.Time, end time.Time) *PQLBitmapQuery`
 * `InverseRange(columnID uint64, start time.Time, end time.Time) *PQLBitmapQuery`
 * `SetRowAttrs(rowID uint64, attrs map[string]interface{}) *PQLBaseQuery`
-* `Sum(bitmap *PQLBitmapQuery, field string) *PQLBaseQuery`
+* (**deprecated**) `Sum(bitmap *PQLBitmapQuery, field string) *PQLBaseQuery`
 * (**deprecated**) `SetIntFieldValue(columnID uint64, field string, value int) *PQLBaseQuery`
 
 Field:

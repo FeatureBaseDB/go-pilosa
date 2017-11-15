@@ -100,7 +100,7 @@ func TestSchemaToString(t *testing.T) {
 }
 
 func TestNewIndex(t *testing.T) {
-	index1, err := schema.Index("index-name", nil)
+	index1, err := schema.Index("index-name")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestNewIndex(t *testing.T) {
 		t.Fatalf("index name was not set")
 	}
 	// calling schema.Index again should return the same index
-	index2, err := schema.Index("index-name", nil)
+	index2, err := schema.Index("index-name")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,6 +121,13 @@ func TestNewIndexWithInvalidName(t *testing.T) {
 	_, err := schema.Index("$FOO", nil)
 	if err == nil {
 		t.Fatal(err)
+	}
+}
+
+func TestNewIndexWithInvalidOptions(t *testing.T) {
+	_, err := schema.Index("foo-invalid-opts", &IndexOptions{}, &IndexOptions{})
+	if err != ErrInvalidIndexOption {
+		t.Fatalf("%v != %v", ErrInvalidQueryOption, err)
 	}
 }
 

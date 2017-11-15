@@ -61,11 +61,17 @@ func NewSchema() *Schema {
 
 // Index returns an index with a name and options.
 // Pass nil for default options.
-func (s *Schema) Index(name string, options *IndexOptions) (*Index, error) {
+func (s *Schema) Index(name string, options ...*IndexOptions) (*Index, error) {
 	if index, ok := s.indexes[name]; ok {
 		return index, nil
 	}
-	index, err := NewIndex(name, options)
+	var indexOptions *IndexOptions
+	if len(options) == 1 {
+		indexOptions = options[0]
+	} else if len(options) > 1 {
+		return nil, ErrInvalidIndexOption
+	}
+	index, err := NewIndex(name, indexOptions)
 	if err != nil {
 		return nil, err
 	}

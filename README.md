@@ -12,8 +12,14 @@ Go client for Pilosa high performance distributed bitmap index.
 
 ## Change Log
 
-* **Next**
+* **v0.8.0**
     * IPv6 support.
+    * **Deprecation** `Error*` constants. Use `Err*` constants instead.
+    * **Deprecation** `NewClientWithURI`, `NewClientFromAddresses` and `NewClientWithCluster` functions. Use `NewClient` function which can be used with the same parameters.
+    * **Deprecation** Passing a `*ClientOptions` struct to `NewClient` function. Pass 0 or more `ClientOption` structs to `NewClient` instead.  
+    * **Deprecation** Passing a `*QueryOptions` struct to `client.Query` function. Pass 0 or more `QueryOption` structs instead. 
+    * **Deprecation** Index options.
+    * **Deprecation** Passing a `*FrameOptions` struct to `index.Frame` function. Pass 0 or more `FrameOption` structs instead.
 
 * **v0.7.0** (2017-10-04):
     * Dropped support for Go 1.7.
@@ -79,19 +85,19 @@ client := pilosa.DefaultClient()
 schema, err := client.Schema()
 
 // Create an Index object
-myindex, err := schema.Index("myindex", nil)
+myindex, err := schema.Index("myindex")
 
 // Create a Frame object
-myframe, err := myindex.Frame("myframe", nil)
+myframe, err := myindex.Frame("myframe")
 
 // make sure the index and frame exists on the server
 err = client.SyncSchema(schema)
 
 // Send a SetBit query. PilosaException is thrown if execution of the query fails.
-response, err := client.Query(myframe.SetBit(5, 42), nil)
+response, err := client.Query(myframe.SetBit(5, 42))
 
 // Send a Bitmap query. PilosaException is thrown if execution of the query fails.
-response, err = client.Query(myframe.Bitmap(5), nil)
+response, err = client.Query(myframe.Bitmap(5))
 
 // Get the result
 result := response.Result()
@@ -102,11 +108,9 @@ if result != nil {
 }
 
 // You can batch queries to improve throughput
-response, err = client.Query(
-    myindex.BatchQuery(
-        myframe.Bitmap(5),
-        myframe.Bitmap(10),
-    ), nil,
+response, err = client.Query(myindex.BatchQuery(
+    myframe.Bitmap(5),
+    myframe.Bitmap(10))
 )
 if err != nil {
     fmt.Println(err)
@@ -129,34 +133,19 @@ for _, result := range response.Results() {
 
 ```go
 schema := NewSchema()
-repository, err := NewIndex("repository", nil)
-```
-
-Indexes support changing the time quantum. In order to apply these custom options, pass an `IndexOptions` struct as the second argument to `NewIndex`:
-
-```go
-options := &pilosa.IndexOptions{
-    TimeQuantum: TimeQuantumYearMonth,
-}
-
-repository, err := schema.Index("repository", options);
+repository, err := schema.Index("repository")
 ```
 
 Frame definitions are created with a call to `Frame` function of an index:
 
 ```go
-stargazer, err := repository.Frame("stargazer", nil)
+stargazer, err := repository.Frame("stargazer")
 ```
 
-Similar to index objects, you can pass custom options to frames:
+You can pass options to frames:
 
 ```go
-stargazerOptions, err := &pilosa.FrameOptions{
-    InverseEnabled: true,
-    TimeQuantum: TimeQuantumYearMonthDay,
-}
-
-stargazer, err := repository.Frame("stargazer", stargazerOptions);
+stargazer, err := repository.Frame("stargazer", pilosa.InverseEnabled(true), pilosa.TimeQuantumYearMonthDay);
 ```
 
 #### Queries
@@ -194,10 +183,8 @@ This client supports [Range encoded fields](https://www.pilosa.com/docs/latest/q
 
 In order to use range encoded fields, a frame should be created with one or more integer fields. Each field should have their minimums and maximums set. Here's how you would do that using this library:
 ```go
-index, _ := schema.Index("animals", nil)
-frameOptions := &pilosa.FrameOptions{}
-frameOptions.AddIntField("captivity", 0, 956)
-frame, _ := index.Frame("traits", frameOptions)
+index, _ := schema.Index("animals")
+frame, _ := index.Frame("traits", pilosa.IntField("captivity", 0, 956))
 client.SyncSchema(schema)
 ``` 
 
@@ -211,17 +198,17 @@ for i, x := range data {
 	column := uint64(i + 1)
 	query.Add(captivity.SetIntValue(column, x))
 }
-client.Query(query, nil)
+client.Query(query)
 ```
 
 Let's write a range query:
 ```go
 // Query for all animals with more than 100 specimens
-response, _ := client.Query(captivity.GT(100), nil)
+response, _ := client.Query(captivity.GT(100))
 fmt.Println(response.Result().Bitmap.Bits)
 
 // Query for the total number of animals in captivity
-response, _ = client.Query(captivity.Sum(nil), nil)
+response, _ = client.Query(captivity.Sum(nil))
 fmt.Println(response.Result().Sum)
 ```
 
@@ -229,11 +216,10 @@ It's possible to pass a bitmap query to `Sum`, so only columns where a row is se
 ```go
 // Let's run a few setbit queries first
 client.Query(index.BatchQuery(
-		frame.SetBit(42, 1),
-		frame.SetBit(42, 6),
-	), nil)
+    frame.SetBit(42, 1),
+    frame.SetBit(42, 6)))
 // Query for the total number of animals in captivity where row 42 is set
-response, _ = client.Query(captivity.Sum(frame.Bitmap(42)), nil)
+response, _ = client.Query(captivity.Sum(frame.Bitmap(42)))
 fmt.Println(response.Result().Sum)
 ``` 
 
@@ -325,7 +311,7 @@ uri, err := pilosa.NewURIFromAddress("http://index1.pilosa.com:15000")
 if err != nil {
     // Act on the error
 }
-client := pilosa.NewClientWithURI(uri)
+client := pilosa.NewClient(uri)
 ```
 
 If you are running a cluster of Pilosa servers, you can create a `Cluster` struct that keeps addresses of those servers:
@@ -337,7 +323,13 @@ uri3, err := pilosa.NewURIFromAddress(":10111")
 cluster := pilosa.NewClusterWithHost(uri1, uri2, uri3)
 
 // Create a client with the cluster
-client := pilosa.NewClientWithCluster(cluster, nil)
+client, err := pilosa.NewClient(cluster)
+```
+
+That is equivalent to:
+```go
+client := pilosa.NewClient([]string{":10101", ":10110", ":10111"})
+
 ```
 
 It is possible to customize the behaviour of the underlying HTTP client by passing a `ClientOptions` struct to the `NewClientWithCluster` function:
@@ -350,7 +342,11 @@ options = &pilosa.ClientOptions{
     TotalPoolSize: 10,  // number of total connections in the pool  
 }
 
-client := pilosa.NewClientWithCluster(cluster, options)
+client := pilosa.NewClient(cluster,
+	pilosa.ConnectTimeout(1000), 
+    pilosa.SocketTimeout(10000),
+    pilosa.PoolSizePerRoute(3),
+    pilosa.TotalPoolSize(10))
 ```
 
 Once you create a client, you can create indexes, frames or start sending queries.
@@ -365,17 +361,13 @@ err := client.SyncSchema(schema)
 You can send queries to a Pilosa server using the `Query` function of the `Client` struct:
 
 ```go
-response, err := client.Query(frame.Bitmap(5), nil);
+response, err := client.Query(frame.Bitmap(5));
 ```
 
-The second argument of `Query` function is of type `QueryOptions`:
+`Query` accepts zero or more options:
 
 ```go
-options = &pilosa.QueryOptions{
-    Columns: true,  // return column data in the response
-}
-
-response := client.Query(frame.Bitmap(5), options)
+response := client.Query(frame.Bitmap(5), pilosa.ColumnAttrs(true), pilosa.ExcludeBits(true))
 ```
 
 ### Server Response
@@ -385,7 +377,7 @@ When a query is sent to a Pilosa server, the server either fulfills the query or
 A `QueryResponse` struct may contain zero or more results of `QueryResult` type. You can access all results using the `Results` function of `QueryResponse` (which returns a list of `QueryResult` objects), or you can use the `Result` method (which returns either the first result or `nil` if there are no results):
 
 ```go
-response, err := client.Query(frame.Bitmap(5). nil)
+response, err := client.Query(frame.Bitmap(5))
 if err != nil {
     // Act on the error
 }

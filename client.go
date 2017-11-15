@@ -141,14 +141,16 @@ func NewClient(addrUriOrCluster interface{}, options ...ClientOption) (*Client, 
 
 // Query runs the given query against the server with the given options.
 // Pass nil for default options.
-func (c *Client) Query(query PQLQuery, options *QueryOptions) (*QueryResponse, error) {
+func (c *Client) Query(query PQLQuery, options ...interface{}) (*QueryResponse, error) {
 	if err := query.Error(); err != nil {
 		return nil, err
 	}
-	if options == nil {
-		options = &QueryOptions{}
+	queryOptions := &QueryOptions{}
+	err := queryOptions.addOptions(options...)
+	if err != nil {
+		return nil, err
 	}
-	data, err := makeRequestData(query.serialize(), options)
+	data, err := makeRequestData(query.serialize(), queryOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "making request data")
 	}
@@ -867,6 +869,54 @@ type QueryOptions struct {
 	ExcludeAttrs bool
 	// ExcludeBits inhibits returning bits
 	ExcludeBits bool
+}
+
+func (qo *QueryOptions) addOptions(options ...interface{}) error {
+	for i, option := range options {
+		switch o := option.(type) {
+		case nil:
+			if i != 0 {
+				return ErrInvalidQueryOption
+			}
+			continue
+		case *QueryOptions:
+			if i != 0 {
+				return ErrInvalidQueryOption
+			}
+			*qo = *o
+		case QueryOption:
+			err := o(qo)
+			if err != nil {
+				return err
+			}
+		default:
+			return ErrInvalidQueryOption
+		}
+	}
+	return nil
+}
+
+type QueryOption func(options *QueryOptions) error
+
+func ColumnAttrs(enable bool) QueryOption {
+	return func(options *QueryOptions) error {
+		options.Columns = enable
+		return nil
+	}
+}
+
+func ExcludeAttrs(enable bool) QueryOption {
+	return func(options *QueryOptions) error {
+		options.ExcludeAttrs = enable
+		return nil
+	}
+}
+
+func ExcludeBits(enable bool) QueryOption {
+	return func(options *QueryOptions) error {
+		options.ExcludeBits = enable
+		return nil
+	}
 }
 
 type returnClientInfo uint

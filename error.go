@@ -72,4 +72,5 @@ var (
 	ErrInvalidLabel           = NewError("Invalid label")
 	ErrTriedMaxHosts          = NewError("Tried max hosts, still failing")
 	ErrAddrURIClusterExpected = NewError("Addresses, URIs or a cluster is expected")
+	ErrInvalidQueryOption     = NewError("Invalid query option")
 )

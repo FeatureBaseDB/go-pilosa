@@ -75,7 +75,10 @@ func TestClientOptions(t *testing.T) {
 
 	for i := 0; i < len(targets); i++ {
 		options := &ClientOptions{}
-		options.addOptions(optionsList[i]...)
+		err := options.addOptions(optionsList[i]...)
+		if err != nil {
+			t.Fatal(err)
+		}
 		target := targets[i]
 		if !reflect.DeepEqual(target, options) {
 			t.Fatalf("%v != %v", target, options)
@@ -84,7 +87,7 @@ func TestClientOptions(t *testing.T) {
 }
 
 func TestNewClientWithErrorredOption(t *testing.T) {
-	_, err := NewClient(":8888", ErrOption(0))
+	_, err := NewClient(":8888", ClientOptionErr(0))
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -130,8 +133,91 @@ func TestNewClientWithInvalidAddr(t *testing.T) {
 	}
 }
 
-func ErrOption(int) ClientOption {
+func ClientOptionErr(int) ClientOption {
 	return func(*ClientOptions) error {
+		return errors.New("Some error")
+	}
+}
+
+func TestQueryOptions(t *testing.T) {
+	targets := []*QueryOptions{
+		{Columns: true},
+		{Columns: false},
+		{ExcludeAttrs: true},
+		{ExcludeAttrs: false},
+		{ExcludeBits: true},
+		{ExcludeBits: false},
+	}
+
+	optionsList := [][]interface{}{
+		{ColumnAttrs(true)},
+		{ColumnAttrs(false)},
+		{ExcludeAttrs(true)},
+		{ExcludeAttrs(false)},
+		{ExcludeBits(true)},
+		{ExcludeBits(false)},
+	}
+
+	for i := 0; i < len(targets); i++ {
+		options := &QueryOptions{}
+		err := options.addOptions(optionsList[i]...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		target := targets[i]
+		if !reflect.DeepEqual(target, options) {
+			t.Fatalf("%v != %v", target, options)
+		}
+	}
+
+	target := &QueryOptions{
+		Columns:      true,
+		ExcludeAttrs: true,
+		ExcludeBits:  true,
+	}
+	options := &QueryOptions{}
+	options.addOptions(&QueryOptions{
+		Columns:      true,
+		ExcludeAttrs: true,
+		ExcludeBits:  true,
+	})
+	if !reflect.DeepEqual(target, options) {
+		t.Fatalf("%v != %v", target, options)
+	}
+}
+
+func TestQueryOptionsWithError(t *testing.T) {
+	options := &QueryOptions{}
+	err := options.addOptions(1)
+	if err == nil {
+		t.Fatalf("should have failed")
+	}
+	err = options.addOptions(ColumnAttrs(true), nil)
+	if err == nil {
+		t.Fatalf("should have failed")
+	}
+	err = options.addOptions(ColumnAttrs(true), &QueryOptions{})
+	if err == nil {
+		t.Fatalf("should have failed")
+	}
+	err = options.addOptions(QueryOptionErr(0))
+	if err == nil {
+		t.Fatalf("should have failed")
+	}
+}
+
+func TestQueryOptionsError(t *testing.T) {
+	client := DefaultClient()
+	index, _ := NewIndex("foo", nil)
+	_, err := client.Query(index.RawQuery(""), QueryOptionErr(0))
+	if err == nil {
+		t.Fatalf("should have failed")
+	}
+
+}
+
+func QueryOptionErr(int) QueryOption {
+	return func(*QueryOptions) error {
 		return errors.New("Some error")
 	}
 }

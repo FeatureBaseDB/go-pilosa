@@ -110,8 +110,7 @@ if result != nil {
 // You can batch queries to improve throughput
 response, err = client.Query(myindex.BatchQuery(
     myframe.Bitmap(5),
-    myframe.Bitmap(10))
-)
+    myframe.Bitmap(10)))
 if err != nil {
     fmt.Println(err)
 }
@@ -169,8 +168,7 @@ In order to increase throughput, you may want to batch queries sent to the Pilos
 ```go
 query := repository.BatchQuery(
     stargazer.Bitmap(1, 100),
-    repository.Union(stargazer.Bitmap(100, 200), stargazer.Bitmap(5, 100))
-)
+    repository.Union(stargazer.Bitmap(100, 200), stargazer.Bitmap(5, 100)))
 ```
 
 The recommended way of creating query structs is, using dedicated methods attached to index and frame objects. But sometimes it would be desirable to send raw queries to Pilosa. You can use `index.RawQuery` method for that. Note that query string is not validated before sending to the server:
@@ -304,14 +302,19 @@ If the Pilosa server is running at the default address (`http://localhost:10101`
 client := pilosa.DefaultClient()
 ```
 
-To use a custom server address, use the `NewClientWithURI` function:
+To use a custom server address, use the `NewClient` function:
 
 ```go
 uri, err := pilosa.NewURIFromAddress("http://index1.pilosa.com:15000")
 if err != nil {
     // Act on the error
 }
-client := pilosa.NewClient(uri)
+client, err := pilosa.NewClient(uri)
+```
+
+Equivalently:
+```go
+client, err := pilosa.NewClient("http://index1.pilosa.com:15000")
 ```
 
 If you are running a cluster of Pilosa servers, you can create a `Cluster` struct that keeps addresses of those servers:
@@ -332,21 +335,14 @@ client := pilosa.NewClient([]string{":10101", ":10110", ":10111"})
 
 ```
 
-It is possible to customize the behaviour of the underlying HTTP client by passing a `ClientOptions` struct to the `NewClientWithCluster` function:
+It is possible to customize the behaviour of the underlying HTTP client by passing `ClientOption` structs to the `NewClient` function:
 
 ```go
-options = &pilosa.ClientOptions{
-    ConnectTimeout: 1000,  // if can't connect in  a second, close the connection
-    setSocketTimeout: 10000,  // if no response received in 10 seconds, close the connection
-    PoolSizePerRoute: 3,  // number of connections in the pool per host
-    TotalPoolSize: 10,  // number of total connections in the pool  
-}
-
 client := pilosa.NewClient(cluster,
-	pilosa.ConnectTimeout(1000), 
-    pilosa.SocketTimeout(10000),
-    pilosa.PoolSizePerRoute(3),
-    pilosa.TotalPoolSize(10))
+	pilosa.ConnectTimeout(1000),  // if can't connect in  a second, close the connection 
+    pilosa.SocketTimeout(10000),  // if no response received in 10 seconds, close the connection
+    pilosa.PoolSizePerRoute(3),  // number of connections in the pool per host
+    pilosa.TotalPoolSize(10))   // number of total connections in the pool
 ```
 
 Once you create a client, you can create indexes, frames or start sending queries.

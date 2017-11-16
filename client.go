@@ -905,6 +905,7 @@ func (qo *QueryOptions) addOptions(options ...interface{}) error {
 // QueryOption is used when using options with a client.Query,
 type QueryOption func(options *QueryOptions) error
 
+// ColumnAttrs enables returning column attributes in the result.
 func ColumnAttrs(enable bool) QueryOption {
 	return func(options *QueryOptions) error {
 		options.Columns = enable

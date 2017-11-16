@@ -1385,15 +1385,15 @@ func TestHttpRequest(t *testing.T) {
 func TestInvalidFieldInStatus(t *testing.T) {
 	responseMap := map[string]interface{}{
 		"status": map[string]interface{}{
-			"Nodes": []map[string]interface{}{map[string]interface{}{
+			"Nodes": []map[string]interface{}{{
 				"Host":   "localhost:10101",
 				"Scheme": "http",
-				"Indexes": []map[string]interface{}{map[string]interface{}{
+				"Indexes": []map[string]interface{}{{
 					"Name": "sample-index",
-					"Frames": []map[string]interface{}{map[string]interface{}{
+					"Frames": []map[string]interface{}{{
 						"Name": "foo",
 						"Meta": map[string]interface{}{
-							"Fields": []map[string]interface{}{map[string]interface{}{
+							"Fields": []map[string]interface{}{{
 								"Name": "$$invalid",
 								"Type": "int",
 								"Min":  0,

@@ -12,7 +12,7 @@ Go client for Pilosa high performance distributed bitmap index.
 
 ## Change Log
 
-* **v0.8.0**
+* **v0.8.0** (2017-11-16)
     * IPv6 support.
     * **Deprecation** `Error*` constants. Use `Err*` constants instead.
     * **Deprecation** `NewClientWithURI`, `NewClientFromAddresses` and `NewClientWithCluster` functions. Use `NewClient` function which can be used with the same parameters.

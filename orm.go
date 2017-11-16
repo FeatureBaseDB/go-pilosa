@@ -274,36 +274,36 @@ func NewIndex(name string, options *IndexOptions) (*Index, error) {
 }
 
 // Frames return a copy of the frames in this index
-func (d *Index) Frames() map[string]*Frame {
+func (idx *Index) Frames() map[string]*Frame {
 	result := make(map[string]*Frame)
-	for k, v := range d.frames {
+	for k, v := range idx.frames {
 		result[k] = v.copy()
 	}
 	return result
 }
 
-func (d *Index) copy() *Index {
+func (idx *Index) copy() *Index {
 	frames := make(map[string]*Frame)
-	for name, f := range d.frames {
+	for name, f := range idx.frames {
 		frames[name] = f.copy()
 	}
 	index := &Index{
-		name:    d.name,
+		name:    idx.name,
 		frames:  frames,
 		options: &IndexOptions{},
 	}
-	*index.options = *d.options
+	*index.options = *idx.options
 	return index
 }
 
 // Name returns the name of this index.
-func (d *Index) Name() string {
-	return d.name
+func (idx *Index) Name() string {
+	return idx.name
 }
 
 // Frame creates a frame struct with the specified name and defaults.
-func (d *Index) Frame(name string, options ...interface{}) (*Frame, error) {
-	if frame, ok := d.frames[name]; ok {
+func (idx *Index) Frame(name string, options ...interface{}) (*Frame, error) {
+	if frame, ok := idx.frames[name]; ok {
 		return frame, nil
 	}
 	if err := validateFrameName(name); err != nil {
@@ -318,90 +318,90 @@ func (d *Index) Frame(name string, options ...interface{}) (*Frame, error) {
 	if err := validateLabel(frameOptions.RowLabel); err != nil {
 		return nil, err
 	}
-	frame := newFrame(name, d)
+	frame := newFrame(name, idx)
 	frame.options = frameOptions
-	d.frames[name] = frame
+	idx.frames[name] = frame
 	return frame, nil
 }
 
 // BatchQuery creates a batch query with the given queries.
-func (d *Index) BatchQuery(queries ...PQLQuery) *PQLBatchQuery {
+func (idx *Index) BatchQuery(queries ...PQLQuery) *PQLBatchQuery {
 	stringQueries := make([]string, 0, len(queries))
 	for _, query := range queries {
 		stringQueries = append(stringQueries, query.serialize())
 	}
 	return &PQLBatchQuery{
-		index:   d,
+		index:   idx,
 		queries: stringQueries,
 	}
 }
 
 // RawQuery creates a query with the given string.
 // Note that the query is not validated before sending to the server.
-func (d *Index) RawQuery(query string) *PQLBaseQuery {
-	return NewPQLBaseQuery(query, d, nil)
+func (idx *Index) RawQuery(query string) *PQLBaseQuery {
+	return NewPQLBaseQuery(query, idx, nil)
 }
 
 // Union creates a Union query.
 // Union performs a logical OR on the results of each BITMAP_CALL query passed to it.
-func (d *Index) Union(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
-	return d.bitmapOperation("Union", bitmaps...)
+func (idx *Index) Union(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
+	return idx.bitmapOperation("Union", bitmaps...)
 }
 
 // Intersect creates an Intersect query.
 // Intersect performs a logical AND on the results of each BITMAP_CALL query passed to it.
-func (d *Index) Intersect(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
+func (idx *Index) Intersect(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
 	if len(bitmaps) < 1 {
-		return NewPQLBitmapQuery("", d, NewError("Intersect operation requires at least 1 bitmap"))
+		return NewPQLBitmapQuery("", idx, NewError("Intersect operation requires at least 1 bitmap"))
 	}
-	return d.bitmapOperation("Intersect", bitmaps...)
+	return idx.bitmapOperation("Intersect", bitmaps...)
 }
 
 // Difference creates an Intersect query.
 // Difference returns all of the bits from the first BITMAP_CALL argument passed to it, without the bits from each subsequent BITMAP_CALL.
-func (d *Index) Difference(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
+func (idx *Index) Difference(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
 	if len(bitmaps) < 1 {
-		return NewPQLBitmapQuery("", d, NewError("Difference operation requires at least 1 bitmap"))
+		return NewPQLBitmapQuery("", idx, NewError("Difference operation requires at least 1 bitmap"))
 	}
-	return d.bitmapOperation("Difference", bitmaps...)
+	return idx.bitmapOperation("Difference", bitmaps...)
 }
 
 // Xor creates an Xor query.
-func (d *Index) Xor(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
+func (idx *Index) Xor(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
 	if len(bitmaps) < 2 {
-		return NewPQLBitmapQuery("", d, NewError("Xor operation requires at least 2 bitmaps"))
+		return NewPQLBitmapQuery("", idx, NewError("Xor operation requires at least 2 bitmaps"))
 	}
-	return d.bitmapOperation("Xor", bitmaps...)
+	return idx.bitmapOperation("Xor", bitmaps...)
 }
 
 // Count creates a Count query.
 // Returns the number of set bits in the BITMAP_CALL passed in.
-func (d *Index) Count(bitmap *PQLBitmapQuery) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("Count(%s)", bitmap.serialize()), d, nil)
+func (idx *Index) Count(bitmap *PQLBitmapQuery) *PQLBaseQuery {
+	return NewPQLBaseQuery(fmt.Sprintf("Count(%s)", bitmap.serialize()), idx, nil)
 }
 
 // SetColumnAttrs creates a SetColumnAttrs query.
 // SetColumnAttrs associates arbitrary key/value pairs with a column in an index.
 // Following types are accepted: integer, float, string and boolean types.
-func (d *Index) SetColumnAttrs(columnID uint64, attrs map[string]interface{}) *PQLBaseQuery {
+func (idx *Index) SetColumnAttrs(columnID uint64, attrs map[string]interface{}) *PQLBaseQuery {
 	attrsString, err := createAttributesString(attrs)
 	if err != nil {
-		return NewPQLBaseQuery("", d, err)
+		return NewPQLBaseQuery("", idx, err)
 	}
 	return NewPQLBaseQuery(fmt.Sprintf("SetColumnAttrs(%s=%d, %s)",
-		d.options.ColumnLabel, columnID, attrsString), d, nil)
+		idx.options.ColumnLabel, columnID, attrsString), idx, nil)
 }
 
-func (d *Index) bitmapOperation(name string, bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
+func (idx *Index) bitmapOperation(name string, bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
 	var err error
 	args := make([]string, 0, len(bitmaps))
 	for _, bitmap := range bitmaps {
 		if err = bitmap.Error(); err != nil {
-			return NewPQLBitmapQuery("", d, err)
+			return NewPQLBitmapQuery("", idx, err)
 		}
 		args = append(args, bitmap.serialize())
 	}
-	return NewPQLBitmapQuery(fmt.Sprintf("%s(%s)", name, strings.Join(args, ", ")), d, nil)
+	return NewPQLBitmapQuery(fmt.Sprintf("%s(%s)", name, strings.Join(args, ", ")), idx, nil)
 }
 
 // FrameInfo represents schema information for a frame.
@@ -509,8 +509,10 @@ func (fo *FrameOptions) addOptions(options ...interface{}) error {
 	return nil
 }
 
+// FrameOption is used to pass an option to index.Frame function.
 type FrameOption func(options *FrameOptions) error
 
+// InverseEnabled enables inverse frame.
 func InverseEnabled(enabled bool) FrameOption {
 	return func(options *FrameOptions) error {
 		options.InverseEnabled = enabled
@@ -518,6 +520,7 @@ func InverseEnabled(enabled bool) FrameOption {
 	}
 }
 
+// CacheSize sets the cache size.
 func CacheSize(size uint) FrameOption {
 	return func(options *FrameOptions) error {
 		options.CacheSize = size
@@ -525,6 +528,7 @@ func CacheSize(size uint) FrameOption {
 	}
 }
 
+// RangeEnabled enables range encoding for a frame.
 func RangeEnabled(enabled bool) FrameOption {
 	return func(options *FrameOptions) error {
 		options.RangeEnabled = enabled
@@ -532,6 +536,7 @@ func RangeEnabled(enabled bool) FrameOption {
 	}
 }
 
+// IntField adds an integer field to the frame.
 func IntField(name string, min int, max int) FrameOption {
 	return func(options *FrameOptions) error {
 		return options.AddIntField(name, min, max)

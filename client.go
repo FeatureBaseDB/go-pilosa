@@ -583,7 +583,7 @@ func (c *Client) status() (*Status, error) {
 	return root.Status, nil
 }
 
-// HttpGet sends an HTTP request to the Pilosa server.
+// HttpRequest sends an HTTP request to the Pilosa server.
 // **NOTE**: This function is experimental and may be removed in later revisions.
 func (c *Client) HttpRequest(method string, path string, data []byte, headers map[string]string) (*http.Response, []byte, error) {
 	return c.httpRequest(method, path, data, headers, rawResponse)
@@ -782,7 +782,7 @@ func valsToImportRequest(indexName string, frameName string, slice uint64, field
 	}
 }
 
-// ClientOptions control the properties of client connection to the server
+// ClientOptions control the properties of client connection to the server.
 type ClientOptions struct {
 	SocketTimeout    time.Duration
 	ConnectTimeout   time.Duration
@@ -801,8 +801,10 @@ func (co *ClientOptions) addOptions(options ...ClientOption) error {
 	return nil
 }
 
+// ClientOption is used when creating a PilosaClient struct.
 type ClientOption func(options *ClientOptions) error
 
+// SocketTimeout is the maximum idle socket time in nanoseconds
 func SocketTimeout(timeout time.Duration) ClientOption {
 	return func(options *ClientOptions) error {
 		options.SocketTimeout = timeout
@@ -810,6 +812,7 @@ func SocketTimeout(timeout time.Duration) ClientOption {
 	}
 }
 
+// ConnectTimeout is the maximum time to connect in nanoseconds.
 func ConnectTimeout(timeout time.Duration) ClientOption {
 	return func(options *ClientOptions) error {
 		options.ConnectTimeout = timeout
@@ -817,6 +820,7 @@ func ConnectTimeout(timeout time.Duration) ClientOption {
 	}
 }
 
+// PoolSizePerRoute is the maximum number of active connections in the pool to a host.
 func PoolSizePerRoute(size int) ClientOption {
 	return func(options *ClientOptions) error {
 		options.PoolSizePerRoute = size
@@ -824,6 +828,7 @@ func PoolSizePerRoute(size int) ClientOption {
 	}
 }
 
+// TotalPoolSize is the maximum number of connections in the pool.
 func TotalPoolSize(size int) ClientOption {
 	return func(options *ClientOptions) error {
 		options.TotalPoolSize = size
@@ -831,6 +836,7 @@ func TotalPoolSize(size int) ClientOption {
 	}
 }
 
+// TLSConfig contains the TLS configuration.
 func TLSConfig(config *tls.Config) ClientOption {
 	return func(options *ClientOptions) error {
 		options.TLSConfig = config
@@ -896,6 +902,7 @@ func (qo *QueryOptions) addOptions(options ...interface{}) error {
 	return nil
 }
 
+// QueryOption is used when using options with a client.Query,
 type QueryOption func(options *QueryOptions) error
 
 func ColumnAttrs(enable bool) QueryOption {
@@ -905,6 +912,7 @@ func ColumnAttrs(enable bool) QueryOption {
 	}
 }
 
+// ExcludeAttrs enables discarding attributes from a result,
 func ExcludeAttrs(enable bool) QueryOption {
 	return func(options *QueryOptions) error {
 		options.ExcludeAttrs = enable
@@ -912,6 +920,7 @@ func ExcludeAttrs(enable bool) QueryOption {
 	}
 }
 
+// ExcludeBits enables discarding bits from a result,
 func ExcludeBits(enable bool) QueryOption {
 	return func(options *QueryOptions) error {
 		options.ExcludeBits = enable
@@ -975,6 +984,7 @@ type StatusMeta struct {
 	TimeQuantum    string
 }
 
+// StatusField contains a field in the status.
 type StatusField struct {
 	Name string
 	Type string

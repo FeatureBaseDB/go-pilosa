@@ -844,10 +844,10 @@ func TLSConfig(config *tls.Config) ClientOption {
 	}
 }
 
-func (options *ClientOptions) withDefaults() (updated *ClientOptions) {
+func (co *ClientOptions) withDefaults() (updated *ClientOptions) {
 	// copy options so the original is not updated
 	updated = &ClientOptions{}
-	*updated = *options
+	*updated = *co
 	// impose defaults
 	if updated.SocketTimeout <= 0 {
 		updated.SocketTimeout = time.Second * 300

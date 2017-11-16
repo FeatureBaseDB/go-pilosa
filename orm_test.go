@@ -33,6 +33,7 @@
 package pilosa
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"sort"
@@ -100,7 +101,7 @@ func TestSchemaToString(t *testing.T) {
 }
 
 func TestNewIndex(t *testing.T) {
-	index1, err := schema.Index("index-name", nil)
+	index1, err := schema.Index("index-name")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +109,7 @@ func TestNewIndex(t *testing.T) {
 		t.Fatalf("index name was not set")
 	}
 	// calling schema.Index again should return the same index
-	index2, err := schema.Index("index-name", nil)
+	index2, err := schema.Index("index-name")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,6 +122,13 @@ func TestNewIndexWithInvalidName(t *testing.T) {
 	_, err := schema.Index("$FOO", nil)
 	if err == nil {
 		t.Fatal(err)
+	}
+}
+
+func TestNewIndexWithInvalidOptions(t *testing.T) {
+	_, err := schema.Index("foo-invalid-opts", &IndexOptions{}, &IndexOptions{})
+	if err != ErrInvalidIndexOption {
+		t.Fatalf("%v != %v", ErrInvalidQueryOption, err)
 	}
 }
 
@@ -583,29 +591,40 @@ func TestInvalidRowLabelFails(t *testing.T) {
 }
 
 func TestFrameOptionsToString(t *testing.T) {
-	frameOptions := &FrameOptions{
-		RowLabel:       "stargazer_id",
-		TimeQuantum:    TimeQuantumDayHour,
-		InverseEnabled: true,
-		CacheType:      CacheTypeRanked,
-		CacheSize:      1000,
-	}
-	err := frameOptions.AddIntField("foo", 10, 100)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = frameOptions.AddIntField("bar", -1, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	frame, err := sampleIndex.Frame("stargazer", frameOptions)
+	frame, err := sampleIndex.Frame("stargazer",
+		TimeQuantumDayHour,
+		InverseEnabled(true),
+		RangeEnabled(true), // unnecessary, just to be able to have one less test
+		CacheTypeRanked,
+		CacheSize(1000),
+		IntField("foo", 10, 100),
+		IntField("bar", -1, 1))
 	if err != nil {
 		t.Fatal(err)
 	}
 	jsonString := frame.options.String()
-	targetString := `{"options": {"cacheSize":1000,"cacheType":"ranked","fields":[{"max":100,"min":10,"name":"foo","type":"int"},{"max":1,"min":-1,"name":"bar","type":"int"}],"inverseEnabled":true,"rangeEnabled":true,"rowLabel":"stargazer_id","timeQuantum":"DH"}}`
+	targetString := `{"options": {"cacheSize":1000,"cacheType":"ranked","fields":[{"max":100,"min":10,"name":"foo","type":"int"},{"max":1,"min":-1,"name":"bar","type":"int"}],"inverseEnabled":true,"rangeEnabled":true,"rowLabel":"rowID","timeQuantum":"DH"}}`
 	if sortedString(targetString) != sortedString(jsonString) {
 		t.Fatalf("`%s` != `%s`", targetString, jsonString)
+	}
+}
+
+func TestInvalidFrameOption(t *testing.T) {
+	_, err := sampleIndex.Frame("invalid-frame-opt", 1)
+	if err == nil {
+		t.Fatalf("should have failed")
+	}
+	_, err = sampleIndex.Frame("invalid-frame-opt", TimeQuantumDayHour, nil)
+	if err == nil {
+		t.Fatalf("should have failed")
+	}
+	_, err = sampleIndex.Frame("invalid-frame-opt", TimeQuantumDayHour, &FrameOptions{})
+	if err == nil {
+		t.Fatalf("should have failed")
+	}
+	_, err = sampleIndex.Frame("invalid-frame-opt", FrameOptionErr(0))
+	if err == nil {
+		t.Fatalf("should have failed")
 	}
 }
 
@@ -618,6 +637,16 @@ func TestAddInvalidField(t *testing.T) {
 	err = frameOptions.AddIntField("valid", 10, 10)
 	if err == nil {
 		t.Fatalf("Adding a field with max <= min should have failed")
+	}
+}
+
+func TestCreateIntFieldWithInvalidName(t *testing.T) {
+	client := DefaultClient()
+	index, _ := NewIndex("foo", nil)
+	frame, _ := index.Frame("foo", nil)
+	err := client.CreateIntField(frame, "??invalid$$", 10, 20)
+	if err == nil {
+		t.Fatalf("Should have failed")
 	}
 }
 
@@ -675,4 +704,10 @@ func sortedString(s string) string {
 	arr := strings.Split(s, "")
 	sort.Strings(arr)
 	return strings.Join(arr, "")
+}
+
+func FrameOptionErr(int) FrameOption {
+	return func(*FrameOptions) error {
+		return errors.New("Some error")
+	}
 }

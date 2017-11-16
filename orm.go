@@ -61,11 +61,17 @@ func NewSchema() *Schema {
 
 // Index returns an index with a name and options.
 // Pass nil for default options.
-func (s *Schema) Index(name string, options *IndexOptions) (*Index, error) {
+func (s *Schema) Index(name string, options ...*IndexOptions) (*Index, error) {
 	if index, ok := s.indexes[name]; ok {
 		return index, nil
 	}
-	index, err := NewIndex(name, options)
+	var indexOptions *IndexOptions
+	if len(options) == 1 {
+		indexOptions = options[0]
+	} else if len(options) > 1 {
+		return nil, ErrInvalidIndexOption
+	}
+	index, err := NewIndex(name, indexOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -296,22 +302,24 @@ func (d *Index) Name() string {
 }
 
 // Frame creates a frame struct with the specified name and defaults.
-func (d *Index) Frame(name string, options *FrameOptions) (*Frame, error) {
+func (d *Index) Frame(name string, options ...interface{}) (*Frame, error) {
 	if frame, ok := d.frames[name]; ok {
 		return frame, nil
-	}
-	if options == nil {
-		options = &FrameOptions{}
 	}
 	if err := validateFrameName(name); err != nil {
 		return nil, err
 	}
-	options = options.withDefaults()
-	if err := validateLabel(options.RowLabel); err != nil {
+	frameOptions := &FrameOptions{}
+	err := frameOptions.addOptions(options...)
+	if err != nil {
+		return nil, err
+	}
+	frameOptions = frameOptions.withDefaults()
+	if err := validateLabel(frameOptions.RowLabel); err != nil {
 		return nil, err
 	}
 	frame := newFrame(name, d)
-	frame.options = options
+	frame.options = frameOptions
 	d.frames[name] = frame
 	return frame, nil
 }
@@ -470,6 +478,64 @@ func (options *FrameOptions) AddIntField(name string, min int, max int) error {
 	}
 	options.fields[name] = field
 	return nil
+}
+
+func (fo *FrameOptions) addOptions(options ...interface{}) error {
+	for i, option := range options {
+		switch o := option.(type) {
+		case nil:
+			if i != 0 {
+				return ErrInvalidFrameOption
+			}
+			continue
+		case *FrameOptions:
+			if i != 0 {
+				return ErrInvalidFrameOption
+			}
+			*fo = *o
+		case FrameOption:
+			err := o(fo)
+			if err != nil {
+				return err
+			}
+		case TimeQuantum:
+			fo.TimeQuantum = o
+		case CacheType:
+			fo.CacheType = o
+		default:
+			return ErrInvalidFrameOption
+		}
+	}
+	return nil
+}
+
+type FrameOption func(options *FrameOptions) error
+
+func InverseEnabled(enabled bool) FrameOption {
+	return func(options *FrameOptions) error {
+		options.InverseEnabled = enabled
+		return nil
+	}
+}
+
+func CacheSize(size uint) FrameOption {
+	return func(options *FrameOptions) error {
+		options.CacheSize = size
+		return nil
+	}
+}
+
+func RangeEnabled(enabled bool) FrameOption {
+	return func(options *FrameOptions) error {
+		options.RangeEnabled = enabled
+		return nil
+	}
+}
+
+func IntField(name string, min int, max int) FrameOption {
+	return func(options *FrameOptions) error {
+		return options.AddIntField(name, min, max)
+	}
 }
 
 // Frame structs are used to segment and define different functional characteristics within your entire index.

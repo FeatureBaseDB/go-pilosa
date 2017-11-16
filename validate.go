@@ -65,19 +65,19 @@ func validateIndexName(name string) error {
 	if ValidIndexName(name) {
 		return nil
 	}
-	return ErrorInvalidIndexName
+	return ErrInvalidIndexName
 }
 
 func validateFrameName(name string) error {
 	if ValidFrameName(name) {
 		return nil
 	}
-	return ErrorInvalidFrameName
+	return ErrInvalidFrameName
 }
 
 func validateLabel(label string) error {
 	if ValidLabel(label) {
 		return nil
 	}
-	return ErrorInvalidLabel
+	return ErrInvalidLabel
 }

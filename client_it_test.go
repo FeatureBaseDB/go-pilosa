@@ -403,7 +403,7 @@ func TestErrorCreatingFrame(t *testing.T) {
 func TestIndexAlreadyExists(t *testing.T) {
 	client := getClient()
 	err := client.CreateIndex(index)
-	if err != ErrorIndexExists {
+	if err != ErrIndexExists {
 		t.Fatal(err)
 	}
 }
@@ -411,7 +411,7 @@ func TestIndexAlreadyExists(t *testing.T) {
 func TestQueryWithEmptyClusterFails(t *testing.T) {
 	client := NewClientWithCluster(DefaultCluster(), nil)
 	_, err := client.Query(index.RawQuery("won't run"), nil)
-	if err != ErrorEmptyCluster {
+	if err != ErrEmptyCluster {
 		t.Fatal(err)
 	}
 }
@@ -421,8 +421,8 @@ func TestMaxHostsFail(t *testing.T) {
 	cluster := NewClusterWithHost(uri, uri, uri, uri)
 	client := NewClientWithCluster(cluster, nil)
 	_, err := client.Query(index.RawQuery("foo"), nil)
-	if err != ErrorTriedMaxHosts {
-		t.Fatalf("ErrorTriedMaxHosts error should be returned")
+	if err != ErrTriedMaxHosts {
+		t.Fatalf("ErrTriedMaxHosts error should be returned")
 	}
 }
 
@@ -1461,8 +1461,11 @@ func getClient() *Client {
 	if err != nil {
 		panic(err)
 	}
-	cluster := NewClusterWithHost(uri)
-	return NewClientWithCluster(cluster, &ClientOptions{TLSConfig: &tls.Config{InsecureSkipVerify: true}})
+	client, err := NewClient(uri, TLSConfig(&tls.Config{InsecureSkipVerify: true}))
+	if err != nil {
+		panic(err)
+	}
+	return client
 }
 
 func getPilosaBindAddress() string {

@@ -51,13 +51,28 @@ func (e Error) Error() string {
 }
 
 // Predefined Pilosa errors.
+// Deprecated. Use Err forms instead.
 var (
-	ErrorEmptyCluster             = NewError("No usable addresses in the cluster")
-	ErrorIndexExists              = NewError("Index exists")
-	ErrorFrameExists              = NewError("Frame exists")
-	ErrorInvalidIndexName         = NewError("Invalid index name")
-	ErrorInvalidFrameName         = NewError("Invalid frame name")
-	ErrorInvalidLabel             = NewError("Invalid label")
-	ErrorInverseBitmapsNotEnabled = NewError("Inverse bitmaps support was not enabled for this frame")
-	ErrorTriedMaxHosts            = NewError("Tried max hosts, still failing")
+	ErrorEmptyCluster     = NewError("No usable addresses in the cluster")
+	ErrorIndexExists      = NewError("Index exists")
+	ErrorFrameExists      = NewError("Frame exists")
+	ErrorInvalidIndexName = NewError("Invalid index name")
+	ErrorInvalidFrameName = NewError("Invalid frame name")
+	ErrorInvalidLabel     = NewError("Invalid label")
+	ErrorTriedMaxHosts    = NewError("Tried max hosts, still failing")
+)
+
+// Predefined Pilosa errors.
+var (
+	ErrEmptyCluster           = NewError("No usable addresses in the cluster")
+	ErrIndexExists            = NewError("Index exists")
+	ErrFrameExists            = NewError("Frame exists")
+	ErrInvalidIndexName       = NewError("Invalid index name")
+	ErrInvalidFrameName       = NewError("Invalid frame name")
+	ErrInvalidLabel           = NewError("Invalid label")
+	ErrTriedMaxHosts          = NewError("Tried max hosts, still failing")
+	ErrAddrURIClusterExpected = NewError("Addresses, URIs or a cluster is expected")
+	ErrInvalidQueryOption     = NewError("Invalid query option")
+	ErrInvalidIndexOption     = NewError("Invalid index option")
+	ErrInvalidFrameOption     = NewError("Invalid frame option")
 )

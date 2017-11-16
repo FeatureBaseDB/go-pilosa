@@ -423,10 +423,10 @@ type FrameOptions struct {
 	fields         map[string]rangeField
 }
 
-func (options *FrameOptions) withDefaults() (updated *FrameOptions) {
+func (fo *FrameOptions) withDefaults() (updated *FrameOptions) {
 	// copy options so the original is not updated
 	updated = &FrameOptions{}
-	*updated = *options
+	*updated = *fo
 	// impose defaults
 	if updated.RowLabel == "" {
 		updated.RowLabel = "rowID"
@@ -437,29 +437,29 @@ func (options *FrameOptions) withDefaults() (updated *FrameOptions) {
 	return
 }
 
-func (options FrameOptions) String() string {
+func (fo FrameOptions) String() string {
 	mopt := map[string]interface{}{
-		"rowLabel": options.RowLabel,
+		"rowLabel": fo.RowLabel,
 	}
-	if options.InverseEnabled {
+	if fo.InverseEnabled {
 		mopt["inverseEnabled"] = true
 	}
-	if options.TimeQuantum != TimeQuantumNone {
-		mopt["timeQuantum"] = string(options.TimeQuantum)
+	if fo.TimeQuantum != TimeQuantumNone {
+		mopt["timeQuantum"] = string(fo.TimeQuantum)
 	}
-	if options.CacheType != CacheTypeDefault {
-		mopt["cacheType"] = string(options.CacheType)
+	if fo.CacheType != CacheTypeDefault {
+		mopt["cacheType"] = string(fo.CacheType)
 	}
-	if options.CacheSize != 0 {
-		mopt["cacheSize"] = options.CacheSize
+	if fo.CacheSize != 0 {
+		mopt["cacheSize"] = fo.CacheSize
 	}
-	if options.RangeEnabled {
+	if fo.RangeEnabled {
 		mopt["rangeEnabled"] = true
 	}
-	if len(options.fields) > 0 {
+	if len(fo.fields) > 0 {
 		mopt["rangeEnabled"] = true
-		fields := make([]rangeField, 0, len(options.fields))
-		for _, field := range options.fields {
+		fields := make([]rangeField, 0, len(fo.fields))
+		for _, field := range fo.fields {
 			fields = append(fields, field)
 		}
 		mopt["fields"] = fields
@@ -468,15 +468,15 @@ func (options FrameOptions) String() string {
 }
 
 // AddIntField adds an integer field to the frame options
-func (options *FrameOptions) AddIntField(name string, min int, max int) error {
+func (fo *FrameOptions) AddIntField(name string, min int, max int) error {
 	field, err := newIntRangeField(name, min, max)
 	if err != nil {
 		return err
 	}
-	if options.fields == nil {
-		options.fields = map[string]rangeField{}
+	if fo.fields == nil {
+		fo.fields = map[string]rangeField{}
 	}
-	options.fields[name] = field
+	fo.fields[name] = field
 	return nil
 }
 

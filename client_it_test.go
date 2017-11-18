@@ -489,7 +489,7 @@ func TestQueryFails(t *testing.T) {
 
 func TestInvalidHttpRequest(t *testing.T) {
 	client := getClient()
-	_, _, err := client.httpRequest("INVALID METHOD", "/foo", nil, nil, 0)
+	_, _, err := client.httpRequest("INVALID METHOD", "/foo", nil, nil)
 	if err == nil {
 		t.Fatal()
 	}

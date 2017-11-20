@@ -168,9 +168,6 @@ func (c *Client) Query(query PQLQuery, options ...interface{}) (*QueryResponse, 
 	if err != nil {
 		return nil, err
 	}
-	if !queryResponse.Success {
-		return nil, NewError(queryResponse.ErrorMessage)
-	}
 	return queryResponse, nil
 }
 

@@ -51,13 +51,4 @@ func TestAnyError(t *testing.T) {
 	if err == nil {
 		t.Fatalf("should have gotten an error")
 	}
-
-	err = anyError(
-		&http.Response{StatusCode: 400,
-			Body: ioutil.NopCloser(bytes.NewBuffer([]byte("index already exists\n")))},
-		nil)
-	if err != ErrIndexExists {
-		t.Fatalf("should have gotten ErrIndexExists, but got %v", err)
-	}
-
 }

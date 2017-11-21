@@ -155,7 +155,7 @@ func (c *Client) Query(query PQLQuery, options ...interface{}) (*QueryResponse, 
 		return nil, errors.Wrap(err, "making request data")
 	}
 	path := fmt.Sprintf("/index/%s/query", query.Index().name)
-	_, buf, err := c.httpRequest("POST", path, data, protobufHeaders, rawResponse)
+	_, buf, err := c.httpRequest("POST", path, data, protobufHeaders)
 	if err != nil {
 		return nil, err
 	}
@@ -168,9 +168,6 @@ func (c *Client) Query(query PQLQuery, options ...interface{}) (*QueryResponse, 
 	if err != nil {
 		return nil, err
 	}
-	if !queryResponse.Success {
-		return nil, NewError(queryResponse.ErrorMessage)
-	}
 	return queryResponse, nil
 }
 
@@ -178,8 +175,11 @@ func (c *Client) Query(query PQLQuery, options ...interface{}) (*QueryResponse, 
 func (c *Client) CreateIndex(index *Index) error {
 	data := []byte(index.options.String())
 	path := fmt.Sprintf("/index/%s", index.name)
-	_, _, err := c.httpRequest("POST", path, data, nil, noResponse)
+	response, _, err := c.httpRequest("POST", path, data, nil)
 	if err != nil {
+		if response.StatusCode == 409 {
+			return ErrIndexExists
+		}
 		return err
 	}
 	if index.options.TimeQuantum != TimeQuantumNone {
@@ -193,15 +193,17 @@ func (c *Client) CreateIndex(index *Index) error {
 func (c *Client) CreateFrame(frame *Frame) error {
 	data := []byte(frame.options.String())
 	path := fmt.Sprintf("/index/%s/frame/%s", frame.index.name, frame.name)
-	_, _, err := c.httpRequest("POST", path, data, nil, noResponse)
+	response, _, err := c.httpRequest("POST", path, data, nil)
 	if err != nil {
+		if response.StatusCode == 409 {
+			return ErrFrameExists
+		}
 		return err
 	}
 	if frame.options.TimeQuantum != TimeQuantumNone {
 		err = c.patchFrameTimeQuantum(frame)
 	}
 	return err
-
 }
 
 // EnsureIndex creates an index on the server if it does not exist.
@@ -225,7 +227,7 @@ func (c *Client) EnsureFrame(frame *Frame) error {
 // DeleteIndex deletes an index on the server.
 func (c *Client) DeleteIndex(index *Index) error {
 	path := fmt.Sprintf("/index/%s", index.name)
-	_, _, err := c.httpRequest("DELETE", path, nil, nil, noResponse)
+	_, _, err := c.httpRequest("DELETE", path, nil, nil)
 	return err
 
 }
@@ -241,7 +243,7 @@ func (c *Client) CreateIntField(frame *Frame, name string, min int, max int) err
 	path := fmt.Sprintf("/index/%s/frame/%s/field/%s",
 		frame.index.name, frame.name, name)
 	data := []byte(encodeMap(field))
-	_, _, err = c.httpRequest("POST", path, data, nil, noResponse)
+	_, _, err = c.httpRequest("POST", path, data, nil)
 	if err != nil {
 		return err
 	}
@@ -253,7 +255,7 @@ func (c *Client) CreateIntField(frame *Frame, name string, min int, max int) err
 func (c *Client) DeleteField(frame *Frame, name string) error {
 	path := fmt.Sprintf("/index/%s/frame/%s/field/%s",
 		frame.index.name, frame.name, name)
-	_, _, err := c.httpRequest("DELETE", path, nil, nil, noResponse)
+	_, _, err := c.httpRequest("DELETE", path, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -263,7 +265,7 @@ func (c *Client) DeleteField(frame *Frame, name string) error {
 // DeleteFrame deletes a frame on the server.
 func (c *Client) DeleteFrame(frame *Frame) error {
 	path := fmt.Sprintf("/index/%s/frame/%s", frame.index.name, frame.name)
-	_, _, err := c.httpRequest("DELETE", path, nil, nil, noResponse)
+	_, _, err := c.httpRequest("DELETE", path, nil, nil)
 	return err
 }
 
@@ -495,7 +497,7 @@ func (c *Client) importValues(indexName string, frameName string, slice uint64, 
 
 func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentNode, error) {
 	path := fmt.Sprintf("/fragment/nodes?slice=%d&index=%s", slice, indexName)
-	_, body, err := c.httpRequest("GET", path, []byte{}, nil, errorCheckedResponse)
+	_, body, err := c.httpRequest("GET", path, []byte{}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -543,7 +545,7 @@ func (c *Client) ExportFrame(frame *Frame, view string) (BitIterator, error) {
 // Views fetches and returns the views of a frame
 func (c *Client) Views(frame *Frame) ([]string, error) {
 	path := fmt.Sprintf("/index/%s/frame/%s/views", frame.index.name, frame.name)
-	_, body, err := c.httpRequest("GET", path, nil, nil, errorCheckedResponse)
+	_, body, err := c.httpRequest("GET", path, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -558,7 +560,7 @@ func (c *Client) Views(frame *Frame) ([]string, error) {
 func (c *Client) patchIndexTimeQuantum(index *Index) error {
 	data := []byte(fmt.Sprintf(`{"timeQuantum": "%s"}`, index.options.TimeQuantum))
 	path := fmt.Sprintf("/index/%s/time-quantum", index.name)
-	_, _, err := c.httpRequest("PATCH", path, data, nil, noResponse)
+	_, _, err := c.httpRequest("PATCH", path, data, nil)
 	return err
 }
 
@@ -566,12 +568,12 @@ func (c *Client) patchFrameTimeQuantum(frame *Frame) error {
 	data := []byte(fmt.Sprintf(`{"index": "%s", "frame": "%s", "timeQuantum": "%s"}`,
 		frame.index.name, frame.name, frame.options.TimeQuantum))
 	path := fmt.Sprintf("/index/%s/frame/%s/time-quantum", frame.index.name, frame.name)
-	_, _, err := c.httpRequest("PATCH", path, data, nil, noResponse)
+	_, _, err := c.httpRequest("PATCH", path, data, nil)
 	return err
 }
 
 func (c *Client) status() (*Status, error) {
-	_, data, err := c.httpRequest("GET", "/status", nil, nil, errorCheckedResponse)
+	_, data, err := c.httpRequest("GET", "/status", nil, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "requesting /status")
 	}
@@ -586,13 +588,13 @@ func (c *Client) status() (*Status, error) {
 // HttpRequest sends an HTTP request to the Pilosa server.
 // **NOTE**: This function is experimental and may be removed in later revisions.
 func (c *Client) HttpRequest(method string, path string, data []byte, headers map[string]string) (*http.Response, []byte, error) {
-	return c.httpRequest(method, path, data, headers, rawResponse)
+	return c.httpRequest(method, path, data, headers)
 }
 
 // httpRequest makes a request to the cluster - use this when you want the
 // client to choose a host, and it doesn't matter if the request goes to a
 // specific host
-func (c *Client) httpRequest(method string, path string, data []byte, headers map[string]string, returnResponse returnClientInfo) (*http.Response, []byte, error) {
+func (c *Client) httpRequest(method string, path string, data []byte, headers map[string]string) (*http.Response, []byte, error) {
 	if data == nil {
 		data = []byte{}
 	}
@@ -623,19 +625,9 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 	if err != nil {
 		return nil, nil, err
 	}
-	if returnResponse == rawResponse {
-		return response, buf, nil
-	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		msg := string(buf)
-		err = matchError(msg)
-		if err != nil {
-			return nil, nil, err
-		}
-		return nil, nil, NewError(fmt.Sprintf("Server error (%d) %s: %s", response.StatusCode, response.Status, msg))
-	}
-	if returnResponse == noResponse {
-		return nil, nil, nil
+		err := NewError(fmt.Sprintf("Server error (%d) %s: %s", response.StatusCode, response.Status, string(buf)))
+		return response, buf, err
 	}
 	return response, buf, nil
 }
@@ -654,10 +646,6 @@ func anyError(resp *http.Response, err error) error {
 			return errors.Wrapf(err, "bad status '%s' and err reading body", resp.Status)
 		}
 		msg := string(buf)
-		err = matchError(msg)
-		if err != nil {
-			return err
-		}
 		return errors.Errorf("Server error %s body:'%s'", resp.Status, msg)
 	}
 	return nil
@@ -734,16 +722,6 @@ func makeRequestData(query string, options *QueryOptions) ([]byte, error) {
 		return nil, errors.Wrap(err, "marshaling request to protobuf")
 	}
 	return r, nil
-}
-
-func matchError(msg string) error {
-	switch msg {
-	case "index already exists\n":
-		return ErrIndexExists
-	case "frame already exists\n":
-		return ErrFrameExists
-	}
-	return nil
 }
 
 func bitsToImportRequest(indexName string, frameName string, slice uint64, bits []Bit) *pbuf.ImportRequest {
@@ -928,14 +906,6 @@ func ExcludeBits(enable bool) QueryOption {
 		return nil
 	}
 }
-
-type returnClientInfo uint
-
-const (
-	noResponse returnClientInfo = iota
-	rawResponse
-	errorCheckedResponse
-)
 
 type fragmentNode struct {
 	Scheme       string

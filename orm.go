@@ -844,14 +844,17 @@ func (field *RangeField) GTE(n int) *PQLBitmapQuery {
 	return field.binaryOperation(">=", n)
 }
 
+// Equals creates an equals query.
 func (field *RangeField) Equals(n int) *PQLBitmapQuery {
 	return field.binaryOperation("==", n)
 }
 
+// NotEquals creates a not equals query.
 func (field *RangeField) NotEquals(n int) *PQLBitmapQuery {
 	return field.binaryOperation("!=", n)
 }
 
+// NotNull creates a not equal to null query.
 func (field *RangeField) NotNull() *PQLBitmapQuery {
 	qry := fmt.Sprintf("Range(frame='%s', %s != null)", field.frame.name, field.name)
 	return NewPQLBitmapQuery(qry, field.frame.index, field.err)

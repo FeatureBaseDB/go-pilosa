@@ -409,6 +409,24 @@ func TestFieldGTE(t *testing.T) {
 		sampleFrame.Field("foo").GTE(10))
 }
 
+func TestFieldEquals(t *testing.T) {
+	comparePQL(t,
+		"Range(frame='sample-frame', foo == 10)",
+		sampleFrame.Field("foo").Equals(10))
+}
+
+func TestFieldNotEquals(t *testing.T) {
+	comparePQL(t,
+		"Range(frame='sample-frame', foo != 10)",
+		sampleFrame.Field("foo").NotEquals(10))
+}
+
+func TestFieldNotNull(t *testing.T) {
+	comparePQL(t,
+		"Range(frame='sample-frame', foo != null)",
+		sampleFrame.Field("foo").NotNull())
+}
+
 func TestFieldBetween(t *testing.T) {
 	comparePQL(t,
 		"Range(frame='sample-frame', foo >< [10,20])",

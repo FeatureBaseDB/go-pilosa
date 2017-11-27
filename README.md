@@ -12,6 +12,12 @@ Go client for Pilosa high performance distributed bitmap index.
 
 ## Change Log
 
+* **Next**
+    * Added `Equals`, `NotEquals` and `NotNull` field operations.
+    * **Deprecation** `TimeQuantum` for `IndexOptions`. Use `TimeQuantum` of individual `FrameOptions` instead.
+    * **Deprecation** `IndexOptions` struct is deprecated and will be removed in the future.
+    * **Deprecation** Passing `IndexOptions` or `nil` to `schema.Index` function.
+    
 * **v0.8.0** (2017-11-16)
     * IPv6 support.
     * **Deprecation** `Error*` constants. Use `Err*` constants instead.

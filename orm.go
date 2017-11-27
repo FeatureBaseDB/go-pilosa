@@ -59,8 +59,8 @@ func NewSchema() *Schema {
 	}
 }
 
-// Index returns an index with a name and options.
-// Pass nil for default options.
+// Index returns an index with a name.
+// *Deprecated* Passing IndexOptions or nil.
 func (s *Schema) Index(name string, options ...*IndexOptions) (*Index, error) {
 	if index, ok := s.indexes[name]; ok {
 		return index, nil
@@ -211,7 +211,9 @@ func (q *PQLBatchQuery) Add(query PQLQuery) {
 }
 
 // IndexOptions contains options to customize Index structs and column queries.
+// *Deprecated*. This struct is deprecated, do not use it in new code.
 // *Deprecation*: `ColumnLabel` field is deprecated and will be removed in a future release.
+// *Deprecation*: `TimeQuantum` field is deprecated and will be removed in a future release.
 type IndexOptions struct {
 	ColumnLabel string
 	TimeQuantum TimeQuantum
@@ -840,6 +842,22 @@ func (field *RangeField) GT(n int) *PQLBitmapQuery {
 // GTE creates a greater than or equal query.
 func (field *RangeField) GTE(n int) *PQLBitmapQuery {
 	return field.binaryOperation(">=", n)
+}
+
+// Equals creates an equals query.
+func (field *RangeField) Equals(n int) *PQLBitmapQuery {
+	return field.binaryOperation("==", n)
+}
+
+// NotEquals creates a not equals query.
+func (field *RangeField) NotEquals(n int) *PQLBitmapQuery {
+	return field.binaryOperation("!=", n)
+}
+
+// NotNull creates a not equal to null query.
+func (field *RangeField) NotNull() *PQLBitmapQuery {
+	qry := fmt.Sprintf("Range(frame='%s', %s != null)", field.frame.name, field.name)
+	return NewPQLBitmapQuery(qry, field.frame.index, field.err)
 }
 
 // Between creates a between query.

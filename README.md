@@ -69,7 +69,7 @@ Download the library in your `GOPATH` using:
 go get github.com/pilosa/go-pilosa
 ```
 
-After that, you can import that in your code using:
+After that, you can import the library in your code using:
 
 ```go
 import "github.com/pilosa/go-pilosa"
@@ -110,7 +110,7 @@ result := response.Result()
 // Act on the result
 if result != nil {
     bits := result.Bitmap.Bits
-    fmt.Println("Got bits: %v", bits)
+    fmt.Println("Got bits: ", bits)
 }
 
 // You can batch queries to improve throughput
@@ -123,7 +123,7 @@ if err != nil {
 
 for _, result := range response.Results() {
     // Act on the result
-    fmt.Println(result)
+    fmt.Println(result.Bitmap.Bits)
 }
 
 ```
@@ -137,7 +137,7 @@ for _, result := range response.Results() {
 `schema.Index` function is used to create an index object. Note that this does not create an index on the server; the index object simply defines the schema.
 
 ```go
-schema := NewSchema()
+schema := pilosa.NewSchema()
 repository, err := schema.Index("repository")
 ```
 
@@ -160,10 +160,10 @@ Once you have indexes and frame structs created, you can create queries for them
 For instance, `Bitmap` queries work on rows; use a frame object to create those queries:
 
 ```go
-bitmapQuery := stargazer.Bitmap(1, 100)  // corresponds to PQL: Bitmap(frame='stargazer', row=1)
+bitmapQuery := stargazer.Bitmap(1)  // corresponds to PQL: Bitmap(frame='stargazer', row=1)
 ```
 
-`Union` queries work on columns; use the index object to create them:
+`Union` queries work on columns; use the index to create them:
 
 ```go
 query := repository.Union(bitmapQuery1, bitmapQuery2)
@@ -173,8 +173,8 @@ In order to increase throughput, you may want to batch queries sent to the Pilos
 
 ```go
 query := repository.BatchQuery(
-    stargazer.Bitmap(1, 100),
-    repository.Union(stargazer.Bitmap(100, 200), stargazer.Bitmap(5, 100)))
+    stargazer.Bitmap(1),
+    repository.Union(stargazer.Bitmap(100), stargazer.Bitmap(5)))
 ```
 
 The recommended way of creating query structs is, using dedicated methods attached to index and frame objects. But sometimes it would be desirable to send raw queries to Pilosa. You can use `index.RawQuery` method for that. Note that query string is not validated before sending to the server:
@@ -337,14 +337,14 @@ client, err := pilosa.NewClient(cluster)
 
 That is equivalent to:
 ```go
-client := pilosa.NewClient([]string{":10101", ":10110", ":10111"})
+client, err := pilosa.NewClient([]string{":10101", ":10110", ":10111"})
 
 ```
 
 It is possible to customize the behaviour of the underlying HTTP client by passing `ClientOption` structs to the `NewClient` function:
 
 ```go
-client := pilosa.NewClient(cluster,
+client, err := pilosa.NewClient(cluster,
 	pilosa.ConnectTimeout(1000),  // if can't connect in  a second, close the connection 
     pilosa.SocketTimeout(10000),  // if no response received in 10 seconds, close the connection
     pilosa.PoolSizePerRoute(3),  // number of connections in the pool per host
@@ -369,7 +369,7 @@ response, err := client.Query(frame.Bitmap(5));
 `Query` accepts zero or more options:
 
 ```go
-response := client.Query(frame.Bitmap(5), pilosa.ColumnAttrs(true), pilosa.ExcludeBits(true))
+response, err := client.Query(frame.Bitmap(5), pilosa.ColumnAttrs(true), pilosa.ExcludeBits(true))
 ```
 
 ### Server Response
@@ -403,12 +403,12 @@ var column *pilosa.ColumnItem
 
 // check that there's a column and act on it
 column = response.Column()
-if (column != null) {
+if (column != nil) {
     // Act on the column
 }
 
 // iterate over all columns
-for column = range response.Columns() {
+for _, column = range response.Columns() {
     // Act on the column
 }
 ```
@@ -445,7 +445,7 @@ Optionally, a timestamp can be added. Note that Pilosa is not time zone aware:
 ROW_ID,COLUMN_ID,TIMESTAMP
 ```
 
-Note that each line corresponds to a single bit and ends with a new line (`\n` or `\r\n`).
+Note that each line corresponds to a single bit and ends with a new line (`\n` or `\r\n`), except the last line.
 
 Here's some sample code:
 ```go
@@ -453,7 +453,7 @@ text := `10,7
     10,5
     2,3
     7,1`
-iterator := NewCSVBitIterator(strings.NewReader(text))
+iterator := pilosa.NewCSVBitIterator(strings.NewReader(text))
 ```
 
 After creating the iterator you can pass it to `client.ImportFrame` together with the frame and batch size. The following sample sends batches with size 10000 bits:
@@ -467,26 +467,27 @@ if err != nil {
 You can define a custom `BitIterator` by including a function with the signature `NextBit() (Bit, error)` in your struct.
 ```go
 type StaticBitIterator struct {
-    NextBit() (Bit, error)
-    bits []Bit
+    bits []pilosa.Bit
     index int
 }
 
 func NewStaticBitIterator() *StaticBitIterator {
     return &StaticBitIterator{
-        bits: []Bit{
-            Bit{RowID: 1, ColumnID: 1, Timestamp: 683793200},
-            Bit{RowID: 5, ColumnID: 20, Timestamp: 683793300},
-            Bit{RowID: 3, ColumnID: 41, Timestamp: 683793385},
-        }
-    }
+        bits: []pilosa.Bit{
+            {RowID: 1, ColumnID: 1, Timestamp: 683793200},
+            {RowID: 5, ColumnID: 20, Timestamp: 683793300},
+            {RowID: 3, ColumnID: 41, Timestamp: 683793385},
+        },      
+    }       
 }
 
-func (it *StatiBitIterator) NextBit(Bit, error) {
-    if it.index < len(it.bits) {
-        return Bit{}, io.EOF
+func (it *StaticBitIterator) NextBit(pilosa.Bit, error) (pilosa.Bit, error) {
+    if it.index < len(it.bits) { 
+        return pilosa.Bit{}, io.EOF
     }
-    return it.bits[it.index++], nil
+    index := it.index
+    it.index += 1
+    return it.bits[index], nil
 }
 ```
 
@@ -502,18 +503,19 @@ views, err := client.Views(frame)
 Here's sample code which retrieves bits of the `standard` view:
 
 ```go
-bits := []Bit{}
 iterator, err := client.ExportFrame(frame, "standard")
 if err != nil {
-    t.Fatal(err)
+    log.Fatal(err)
 }
+
+bits := []pilosa.Bit{}
 for {
     bit, err := iterator.NextBit()
     if err == io.EOF {
         break
     }
     if err != nil {
-        t.Fatal(err)
+        log.Fatal(err)
     }
     bits = append(bits, bit)
 }

@@ -155,6 +155,29 @@ func TestResponseDefaults(t *testing.T) {
 
 }
 
+func TestQueryWithSlices(t *testing.T) {
+	Reset()
+	const sliceWidth = 1048576
+	client := getClient()
+	if _, err := client.Query(testFrame.SetBit(1, 100), nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Query(testFrame.SetBit(1, sliceWidth), nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Query(testFrame.SetBit(1, sliceWidth*3), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := client.Query(testFrame.Bitmap(1), &QueryOptions{Slices: []uint64{0, 3}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bits := response.Result().Bitmap.Bits; !reflect.DeepEqual(bits, []uint64{100, sliceWidth * 3}) {
+		t.Fatalf("Unexpected results: %#v", bits)
+	}
+}
+
 func TestQueryWithColumns(t *testing.T) {
 	Reset()
 	client := getClient()

@@ -894,6 +894,14 @@ func ColumnAttrs(enable bool) QueryOption {
 	}
 }
 
+// Slices restricts the set of slices on which a query operates.
+func Slices(slices ...uint64) QueryOption {
+	return func(options *QueryOptions) error {
+		options.Slices = append(options.Slices, slices...)
+		return nil
+	}
+}
+
 // ExcludeAttrs enables discarding attributes from a result,
 func ExcludeAttrs(enable bool) QueryOption {
 	return func(options *QueryOptions) error {

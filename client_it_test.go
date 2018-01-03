@@ -37,6 +37,7 @@ package pilosa
 import (
 	"bytes"
 	"crypto/tls"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -47,7 +48,6 @@ import (
 	"testing"
 	"time"
 
-	"encoding/json"
 	"github.com/golang/protobuf/proto"
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
 	"github.com/pkg/errors"
@@ -169,7 +169,7 @@ func TestQueryWithSlices(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	response, err := client.Query(testFrame.Bitmap(1), &QueryOptions{Slices: []uint64{0, 3}})
+	response, err := client.Query(testFrame.Bitmap(1), Slices(0, 3))
 	if err != nil {
 		t.Fatal(err)
 	}

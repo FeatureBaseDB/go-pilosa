@@ -75,4 +75,6 @@ var (
 	ErrInvalidQueryOption     = NewError("Invalid query option")
 	ErrInvalidIndexOption     = NewError("Invalid index option")
 	ErrInvalidFrameOption     = NewError("Invalid frame option")
+	ErrNoFragmentNodes        = NewError("No fragment nodes")
+	ErrNoSlice                = NewError("Index has no slices")
 )

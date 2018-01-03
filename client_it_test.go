@@ -48,6 +48,7 @@ import (
 	"time"
 
 	"encoding/json"
+
 	"github.com/golang/protobuf/proto"
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
 	"github.com/pkg/errors"
@@ -546,6 +547,37 @@ func TestSchema(t *testing.T) {
 	if len(schema.indexes) < 1 {
 		t.Fatalf("There should be at least 1 index in the schema")
 	}
+	f, err := index.Frame("schema-test-frame",
+		CacheTypeLRU,
+		CacheSize(9999),
+		InverseEnabled(true),
+		TimeQuantumYearMonthDay,
+	)
+	err = client.EnsureFrame(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema, err = client.Schema()
+	if err != nil {
+		t.Fatal(err)
+	}
+	f = schema.indexes[index.Name()].frames["schema-test-frame"]
+	if f == nil {
+		t.Fatal("Frame should not be nil")
+	}
+	opt := f.options
+	if opt.CacheType != CacheTypeLRU {
+		t.Fatalf("cache type %s != %s", CacheTypeLRU, opt.CacheType)
+	}
+	if opt.CacheSize != 9999 {
+		t.Fatalf("cache size 9999 != %d", opt.CacheSize)
+	}
+	if opt.InverseEnabled != true {
+		t.Fatal("inverse enabled false")
+	}
+	if opt.TimeQuantum != TimeQuantumYearMonthDay {
+		t.Fatalf("time quantum %s != %s", string(TimeQuantumYearMonthDay), string(opt.TimeQuantum))
+	}
 }
 
 func TestSync(t *testing.T) {
@@ -605,31 +637,12 @@ func TestErrorRetrievingSchema(t *testing.T) {
 	}
 }
 
-func TestInvalidSchemaNoNodes(t *testing.T) {
-	data := []byte(`{"status": {"Nodes": []}}`)
-	server := getMockServer(200, data, len(data))
-	defer server.Close()
-	uri, err := NewURIFromAddress(server.URL)
-	if err != nil {
-		panic(err)
-	}
-	client := NewClientWithURI(uri)
-	_, err = client.Schema()
-	if err == nil {
-		t.Fatal("should have failed")
-	}
-}
-
 func TestInvalidSchemaInvalidIndex(t *testing.T) {
 	data := []byte(`
 		{
-			"status": {
-				"Nodes": [{
-					"Indexes": [{
-						"Name": "**INVALID**"
-					}]
-				}]
-			}
+			"indexes": [{
+				"Name": "**INVALID**"
+			}]
 		}
 	`)
 	server := getMockServer(200, data, len(data))
@@ -648,16 +661,12 @@ func TestInvalidSchemaInvalidIndex(t *testing.T) {
 func TestInvalidSchemaInvalidFrame(t *testing.T) {
 	data := []byte(`
 		{
-			"status": {
-				"Nodes": [{
-					"Indexes": [{
-						"Name": "myindex",
-						"Frames": [{
-							"Name": "**INVALID**"
-						}]
-					}]
+			"indexes": [{
+				"name": "myindex",
+				"frames": [{
+					"name": "**INVALID**"
 				}]
-			}
+			}]
 		}
 	`)
 	server := getMockServer(200, data, len(data))
@@ -667,7 +676,7 @@ func TestInvalidSchemaInvalidFrame(t *testing.T) {
 		panic(err)
 	}
 	client := NewClientWithURI(uri)
-	_, err = client.Schema()
+	schema, err = client.Schema()
 	if err == nil {
 		t.Fatal("should have failed")
 	}
@@ -872,15 +881,6 @@ func TestFetchStatus(t *testing.T) {
 	}
 	if len(status.Nodes) == 0 {
 		t.Fatalf("There should be at least 1 host in the status")
-	}
-	if len(status.Nodes[0].Indexes) == 0 {
-		t.Fatalf("There should be at least 1 index in the node")
-	}
-	if len(status.Nodes[0].Indexes[0].Frames) == 0 {
-		t.Fatalf("There should be at least 1 frame in the index")
-	}
-	if len(status.Nodes[0].Indexes[0].Slices) == 0 {
-		t.Fatalf("There should be at least 1 slice in the index")
 	}
 }
 
@@ -1333,39 +1333,28 @@ func TestDeleteFieldFails(t *testing.T) {
 }
 
 func TestStatusToNodeSlicesForIndex(t *testing.T) {
-	// even though this function isn't really an integration test,
-	// it needs to access statusToNodeSlicesForIndex which is not
-	// available to client_test.go
-
-	uri, err := NewURIFromAddress("https://:10101")
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := NewClientWithURI(uri)
-	status := &Status{
+	client := getClient()
+	status := Status{
 		Nodes: []StatusNode{
 			{
 				Scheme: "https",
-				Host:   ":10101",
-				Indexes: []StatusIndex{
-					{
-						Name:   "index1",
-						Slices: []uint64{0},
-					},
-					{
-						Name:   "index2",
-						Slices: []uint64{0},
-					},
-				},
+				Host:   "localhost",
+				Port:   10101,
 			},
 		},
+		indexMaxSlice: map[string]uint64{
+			index.Name(): 0,
+		},
 	}
-	sliceMap := client.statusToNodeSlicesForIndex(status, "index2")
+	sliceMap, err := client.statusToNodeSlicesForIndex(status, index.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(sliceMap) != 1 {
-		t.Fatalf("slice map should have a single item")
+		t.Fatalf("len(sliceMap) %d != %d", 1, len(sliceMap))
 	}
 	if uri, ok := sliceMap[0]; ok {
-		target, _ := NewURIFromAddress("https://:10101")
+		target, _ := NewURIFromAddress(getPilosaBindAddress())
 		if !uri.Equals(target) {
 			t.Fatalf("slice map should have the correct URI")
 		}
@@ -1384,25 +1373,20 @@ func TestHttpRequest(t *testing.T) {
 
 func TestInvalidFieldInStatus(t *testing.T) {
 	responseMap := map[string]interface{}{
-		"status": map[string]interface{}{
-			"Nodes": []map[string]interface{}{{
-				"Host":   "localhost:10101",
-				"Scheme": "http",
-				"Indexes": []map[string]interface{}{{
-					"Name": "sample-index",
-					"Frames": []map[string]interface{}{{
-						"Name": "foo",
-						"Meta": map[string]interface{}{
-							"Fields": []map[string]interface{}{{
-								"Name": "$$invalid",
-								"Type": "int",
-								"Min":  0,
-								"Max":  100,
-							}},
-						}},
+		"indexes": []map[string]interface{}{{
+			"name": "sample-index",
+			"frames": []map[string]interface{}{{
+				"name": "foo",
+				"options": map[string]interface{}{
+					"fields": []map[string]interface{}{{
+						"name": "$$invalid",
+						"type": "int",
+						"min":  0,
+						"max":  100,
 					}},
 				}},
 			}},
+		},
 	}
 	response, err := json.Marshal(responseMap)
 	if err != nil {
@@ -1415,7 +1399,7 @@ func TestInvalidFieldInStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := NewClientWithURI(uri)
-	_, err = client.Schema()
+	schema, err = client.Schema()
 	if err == nil {
 		t.Fatalf("should have failed")
 	}

@@ -37,6 +37,7 @@ package pilosa
 import (
 	"bytes"
 	"crypto/tls"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -46,8 +47,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"encoding/json"
 
 	"github.com/golang/protobuf/proto"
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
@@ -154,6 +153,29 @@ func TestResponseDefaults(t *testing.T) {
 	result = response.Result()
 	assertResult(result)
 
+}
+
+func TestQueryWithSlices(t *testing.T) {
+	Reset()
+	const sliceWidth = 1048576
+	client := getClient()
+	if _, err := client.Query(testFrame.SetBit(1, 100), nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Query(testFrame.SetBit(1, sliceWidth), nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Query(testFrame.SetBit(1, sliceWidth*3), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := client.Query(testFrame.Bitmap(1), Slices(0, 3))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bits := response.Result().Bitmap.Bits; !reflect.DeepEqual(bits, []uint64{100, sliceWidth * 3}) {
+		t.Fatalf("Unexpected results: %#v", bits)
+	}
 }
 
 func TestQueryWithColumns(t *testing.T) {
@@ -1440,6 +1462,91 @@ func TestSyncSchemaCantCreateFrame(t *testing.T) {
 	}
 }
 
+func TestExportFrameFailure(t *testing.T) {
+	paths := map[string]mockResponseItem{
+		"/status": {
+			content:       []byte(`{"state":"NORMAL","nodes":[{"scheme":"http","host":"localhost","port":10101}]}`),
+			statusCode:    404,
+			contentLength: -1,
+		},
+		"/slices/max": {
+			content:       []byte(`{"standard":{"go-testindex": 0},"inverse":{}}`),
+			statusCode:    404,
+			contentLength: -1,
+		},
+	}
+	server := getMockPathServer(paths)
+	uri, _ := NewURIFromAddress(server.URL)
+	client := NewClientWithURI(uri)
+	_, err := client.ExportFrame(testFrame, "standard")
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+	statusItem := paths["/status"]
+	statusItem.statusCode = 200
+	paths["/status"] = statusItem
+	_, err = client.ExportFrame(testFrame, "standard")
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+	statusItem = paths["/slices/max"]
+	statusItem.statusCode = 200
+	paths["/slices/max"] = statusItem
+	_, err = client.ExportFrame(testFrame, "standard")
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func TestSlicesMaxDecodeFailure(t *testing.T) {
+	server := getMockServer(200, []byte(`{`), 0)
+	defer server.Close()
+	uri, _ := NewURIFromAddress(server.URL)
+	client := NewClientWithURI(uri)
+	_, err := client.slicesMax()
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func TestReadSchemaDecodeFailure(t *testing.T) {
+	server := getMockServer(200, []byte(`{`), 0)
+	defer server.Close()
+	uri, _ := NewURIFromAddress(server.URL)
+	client := NewClientWithURI(uri)
+	_, err := client.readSchema()
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func TestStatusToNodeSlicesForIndexFailure(t *testing.T) {
+	server := getMockServer(200, []byte(`[]`), -1)
+	defer server.Close()
+	uri, _ := NewURIFromAddress(server.URL)
+	client := NewClientWithURI(uri)
+	// no slice
+	status := Status{
+		indexMaxSlice: map[string]uint64{},
+	}
+	_, err := client.statusToNodeSlicesForIndex(status, "foo")
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+
+	// no fragment nodes
+	status = Status{
+		indexMaxSlice: map[string]uint64{
+			"foo": 0,
+		},
+	}
+	_, err = client.statusToNodeSlicesForIndex(status, "foo")
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+
+}
+
 func getClient() *Client {
 	uri, err := NewURIFromAddress(getPilosaBindAddress())
 	if err != nil {
@@ -1472,6 +1579,37 @@ func getMockServer(statusCode int, response []byte, contentLength int) *httptest
 		if response != nil {
 			io.Copy(w, bytes.NewReader(response))
 		}
+	})
+	return httptest.NewServer(handler)
+}
+
+type mockResponseItem struct {
+	content       []byte
+	contentLength int
+	statusCode    int
+}
+
+func getMockPathServer(responses map[string]mockResponseItem) *httptest.Server {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-protobuf")
+		if item, ok := responses[r.RequestURI]; ok {
+			if item.contentLength >= 0 {
+				w.Header().Set("Content-Length", strconv.Itoa(item.contentLength))
+			} else {
+				w.Header().Set("Content-Length", strconv.Itoa(len(item.content)))
+			}
+			statusCode := item.statusCode
+			if statusCode == 0 {
+				statusCode = 200
+			}
+			w.WriteHeader(statusCode)
+			if item.content != nil {
+				io.Copy(w, bytes.NewReader(item.content))
+			}
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		io.Copy(w, bytes.NewReader([]byte("not found")))
 	})
 	return httptest.NewServer(handler)
 }

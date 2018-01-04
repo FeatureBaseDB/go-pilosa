@@ -37,6 +37,7 @@ package pilosa
 import (
 	"bytes"
 	"crypto/tls"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -47,7 +48,6 @@ import (
 	"testing"
 	"time"
 
-	"encoding/json"
 	"github.com/golang/protobuf/proto"
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
 	"github.com/pkg/errors"
@@ -153,6 +153,29 @@ func TestResponseDefaults(t *testing.T) {
 	result = response.Result()
 	assertResult(result)
 
+}
+
+func TestQueryWithSlices(t *testing.T) {
+	Reset()
+	const sliceWidth = 1048576
+	client := getClient()
+	if _, err := client.Query(testFrame.SetBit(1, 100), nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Query(testFrame.SetBit(1, sliceWidth), nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Query(testFrame.SetBit(1, sliceWidth*3), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := client.Query(testFrame.Bitmap(1), Slices(0, 3))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bits := response.Result().Bitmap.Bits; !reflect.DeepEqual(bits, []uint64{100, sliceWidth * 3}) {
+		t.Fatalf("Unexpected results: %#v", bits)
+	}
 }
 
 func TestQueryWithColumns(t *testing.T) {

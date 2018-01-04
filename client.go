@@ -713,6 +713,7 @@ func newHTTPClient(options *ClientOptions) *http.Client {
 func makeRequestData(query string, options *QueryOptions) ([]byte, error) {
 	request := &pbuf.QueryRequest{
 		Query:        query,
+		Slices:       options.Slices,
 		ColumnAttrs:  options.Columns,
 		ExcludeAttrs: options.ExcludeAttrs,
 		ExcludeBits:  options.ExcludeBits,
@@ -847,6 +848,8 @@ func (co *ClientOptions) withDefaults() (updated *ClientOptions) {
 
 // QueryOptions contains options to customize the Query function.
 type QueryOptions struct {
+	// Slices restricts query to a subset of slices. Queries all slices if nil.
+	Slices []uint64
 	// Columns enables returning columns in the query response.
 	Columns bool
 	// ExcludeAttrs inhibits returning attributes
@@ -887,6 +890,14 @@ type QueryOption func(options *QueryOptions) error
 func ColumnAttrs(enable bool) QueryOption {
 	return func(options *QueryOptions) error {
 		options.Columns = enable
+		return nil
+	}
+}
+
+// Slices restricts the set of slices on which a query operates.
+func Slices(slices ...uint64) QueryOption {
+	return func(options *QueryOptions) error {
+		options.Slices = append(options.Slices, slices...)
 		return nil
 	}
 }

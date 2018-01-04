@@ -133,6 +133,13 @@ func TestNewClientWithInvalidAddr(t *testing.T) {
 	}
 }
 
+func TestCheckServerVersion(t *testing.T) {
+	checkServerVersion("0.1.0")
+	checkServerVersion("1.0.0")
+	checkServerVersion("invalid")
+	checkServerVersion("") // unavailable
+}
+
 func ClientOptionErr(int) ClientOption {
 	return func(*ClientOptions) error {
 		return errors.New("Some error")

@@ -58,7 +58,7 @@ var testFrame *Frame
 
 func TestMain(m *testing.M) {
 	var err error
-	index, err = NewIndex("go-testindex", nil)
+	index, err = NewIndex("go-testindex")
 	if err != nil {
 		panic(err)
 	}
@@ -271,10 +271,7 @@ func TestOrmCount(t *testing.T) {
 
 func TestIntersectReturns(t *testing.T) {
 	client := getClient()
-	options := &FrameOptions{
-		RowLabel: "segment_id",
-	}
-	frame, err := index.Frame("segments", options)
+	frame, err := index.Frame("segments")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -298,7 +295,7 @@ func TestIntersectReturns(t *testing.T) {
 		t.Fatal("There must be 1 result")
 	}
 	if !reflect.DeepEqual(response.Result().Bitmap.Bits, []uint64{10}) {
-		t.Fatal("Returned bits must be: [10]")
+		t.Fatalf("Returned bits [10] != %v", response.Result().Bitmap.Bits)
 	}
 }
 
@@ -341,11 +338,11 @@ func TestTopNReturns(t *testing.T) {
 
 func TestCreateDeleteIndexFrame(t *testing.T) {
 	client := getClient()
-	index1, err := NewIndex("to-be-deleted", nil)
+	index1, err := NewIndex("to-be-deleted")
 	if err != nil {
 		panic(err)
 	}
-	frame1, err := index1.Frame("foo", nil)
+	frame1, err := index1.Frame("foo")
 	err = client.CreateIndex(index1)
 	if err != nil {
 		t.Fatal(err)
@@ -367,20 +364,6 @@ func TestCreateDeleteIndexFrame(t *testing.T) {
 func TestEnsureIndexExists(t *testing.T) {
 	client := getClient()
 	err := client.EnsureIndex(index)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestCreateIndexWithTimeQuantum(t *testing.T) {
-	client := getClient()
-	options := &IndexOptions{TimeQuantum: TimeQuantumYear}
-	index, err := NewIndex("index-with-timequantum", options)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.CreateIndex(index)
-	defer client.DeleteIndex(index)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -432,7 +415,7 @@ func TestIndexAlreadyExists(t *testing.T) {
 }
 
 func TestQueryWithEmptyClusterFails(t *testing.T) {
-	client := NewClientWithCluster(DefaultCluster(), nil)
+	client := NewClientWithCluster(DefaultCluster(), &ClientOptions{SkipVersionCheck: true})
 	_, err := client.Query(index.RawQuery("won't run"), nil)
 	if err != ErrEmptyCluster {
 		t.Fatal(err)
@@ -442,7 +425,7 @@ func TestQueryWithEmptyClusterFails(t *testing.T) {
 func TestMaxHostsFail(t *testing.T) {
 	uri, _ := NewURIFromAddress("does-not-resolve.foo.bar")
 	cluster := NewClusterWithHost(uri, uri, uri, uri)
-	client := NewClientWithCluster(cluster, nil)
+	client := NewClientWithCluster(cluster, &ClientOptions{SkipVersionCheck: true})
 	_, err := client.Query(index.RawQuery("foo"), nil)
 	if err != ErrTriedMaxHosts {
 		t.Fatalf("ErrTriedMaxHosts error should be returned")
@@ -452,7 +435,6 @@ func TestMaxHostsFail(t *testing.T) {
 func TestQueryInverseBitmap(t *testing.T) {
 	client := getClient()
 	options := &FrameOptions{
-		RowLabel:       "row_label",
 		InverseEnabled: true,
 	}
 	f1, err := index.Frame("f1-inversable", options)
@@ -604,23 +586,23 @@ func TestSchema(t *testing.T) {
 
 func TestSync(t *testing.T) {
 	client := getClient()
-	remoteIndex, _ := NewIndex("remote-index-1", nil)
+	remoteIndex, _ := NewIndex("remote-index-1")
 	err := client.EnsureIndex(remoteIndex)
 	if err != nil {
 		t.Fatal(err)
 	}
-	remoteFrame, _ := remoteIndex.Frame("remote-frame-1", nil)
+	remoteFrame, _ := remoteIndex.Frame("remote-frame-1")
 	err = client.EnsureFrame(remoteFrame)
 	if err != nil {
 		t.Fatal(err)
 	}
 	schema1 := NewSchema()
-	index11, _ := schema1.Index("diff-index1", nil)
-	index11.Frame("frame1-1", nil)
-	index11.Frame("frame1-2", nil)
-	index12, _ := schema1.Index("diff-index2", nil)
-	index12.Frame("frame2-1", nil)
-	schema1.Index(remoteIndex.Name(), nil)
+	index11, _ := schema1.Index("diff-index1")
+	index11.Frame("frame1-1")
+	index11.Frame("frame1-2")
+	index12, _ := schema1.Index("diff-index2")
+	index12.Frame("frame2-1")
+	schema1.Index(remoteIndex.Name())
 
 	err = client.SyncSchema(schema1)
 	if err != nil {
@@ -1436,7 +1418,7 @@ func TestSyncSchemaCantCreateIndex(t *testing.T) {
 	}
 	client := NewClientWithURI(uri)
 	schema = NewSchema()
-	schema.Index("foo", nil)
+	schema.Index("foo")
 	err = client.syncSchema(schema, NewSchema())
 	if err == nil {
 		t.Fatalf("Should have failed")
@@ -1452,10 +1434,10 @@ func TestSyncSchemaCantCreateFrame(t *testing.T) {
 	}
 	client := NewClientWithURI(uri)
 	schema = NewSchema()
-	index, _ := schema.Index("foo", nil)
-	index.Frame("fooframe", nil)
+	index, _ := schema.Index("foo")
+	index.Frame("fooframe")
 	serverSchema := NewSchema()
-	serverSchema.Index("foo", nil)
+	serverSchema.Index("foo")
 	err = client.syncSchema(schema, serverSchema)
 	if err == nil {
 		t.Fatalf("Should have failed")
@@ -1476,6 +1458,7 @@ func TestExportFrameFailure(t *testing.T) {
 		},
 	}
 	server := getMockPathServer(paths)
+	defer server.Close()
 	uri, _ := NewURIFromAddress(server.URL)
 	client := NewClientWithURI(uri)
 	_, err := client.ExportFrame(testFrame, "standard")
@@ -1544,7 +1527,31 @@ func TestStatusToNodeSlicesForIndexFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("should have failed")
 	}
+}
 
+func TestServerVersionFail(t *testing.T) {
+	paths := map[string]mockResponseItem{
+		"/version": {
+			content:       []byte(`{"version":"v0.`),
+			statusCode:    404,
+			contentLength: -1,
+		},
+	}
+	server := getMockPathServer(paths)
+	defer server.Close()
+	uri, _ := NewURIFromAddress(server.URL)
+	client := NewClientWithURI(uri)
+	_, err := client.fetchServerVersion()
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+	path := paths["/version"]
+	path.statusCode = 200
+	paths["/version"] = path
+	_, err = client.fetchServerVersion()
+	if err == nil {
+		t.Fatal("should have failed")
+	}
 }
 
 func getClient() *Client {
@@ -1552,7 +1559,7 @@ func getClient() *Client {
 	if err != nil {
 		panic(err)
 	}
-	client, err := NewClient(uri, TLSConfig(&tls.Config{InsecureSkipVerify: true}))
+	client, err := NewClient(uri, TLSConfig(&tls.Config{InsecureSkipVerify: true}), SkipVersionCheck(true))
 	if err != nil {
 		panic(err)
 	}

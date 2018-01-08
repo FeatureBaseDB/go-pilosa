@@ -60,18 +60,11 @@ func NewSchema() *Schema {
 }
 
 // Index returns an index with a name.
-// *Deprecated* Passing IndexOptions or nil.
-func (s *Schema) Index(name string, options ...*IndexOptions) (*Index, error) {
+func (s *Schema) Index(name string) (*Index, error) {
 	if index, ok := s.indexes[name]; ok {
 		return index, nil
 	}
-	var indexOptions *IndexOptions
-	if len(options) == 1 {
-		indexOptions = options[0]
-	} else if len(options) > 1 {
-		return nil, ErrInvalidIndexOption
-	}
-	index, err := NewIndex(name, indexOptions)
+	index, err := NewIndex(name)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +89,7 @@ func (s *Schema) diff(other *Schema) *Schema {
 			result.indexes[indexName] = index.copy()
 		} else {
 			// the index exists in the other schema; check the frames
-			resultIndex, _ := NewIndex(indexName, index.options)
+			resultIndex, _ := NewIndex(indexName)
 			for frameName, frame := range index.frames {
 				if _, ok := otherIndex.frames[frameName]; !ok {
 					// the frame doesn't exist in the other schema, copy it
@@ -210,30 +203,6 @@ func (q *PQLBatchQuery) Add(query PQLQuery) {
 	q.queries = append(q.queries, query.serialize())
 }
 
-// IndexOptions contains options to customize Index structs and column queries.
-// *Deprecated*. This struct is deprecated, do not use it in new code.
-// *Deprecation*: `ColumnLabel` field is deprecated and will be removed in a future release.
-// *Deprecation*: `TimeQuantum` field is deprecated and will be removed in a future release.
-type IndexOptions struct {
-	ColumnLabel string
-	TimeQuantum TimeQuantum
-}
-
-func (options *IndexOptions) withDefaults() (updated *IndexOptions) {
-	// copy options so the original is not updated
-	updated = &IndexOptions{}
-	*updated = *options
-	// impose defaults
-	if updated.ColumnLabel == "" {
-		updated.ColumnLabel = "columnID"
-	}
-	return
-}
-
-func (options IndexOptions) String() string {
-	return fmt.Sprintf(`{"options": {"columnLabel": "%s"}}`, options.ColumnLabel)
-}
-
 // NewPQLBitmapQuery creates a new PqlBitmapQuery.
 func NewPQLBitmapQuery(pql string, index *Index, err error) *PQLBitmapQuery {
 	return &PQLBitmapQuery{
@@ -246,32 +215,22 @@ func NewPQLBitmapQuery(pql string, index *Index, err error) *PQLBitmapQuery {
 // Index is a Pilosa index. The purpose of the Index is to represent a data namespace.
 // You cannot perform cross-index queries. Column-level attributes are global to the Index.
 type Index struct {
-	name    string
-	options *IndexOptions
-	frames  map[string]*Frame
+	name   string
+	frames map[string]*Frame
 }
 
 func (idx *Index) String() string {
 	return fmt.Sprintf("%#v", idx)
 }
 
-// NewIndex creates an index with a name and options.
-// Pass nil for default options.
-func NewIndex(name string, options *IndexOptions) (*Index, error) {
+// NewIndex creates an index with a name.
+func NewIndex(name string) (*Index, error) {
 	if err := validateIndexName(name); err != nil {
 		return nil, err
 	}
-	if options == nil {
-		options = &IndexOptions{}
-	}
-	options = options.withDefaults()
-	if err := validateLabel(options.ColumnLabel); err != nil {
-		return nil, err
-	}
 	return &Index{
-		name:    name,
-		options: options,
-		frames:  map[string]*Frame{},
+		name:   name,
+		frames: map[string]*Frame{},
 	}, nil
 }
 
@@ -290,11 +249,9 @@ func (idx *Index) copy() *Index {
 		frames[name] = f.copy()
 	}
 	index := &Index{
-		name:    idx.name,
-		frames:  frames,
-		options: &IndexOptions{},
+		name:   idx.name,
+		frames: frames,
 	}
-	*index.options = *idx.options
 	return index
 }
 
@@ -317,9 +274,6 @@ func (idx *Index) Frame(name string, options ...interface{}) (*Frame, error) {
 		return nil, err
 	}
 	frameOptions = frameOptions.withDefaults()
-	if err := validateLabel(frameOptions.RowLabel); err != nil {
-		return nil, err
-	}
 	frame := newFrame(name, idx)
 	frame.options = frameOptions
 	idx.frames[name] = frame
@@ -390,8 +344,8 @@ func (idx *Index) SetColumnAttrs(columnID uint64, attrs map[string]interface{}) 
 	if err != nil {
 		return NewPQLBaseQuery("", idx, err)
 	}
-	return NewPQLBaseQuery(fmt.Sprintf("SetColumnAttrs(%s=%d, %s)",
-		idx.options.ColumnLabel, columnID, attrsString), idx, nil)
+	return NewPQLBaseQuery(fmt.Sprintf("SetColumnAttrs(columnID=%d, %s)",
+		columnID, attrsString), idx, nil)
 }
 
 func (idx *Index) bitmapOperation(name string, bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
@@ -414,7 +368,6 @@ type FrameInfo struct {
 // FrameOptions contains options to customize Frame objects and frame queries.
 // *Deprecation*: `RowLabel` field is deprecated and will be removed in a future release.
 type FrameOptions struct {
-	RowLabel string
 	// If a Frame has a time quantum, then Views are generated for each of the defined time segments.
 	TimeQuantum TimeQuantum
 	// Enables inverted frames
@@ -430,9 +383,6 @@ func (fo *FrameOptions) withDefaults() (updated *FrameOptions) {
 	updated = &FrameOptions{}
 	*updated = *fo
 	// impose defaults
-	if updated.RowLabel == "" {
-		updated.RowLabel = "rowID"
-	}
 	if updated.fields == nil {
 		updated.fields = map[string]rangeField{}
 	}
@@ -440,9 +390,7 @@ func (fo *FrameOptions) withDefaults() (updated *FrameOptions) {
 }
 
 func (fo FrameOptions) String() string {
-	mopt := map[string]interface{}{
-		"rowLabel": fo.RowLabel,
-	}
+	mopt := map[string]interface{}{}
 	if fo.InverseEnabled {
 		mopt["inverseEnabled"] = true
 	}
@@ -587,39 +535,39 @@ func (f *Frame) copy() *Frame {
 // Bitmap retrieves the indices of all the set bits in a row or column based on whether the row label or column label is given in the query.
 // It also retrieves any attributes set on that row or column.
 func (f *Frame) Bitmap(rowID uint64) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("Bitmap(%s=%d, frame='%s')",
-		f.options.RowLabel, rowID, f.name), f.index, nil)
+	return NewPQLBitmapQuery(fmt.Sprintf("Bitmap(rowID=%d, frame='%s')",
+		rowID, f.name), f.index, nil)
 }
 
 // InverseBitmap creates a bitmap query using the column label.
 // Bitmap retrieves the indices of all the set bits in a row or column based on whether the row label or column label is given in the query.
 // It also retrieves any attributes set on that row or column.
 func (f *Frame) InverseBitmap(columnID uint64) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("Bitmap(%s=%d, frame='%s')",
-		f.index.options.ColumnLabel, columnID, f.name), f.index, nil)
+	return NewPQLBaseQuery(fmt.Sprintf("Bitmap(columnID=%d, frame='%s')",
+		columnID, f.name), f.index, nil)
 }
 
 // SetBit creates a SetBit query.
 // SetBit, assigns a value of 1 to a bit in the binary matrix, thus associating the given row in the given frame with the given column.
 func (f *Frame) SetBit(rowID uint64, columnID uint64) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("SetBit(%s=%d, frame='%s', %s=%d)",
-		f.options.RowLabel, rowID, f.name, f.index.options.ColumnLabel, columnID), f.index, nil)
+	return NewPQLBaseQuery(fmt.Sprintf("SetBit(rowID=%d, frame='%s', columnID=%d)",
+		rowID, f.name, columnID), f.index, nil)
 }
 
 // SetBitTimestamp creates a SetBit query with timestamp.
 // SetBit, assigns a value of 1 to a bit in the binary matrix,
 // thus associating the given row in the given frame with the given column.
 func (f *Frame) SetBitTimestamp(rowID uint64, columnID uint64, timestamp time.Time) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("SetBit(%s=%d, frame='%s', %s=%d, timestamp='%s')",
-		f.options.RowLabel, rowID, f.name, f.index.options.ColumnLabel, columnID, timestamp.Format(timeFormat)),
+	return NewPQLBaseQuery(fmt.Sprintf("SetBit(rowID=%d, frame='%s', columnID=%d, timestamp='%s')",
+		rowID, f.name, columnID, timestamp.Format(timeFormat)),
 		f.index, nil)
 }
 
 // ClearBit creates a ClearBit query.
 // ClearBit, assigns a value of 0 to a bit in the binary matrix, thus disassociating the given row in the given frame from the given column.
 func (f *Frame) ClearBit(rowID uint64, columnID uint64) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("ClearBit(%s=%d, frame='%s', %s=%d)",
-		f.options.RowLabel, rowID, f.name, f.index.options.ColumnLabel, columnID), f.index, nil)
+	return NewPQLBaseQuery(fmt.Sprintf("ClearBit(rowID=%d, frame='%s', columnID=%d)",
+		rowID, f.name, columnID), f.index, nil)
 }
 
 // TopN creates a TopN query with the given item count.
@@ -685,15 +633,15 @@ func (f *Frame) filterFieldTopN(n uint64, bitmap *PQLBitmapQuery, inverse bool, 
 // Range creates a Range query.
 // Similar to Bitmap, but only returns bits which were set with timestamps between the given start and end timestamps.
 func (f *Frame) Range(rowID uint64, start time.Time, end time.Time) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("Range(%s=%d, frame='%s', start='%s', end='%s')",
-		f.options.RowLabel, rowID, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
+	return NewPQLBitmapQuery(fmt.Sprintf("Range(rowID=%d, frame='%s', start='%s', end='%s')",
+		rowID, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
 }
 
 // InverseRange creates a Range query.
 // Similar to Bitmap, but only returns bits which were set with timestamps between the given start and end timestamps.
 func (f *Frame) InverseRange(columnID uint64, start time.Time, end time.Time) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("Range(%s=%d, frame='%s', start='%s', end='%s')",
-		f.index.options.ColumnLabel, columnID, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
+	return NewPQLBitmapQuery(fmt.Sprintf("Range(columnID=%d, frame='%s', start='%s', end='%s')",
+		columnID, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
 }
 
 // SetRowAttrs creates a SetRowAttrs query.
@@ -704,8 +652,8 @@ func (f *Frame) SetRowAttrs(rowID uint64, attrs map[string]interface{}) *PQLBase
 	if err != nil {
 		return NewPQLBaseQuery("", f.index, err)
 	}
-	return NewPQLBaseQuery(fmt.Sprintf("SetRowAttrs(%s=%d, frame='%s', %s)",
-		f.options.RowLabel, rowID, f.name, attrsString), f.index, nil)
+	return NewPQLBaseQuery(fmt.Sprintf("SetRowAttrs(rowID=%d, frame='%s', %s)",
+		rowID, f.name, attrsString), f.index, nil)
 }
 
 // Sum creates a Sum query.
@@ -879,8 +827,8 @@ func (field *RangeField) Sum(bitmap *PQLBitmapQuery) *PQLBaseQuery {
 // SetIntValue creates a SetValue query.
 func (field *RangeField) SetIntValue(columnID uint64, value int) *PQLBaseQuery {
 	index := field.frame.index
-	qry := fmt.Sprintf("SetFieldValue(frame='%s', %s=%d, %s=%d)",
-		field.frame.name, index.options.ColumnLabel, columnID, field.name, value)
+	qry := fmt.Sprintf("SetFieldValue(frame='%s', columnID=%d, %s=%d)",
+		field.frame.name, columnID, field.name, value)
 	return NewPQLBaseQuery(qry, index, nil)
 }
 

@@ -104,8 +104,9 @@ func NewClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 		options = &ClientOptions{}
 	}
 	return &Client{
-		cluster: cluster,
-		client:  newHTTPClient(options.withDefaults()),
+		cluster:        cluster,
+		client:         newHTTPClient(options.withDefaults()),
+		versionChecked: !options.SkipVersionCheck,
 	}
 }
 
@@ -139,10 +140,7 @@ func NewClient(addrUriOrCluster interface{}, options ...ClientOption) (*Client, 
 		return nil, ErrAddrURIClusterExpected
 	}
 
-	return &Client{
-		cluster: cluster,
-		client:  newHTTPClient(clientOptions.withDefaults()),
-	}, nil
+	return NewClientWithCluster(cluster, clientOptions), nil
 }
 
 // Query runs the given query against the server with the given options.
@@ -179,7 +177,7 @@ func (c *Client) Query(query PQLQuery, options ...interface{}) (*QueryResponse, 
 
 // CreateIndex creates an index on the server using the given Index struct.
 func (c *Client) CreateIndex(index *Index) error {
-	data := []byte(index.options.String())
+	data := []byte("")
 	path := fmt.Sprintf("/index/%s", index.name)
 	response, _, err := c.httpRequest("POST", path, data, nil)
 	if err != nil {
@@ -188,10 +186,7 @@ func (c *Client) CreateIndex(index *Index) error {
 		}
 		return err
 	}
-	if index.options.TimeQuantum != TimeQuantumNone {
-		err = c.patchIndexTimeQuantum(index)
-	}
-	return err
+	return nil
 
 }
 
@@ -206,10 +201,7 @@ func (c *Client) CreateFrame(frame *Frame) error {
 		}
 		return err
 	}
-	if frame.options.TimeQuantum != TimeQuantumNone {
-		err = c.patchFrameTimeQuantum(frame)
-	}
-	return err
+	return nil
 }
 
 // EnsureIndex creates an index on the server if it does not exist.
@@ -331,18 +323,13 @@ func (c *Client) Schema() (*Schema, error) {
 	}
 	schema := NewSchema()
 	for _, indexInfo := range schemaInfo.Indexes {
-		options := &IndexOptions{
-			ColumnLabel: indexInfo.Options.ColumnLabel,
-			TimeQuantum: TimeQuantum(indexInfo.Options.TimeQuantum),
-		}
-		index, err := schema.Index(indexInfo.Name, options)
+		index, err := schema.Index(indexInfo.Name)
 		if err != nil {
 			return nil, err
 		}
 		for _, frameInfo := range indexInfo.Frames {
 			fields := make(map[string]rangeField)
 			frameOptions := &FrameOptions{
-				RowLabel:       frameInfo.Options.RowLabel,
 				CacheSize:      frameInfo.Options.CacheSize,
 				CacheType:      CacheType(frameInfo.Options.CacheType),
 				InverseEnabled: frameInfo.Options.InverseEnabled,
@@ -570,21 +557,6 @@ func (c *Client) Views(frame *Frame) ([]string, error) {
 		return nil, err
 	}
 	return viewsInfo.Views, nil
-}
-
-func (c *Client) patchIndexTimeQuantum(index *Index) error {
-	data := []byte(fmt.Sprintf(`{"timeQuantum": "%s"}`, index.options.TimeQuantum))
-	path := fmt.Sprintf("/index/%s/time-quantum", index.name)
-	_, _, err := c.httpRequest("PATCH", path, data, nil)
-	return err
-}
-
-func (c *Client) patchFrameTimeQuantum(frame *Frame) error {
-	data := []byte(fmt.Sprintf(`{"index": "%s", "frame": "%s", "timeQuantum": "%s"}`,
-		frame.index.name, frame.name, frame.options.TimeQuantum))
-	path := fmt.Sprintf("/index/%s/frame/%s/time-quantum", frame.index.name, frame.name)
-	_, _, err := c.httpRequest("PATCH", path, data, nil)
-	return err
 }
 
 func (c *Client) status() (Status, error) {
@@ -852,6 +824,7 @@ type ClientOptions struct {
 	PoolSizePerRoute int
 	TotalPoolSize    int
 	TLSConfig        *tls.Config
+	SkipVersionCheck bool
 }
 
 func (co *ClientOptions) addOptions(options ...ClientOption) error {
@@ -903,6 +876,13 @@ func TotalPoolSize(size int) ClientOption {
 func TLSConfig(config *tls.Config) ClientOption {
 	return func(options *ClientOptions) error {
 		options.TLSConfig = config
+		return nil
+	}
+}
+
+func SkipVersionCheck(skip bool) ClientOption {
+	return func(options *ClientOptions) error {
+		options.SkipVersionCheck = skip
 		return nil
 	}
 }

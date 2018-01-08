@@ -58,7 +58,7 @@ var testFrame *Frame
 
 func TestMain(m *testing.M) {
 	var err error
-	index, err = NewIndex("go-testindex", nil)
+	index, err = NewIndex("go-testindex")
 	if err != nil {
 		panic(err)
 	}
@@ -271,10 +271,7 @@ func TestOrmCount(t *testing.T) {
 
 func TestIntersectReturns(t *testing.T) {
 	client := getClient()
-	options := &FrameOptions{
-		RowLabel: "segment_id",
-	}
-	frame, err := index.Frame("segments", options)
+	frame, err := index.Frame("segments")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -298,7 +295,7 @@ func TestIntersectReturns(t *testing.T) {
 		t.Fatal("There must be 1 result")
 	}
 	if !reflect.DeepEqual(response.Result().Bitmap.Bits, []uint64{10}) {
-		t.Fatal("Returned bits must be: [10]")
+		t.Fatalf("Returned bits [10] != %v", response.Result().Bitmap.Bits)
 	}
 }
 
@@ -341,11 +338,11 @@ func TestTopNReturns(t *testing.T) {
 
 func TestCreateDeleteIndexFrame(t *testing.T) {
 	client := getClient()
-	index1, err := NewIndex("to-be-deleted", nil)
+	index1, err := NewIndex("to-be-deleted")
 	if err != nil {
 		panic(err)
 	}
-	frame1, err := index1.Frame("foo", nil)
+	frame1, err := index1.Frame("foo")
 	err = client.CreateIndex(index1)
 	if err != nil {
 		t.Fatal(err)
@@ -367,20 +364,6 @@ func TestCreateDeleteIndexFrame(t *testing.T) {
 func TestEnsureIndexExists(t *testing.T) {
 	client := getClient()
 	err := client.EnsureIndex(index)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestCreateIndexWithTimeQuantum(t *testing.T) {
-	client := getClient()
-	options := &IndexOptions{TimeQuantum: TimeQuantumYear}
-	index, err := NewIndex("index-with-timequantum", options)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.CreateIndex(index)
-	defer client.DeleteIndex(index)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -432,7 +415,7 @@ func TestIndexAlreadyExists(t *testing.T) {
 }
 
 func TestQueryWithEmptyClusterFails(t *testing.T) {
-	client := NewClientWithCluster(DefaultCluster(), nil)
+	client := NewClientWithCluster(DefaultCluster(), &ClientOptions{SkipVersionCheck: true})
 	_, err := client.Query(index.RawQuery("won't run"), nil)
 	if err != ErrEmptyCluster {
 		t.Fatal(err)
@@ -442,7 +425,7 @@ func TestQueryWithEmptyClusterFails(t *testing.T) {
 func TestMaxHostsFail(t *testing.T) {
 	uri, _ := NewURIFromAddress("does-not-resolve.foo.bar")
 	cluster := NewClusterWithHost(uri, uri, uri, uri)
-	client := NewClientWithCluster(cluster, nil)
+	client := NewClientWithCluster(cluster, &ClientOptions{SkipVersionCheck: true})
 	_, err := client.Query(index.RawQuery("foo"), nil)
 	if err != ErrTriedMaxHosts {
 		t.Fatalf("ErrTriedMaxHosts error should be returned")
@@ -452,7 +435,6 @@ func TestMaxHostsFail(t *testing.T) {
 func TestQueryInverseBitmap(t *testing.T) {
 	client := getClient()
 	options := &FrameOptions{
-		RowLabel:       "row_label",
 		InverseEnabled: true,
 	}
 	f1, err := index.Frame("f1-inversable", options)
@@ -569,27 +551,58 @@ func TestSchema(t *testing.T) {
 	if len(schema.indexes) < 1 {
 		t.Fatalf("There should be at least 1 index in the schema")
 	}
+	f, err := index.Frame("schema-test-frame",
+		CacheTypeLRU,
+		CacheSize(9999),
+		InverseEnabled(true),
+		TimeQuantumYearMonthDay,
+	)
+	err = client.EnsureFrame(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema, err = client.Schema()
+	if err != nil {
+		t.Fatal(err)
+	}
+	f = schema.indexes[index.Name()].frames["schema-test-frame"]
+	if f == nil {
+		t.Fatal("Frame should not be nil")
+	}
+	opt := f.options
+	if opt.CacheType != CacheTypeLRU {
+		t.Fatalf("cache type %s != %s", CacheTypeLRU, opt.CacheType)
+	}
+	if opt.CacheSize != 9999 {
+		t.Fatalf("cache size 9999 != %d", opt.CacheSize)
+	}
+	if opt.InverseEnabled != true {
+		t.Fatal("inverse enabled false")
+	}
+	if opt.TimeQuantum != TimeQuantumYearMonthDay {
+		t.Fatalf("time quantum %s != %s", string(TimeQuantumYearMonthDay), string(opt.TimeQuantum))
+	}
 }
 
 func TestSync(t *testing.T) {
 	client := getClient()
-	remoteIndex, _ := NewIndex("remote-index-1", nil)
+	remoteIndex, _ := NewIndex("remote-index-1")
 	err := client.EnsureIndex(remoteIndex)
 	if err != nil {
 		t.Fatal(err)
 	}
-	remoteFrame, _ := remoteIndex.Frame("remote-frame-1", nil)
+	remoteFrame, _ := remoteIndex.Frame("remote-frame-1")
 	err = client.EnsureFrame(remoteFrame)
 	if err != nil {
 		t.Fatal(err)
 	}
 	schema1 := NewSchema()
-	index11, _ := schema1.Index("diff-index1", nil)
-	index11.Frame("frame1-1", nil)
-	index11.Frame("frame1-2", nil)
-	index12, _ := schema1.Index("diff-index2", nil)
-	index12.Frame("frame2-1", nil)
-	schema1.Index(remoteIndex.Name(), nil)
+	index11, _ := schema1.Index("diff-index1")
+	index11.Frame("frame1-1")
+	index11.Frame("frame1-2")
+	index12, _ := schema1.Index("diff-index2")
+	index12.Frame("frame2-1")
+	schema1.Index(remoteIndex.Name())
 
 	err = client.SyncSchema(schema1)
 	if err != nil {
@@ -628,31 +641,12 @@ func TestErrorRetrievingSchema(t *testing.T) {
 	}
 }
 
-func TestInvalidSchemaNoNodes(t *testing.T) {
-	data := []byte(`{"status": {"Nodes": []}}`)
-	server := getMockServer(200, data, len(data))
-	defer server.Close()
-	uri, err := NewURIFromAddress(server.URL)
-	if err != nil {
-		panic(err)
-	}
-	client := NewClientWithURI(uri)
-	_, err = client.Schema()
-	if err == nil {
-		t.Fatal("should have failed")
-	}
-}
-
 func TestInvalidSchemaInvalidIndex(t *testing.T) {
 	data := []byte(`
 		{
-			"status": {
-				"Nodes": [{
-					"Indexes": [{
-						"Name": "**INVALID**"
-					}]
-				}]
-			}
+			"indexes": [{
+				"Name": "**INVALID**"
+			}]
 		}
 	`)
 	server := getMockServer(200, data, len(data))
@@ -671,16 +665,12 @@ func TestInvalidSchemaInvalidIndex(t *testing.T) {
 func TestInvalidSchemaInvalidFrame(t *testing.T) {
 	data := []byte(`
 		{
-			"status": {
-				"Nodes": [{
-					"Indexes": [{
-						"Name": "myindex",
-						"Frames": [{
-							"Name": "**INVALID**"
-						}]
-					}]
+			"indexes": [{
+				"name": "myindex",
+				"frames": [{
+					"name": "**INVALID**"
 				}]
-			}
+			}]
 		}
 	`)
 	server := getMockServer(200, data, len(data))
@@ -690,7 +680,7 @@ func TestInvalidSchemaInvalidFrame(t *testing.T) {
 		panic(err)
 	}
 	client := NewClientWithURI(uri)
-	_, err = client.Schema()
+	schema, err = client.Schema()
 	if err == nil {
 		t.Fatal("should have failed")
 	}
@@ -895,15 +885,6 @@ func TestFetchStatus(t *testing.T) {
 	}
 	if len(status.Nodes) == 0 {
 		t.Fatalf("There should be at least 1 host in the status")
-	}
-	if len(status.Nodes[0].Indexes) == 0 {
-		t.Fatalf("There should be at least 1 index in the node")
-	}
-	if len(status.Nodes[0].Indexes[0].Frames) == 0 {
-		t.Fatalf("There should be at least 1 frame in the index")
-	}
-	if len(status.Nodes[0].Indexes[0].Slices) == 0 {
-		t.Fatalf("There should be at least 1 slice in the index")
 	}
 }
 
@@ -1356,39 +1337,28 @@ func TestDeleteFieldFails(t *testing.T) {
 }
 
 func TestStatusToNodeSlicesForIndex(t *testing.T) {
-	// even though this function isn't really an integration test,
-	// it needs to access statusToNodeSlicesForIndex which is not
-	// available to client_test.go
-
-	uri, err := NewURIFromAddress("https://:10101")
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := NewClientWithURI(uri)
-	status := &Status{
+	client := getClient()
+	status := Status{
 		Nodes: []StatusNode{
 			{
 				Scheme: "https",
-				Host:   ":10101",
-				Indexes: []StatusIndex{
-					{
-						Name:   "index1",
-						Slices: []uint64{0},
-					},
-					{
-						Name:   "index2",
-						Slices: []uint64{0},
-					},
-				},
+				Host:   "localhost",
+				Port:   10101,
 			},
 		},
+		indexMaxSlice: map[string]uint64{
+			index.Name(): 0,
+		},
 	}
-	sliceMap := client.statusToNodeSlicesForIndex(status, "index2")
+	sliceMap, err := client.statusToNodeSlicesForIndex(status, index.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(sliceMap) != 1 {
-		t.Fatalf("slice map should have a single item")
+		t.Fatalf("len(sliceMap) %d != %d", 1, len(sliceMap))
 	}
 	if uri, ok := sliceMap[0]; ok {
-		target, _ := NewURIFromAddress("https://:10101")
+		target, _ := NewURIFromAddress(getPilosaBindAddress())
 		if !uri.Equals(target) {
 			t.Fatalf("slice map should have the correct URI")
 		}
@@ -1407,25 +1377,20 @@ func TestHttpRequest(t *testing.T) {
 
 func TestInvalidFieldInStatus(t *testing.T) {
 	responseMap := map[string]interface{}{
-		"status": map[string]interface{}{
-			"Nodes": []map[string]interface{}{{
-				"Host":   "localhost:10101",
-				"Scheme": "http",
-				"Indexes": []map[string]interface{}{{
-					"Name": "sample-index",
-					"Frames": []map[string]interface{}{{
-						"Name": "foo",
-						"Meta": map[string]interface{}{
-							"Fields": []map[string]interface{}{{
-								"Name": "$$invalid",
-								"Type": "int",
-								"Min":  0,
-								"Max":  100,
-							}},
-						}},
+		"indexes": []map[string]interface{}{{
+			"name": "sample-index",
+			"frames": []map[string]interface{}{{
+				"name": "foo",
+				"options": map[string]interface{}{
+					"fields": []map[string]interface{}{{
+						"name": "$$invalid",
+						"type": "int",
+						"min":  0,
+						"max":  100,
 					}},
 				}},
 			}},
+		},
 	}
 	response, err := json.Marshal(responseMap)
 	if err != nil {
@@ -1438,7 +1403,7 @@ func TestInvalidFieldInStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := NewClientWithURI(uri)
-	_, err = client.Schema()
+	schema, err = client.Schema()
 	if err == nil {
 		t.Fatalf("should have failed")
 	}
@@ -1453,7 +1418,7 @@ func TestSyncSchemaCantCreateIndex(t *testing.T) {
 	}
 	client := NewClientWithURI(uri)
 	schema = NewSchema()
-	schema.Index("foo", nil)
+	schema.Index("foo")
 	err = client.syncSchema(schema, NewSchema())
 	if err == nil {
 		t.Fatalf("Should have failed")
@@ -1469,13 +1434,123 @@ func TestSyncSchemaCantCreateFrame(t *testing.T) {
 	}
 	client := NewClientWithURI(uri)
 	schema = NewSchema()
-	index, _ := schema.Index("foo", nil)
-	index.Frame("fooframe", nil)
+	index, _ := schema.Index("foo")
+	index.Frame("fooframe")
 	serverSchema := NewSchema()
-	serverSchema.Index("foo", nil)
+	serverSchema.Index("foo")
 	err = client.syncSchema(schema, serverSchema)
 	if err == nil {
 		t.Fatalf("Should have failed")
+	}
+}
+
+func TestExportFrameFailure(t *testing.T) {
+	paths := map[string]mockResponseItem{
+		"/status": {
+			content:       []byte(`{"state":"NORMAL","nodes":[{"scheme":"http","host":"localhost","port":10101}]}`),
+			statusCode:    404,
+			contentLength: -1,
+		},
+		"/slices/max": {
+			content:       []byte(`{"standard":{"go-testindex": 0},"inverse":{}}`),
+			statusCode:    404,
+			contentLength: -1,
+		},
+	}
+	server := getMockPathServer(paths)
+	defer server.Close()
+	uri, _ := NewURIFromAddress(server.URL)
+	client := NewClientWithURI(uri)
+	_, err := client.ExportFrame(testFrame, "standard")
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+	statusItem := paths["/status"]
+	statusItem.statusCode = 200
+	paths["/status"] = statusItem
+	_, err = client.ExportFrame(testFrame, "standard")
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+	statusItem = paths["/slices/max"]
+	statusItem.statusCode = 200
+	paths["/slices/max"] = statusItem
+	_, err = client.ExportFrame(testFrame, "standard")
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func TestSlicesMaxDecodeFailure(t *testing.T) {
+	server := getMockServer(200, []byte(`{`), 0)
+	defer server.Close()
+	uri, _ := NewURIFromAddress(server.URL)
+	client := NewClientWithURI(uri)
+	_, err := client.slicesMax()
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func TestReadSchemaDecodeFailure(t *testing.T) {
+	server := getMockServer(200, []byte(`{`), 0)
+	defer server.Close()
+	uri, _ := NewURIFromAddress(server.URL)
+	client := NewClientWithURI(uri)
+	_, err := client.readSchema()
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func TestStatusToNodeSlicesForIndexFailure(t *testing.T) {
+	server := getMockServer(200, []byte(`[]`), -1)
+	defer server.Close()
+	uri, _ := NewURIFromAddress(server.URL)
+	client := NewClientWithURI(uri)
+	// no slice
+	status := Status{
+		indexMaxSlice: map[string]uint64{},
+	}
+	_, err := client.statusToNodeSlicesForIndex(status, "foo")
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+
+	// no fragment nodes
+	status = Status{
+		indexMaxSlice: map[string]uint64{
+			"foo": 0,
+		},
+	}
+	_, err = client.statusToNodeSlicesForIndex(status, "foo")
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func TestServerVersionFail(t *testing.T) {
+	paths := map[string]mockResponseItem{
+		"/version": {
+			content:       []byte(`{"version":"v0.`),
+			statusCode:    404,
+			contentLength: -1,
+		},
+	}
+	server := getMockPathServer(paths)
+	defer server.Close()
+	uri, _ := NewURIFromAddress(server.URL)
+	client := NewClientWithURI(uri)
+	_, err := client.fetchServerVersion()
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+	path := paths["/version"]
+	path.statusCode = 200
+	paths["/version"] = path
+	_, err = client.fetchServerVersion()
+	if err == nil {
+		t.Fatal("should have failed")
 	}
 }
 
@@ -1484,7 +1559,7 @@ func getClient() *Client {
 	if err != nil {
 		panic(err)
 	}
-	client, err := NewClient(uri, TLSConfig(&tls.Config{InsecureSkipVerify: true}))
+	client, err := NewClient(uri, TLSConfig(&tls.Config{InsecureSkipVerify: true}), SkipVersionCheck(true))
 	if err != nil {
 		panic(err)
 	}
@@ -1511,6 +1586,37 @@ func getMockServer(statusCode int, response []byte, contentLength int) *httptest
 		if response != nil {
 			io.Copy(w, bytes.NewReader(response))
 		}
+	})
+	return httptest.NewServer(handler)
+}
+
+type mockResponseItem struct {
+	content       []byte
+	contentLength int
+	statusCode    int
+}
+
+func getMockPathServer(responses map[string]mockResponseItem) *httptest.Server {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-protobuf")
+		if item, ok := responses[r.RequestURI]; ok {
+			if item.contentLength >= 0 {
+				w.Header().Set("Content-Length", strconv.Itoa(item.contentLength))
+			} else {
+				w.Header().Set("Content-Length", strconv.Itoa(len(item.content)))
+			}
+			statusCode := item.statusCode
+			if statusCode == 0 {
+				statusCode = 200
+			}
+			w.WriteHeader(statusCode)
+			if item.content != nil {
+				io.Copy(w, bytes.NewReader(item.content))
+			}
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		io.Copy(w, bytes.NewReader([]byte("not found")))
 	})
 	return httptest.NewServer(handler)
 }

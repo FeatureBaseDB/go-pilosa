@@ -2,6 +2,12 @@
 
 
 [[projects]]
+  name = "github.com/blang/semver"
+  packages = ["."]
+  revision = "2ee87856327ba09384cabd113bc6b5d174e9ec0f"
+  version = "v3.5.1"
+
+[[projects]]
   branch = "master"
   name = "github.com/golang/protobuf"
   packages = ["proto"]
@@ -16,6 +22,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "6c664b4e7ef95e3c205dfe2258ebaec3838f5b8bb19a44f5f89903269ce2fa67"
+  inputs-digest = "682da1124aa1e35bff2bf9e73cec996575fe38365c6d4346e94607b05a33b6fa"
   solver-name = "gps-cdcl"
   solver-version = 1

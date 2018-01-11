@@ -538,7 +538,7 @@ client, _ := NewClient("https://01.pilosa.local:10501", TLSConfig(&tls.Config{In
 
 This library sends client library version, Go runtime version and OS platform name (e.g., linux amd64) to the Pilosa server in the HTTP user agent header. This information allow us to understand our community better. Below is a sample user agent header:
 ```
-User-Agent: go-pilosa/0.8.0-16-g46c8a62 go1.9.1 linux amd64
+User-Agent: go-pilosa/0.8.0-16-g46c8a62 go1.9.1 linux/amd64
 ```
 
 ## Contribution

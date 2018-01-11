@@ -694,7 +694,7 @@ func (c *Client) augmentHeaders(headers map[string]string) map[string]string {
 		if strings.HasPrefix(version, "v") {
 			version = version[1:]
 		}
-		c.userAgent = fmt.Sprintf("go-pilosa/%s %s %s %s", version, runtime.Version(), runtime.GOOS, runtime.GOARCH)
+		c.userAgent = fmt.Sprintf("go-pilosa/%s %s %s/%s", version, runtime.Version(), runtime.GOOS, runtime.GOARCH)
 	}
 	headers["User-Agent"] = c.userAgent
 	return headers

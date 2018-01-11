@@ -38,11 +38,13 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -1477,6 +1479,28 @@ func TestSyncSchemaCantCreateFrame(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
+}
+
+func TestUserAgent(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		version := Version
+		if strings.HasPrefix(version, "v") {
+			version = version[1:]
+		}
+		targetUserAgent := fmt.Sprintf("go-pilosa/%s %s %s", version, runtime.GOOS, runtime.GOARCH)
+		if targetUserAgent != r.UserAgent() {
+			t.Fatalf("UserAgent %s != %s", targetUserAgent, r.UserAgent())
+		}
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	uri, _ := NewURIFromAddress(server.URL)
+	client := NewClientWithURI(uri)
+	_, _, err := client.HttpRequest("GET", "/version", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 }
 
 func getClient() *Client {

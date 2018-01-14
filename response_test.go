@@ -92,7 +92,7 @@ func TestNewQueryResponseFromInternal(t *testing.T) {
 		Bits:  []uint64{5, 10},
 	}
 	pairs := []*pbuf.Pair{
-		{Key: 10, Count: 100},
+		{ID: 10, Count: 100},
 	}
 	response := &pbuf.QueryResponse{
 		Results: []*pbuf.QueryResult{

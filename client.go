@@ -41,7 +41,6 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -694,7 +693,7 @@ func (c *Client) augmentHeaders(headers map[string]string) map[string]string {
 		if strings.HasPrefix(version, "v") {
 			version = version[1:]
 		}
-		c.userAgent = fmt.Sprintf("go-pilosa/%s %s %s/%s", version, runtime.Version(), runtime.GOOS, runtime.GOARCH)
+		c.userAgent = fmt.Sprintf("go-pilosa/%s", version)
 	}
 	headers["User-Agent"] = c.userAgent
 	return headers
@@ -1048,4 +1047,10 @@ func (r *exportReader) Read(p []byte) (n int, err error) {
 		r.currentSlice++
 	}
 	return
+}
+
+type ClientDiagnosticsInfo struct {
+	Client   string `json:"client,omitempty"`
+	Runtime  string `json:"runtime,omitempty"`
+	Platform string `json:"platform,omitempty"`
 }

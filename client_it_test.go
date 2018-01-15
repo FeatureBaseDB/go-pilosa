@@ -44,7 +44,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"reflect"
-	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -1487,7 +1486,7 @@ func TestUserAgent(t *testing.T) {
 		if strings.HasPrefix(version, "v") {
 			version = version[1:]
 		}
-		targetUserAgent := fmt.Sprintf("go-pilosa/%s %s %s/%s", version, runtime.Version(), runtime.GOOS, runtime.GOARCH)
+		targetUserAgent := fmt.Sprintf("go-pilosa/%s", version)
 		if targetUserAgent != r.UserAgent() {
 			t.Fatalf("UserAgent %s != %s", targetUserAgent, r.UserAgent())
 		}

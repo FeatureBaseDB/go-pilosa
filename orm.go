@@ -303,11 +303,6 @@ func (idx *Index) Name() string {
 	return idx.name
 }
 
-// ColumnLabel returns the column label for this index.
-func (idx *Index) ColumnLabel() string {
-	return idx.options.ColumnLabel
-}
-
 // Frame creates a frame struct with the specified name and defaults.
 func (idx *Index) Frame(name string, options ...interface{}) (*Frame, error) {
 	if frame, ok := idx.frames[name]; ok {
@@ -576,11 +571,6 @@ func newFrame(name string, index *Index) *Frame {
 // Name returns the name of the frame
 func (f *Frame) Name() string {
 	return f.name
-}
-
-// RowLabel returns the row label for this frame.
-func (f *Frame) RowLabel() string {
-	return f.options.RowLabel
 }
 
 func (f *Frame) copy() *Frame {

@@ -45,6 +45,7 @@ import (
 var schema = NewSchema()
 var sampleIndex = mustNewIndex(schema, "sample-index", "")
 var sampleFrame = mustNewFrame(sampleIndex, "sample-frame", "")
+var sampleField = sampleFrame.Field("sample-field")
 var projectIndex = mustNewIndex(schema, "project-index", "user")
 var collabFrame = mustNewFrame(projectIndex, "collaboration", "project")
 var b1 = sampleFrame.Bitmap(10)
@@ -256,6 +257,15 @@ func TestBitmap(t *testing.T) {
 		collabFrame.Bitmap(10))
 }
 
+func TestBitmapK(t *testing.T) {
+	comparePQL(t,
+		"Bitmap(rowID='myrow', frame='sample-frame')",
+		sampleFrame.BitmapK("myrow"))
+	comparePQL(t,
+		"Bitmap(project='myrow2', frame='collaboration')",
+		collabFrame.BitmapK("myrow2"))
+}
+
 func TestInverseBitmap(t *testing.T) {
 	options := &FrameOptions{
 		RowLabel:       "row_label",
@@ -270,6 +280,20 @@ func TestInverseBitmap(t *testing.T) {
 		f1.InverseBitmap(5))
 }
 
+func TestInverseBitmapK(t *testing.T) {
+	options := &FrameOptions{
+		RowLabel:       "row_label",
+		InverseEnabled: true,
+	}
+	f1, err := projectIndex.Frame("f1-inversable", options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	comparePQL(t,
+		"Bitmap(user='myrow', frame='f1-inversable')",
+		f1.InverseBitmapK("myrow"))
+}
+
 func TestSetBit(t *testing.T) {
 	comparePQL(t,
 		"SetBit(rowID=5, frame='sample-frame', columnID=10)",
@@ -279,11 +303,27 @@ func TestSetBit(t *testing.T) {
 		collabFrame.SetBit(10, 20))
 }
 
+func TestSetBitK(t *testing.T) {
+	comparePQL(t,
+		"SetBit(rowID='myrow', frame='sample-frame', columnID='mycol')",
+		sampleFrame.SetBitK("myrow", "mycol"))
+	comparePQL(t,
+		"SetBit(project='myrow2', frame='collaboration', user='mycol2')",
+		collabFrame.SetBitK("myrow2", "mycol2"))
+}
+
 func TestSetBitTimestamp(t *testing.T) {
 	timestamp := time.Date(2017, time.April, 24, 12, 14, 0, 0, time.UTC)
 	comparePQL(t,
 		"SetBit(project=10, frame='collaboration', user=20, timestamp='2017-04-24T12:14')",
 		collabFrame.SetBitTimestamp(10, 20, timestamp))
+}
+
+func TestSetBitTimestampK(t *testing.T) {
+	timestamp := time.Date(2017, time.April, 24, 12, 14, 0, 0, time.UTC)
+	comparePQL(t,
+		"SetBit(project='myrow', frame='collaboration', user='mycol', timestamp='2017-04-24T12:14')",
+		collabFrame.SetBitTimestampK("myrow", "mycol", timestamp))
 }
 
 func TestClearBit(t *testing.T) {
@@ -295,10 +335,25 @@ func TestClearBit(t *testing.T) {
 		collabFrame.ClearBit(10, 20))
 }
 
+func TestClearBitK(t *testing.T) {
+	comparePQL(t,
+		"ClearBit(rowID='myrow', frame='sample-frame', columnID='mycol')",
+		sampleFrame.ClearBitK("myrow", "mycol"))
+	comparePQL(t,
+		"ClearBit(project='myrow2', frame='collaboration', user='mycol2')",
+		collabFrame.ClearBitK("myrow2", "mycol2"))
+}
+
 func TestSetFieldValue(t *testing.T) {
 	comparePQL(t,
 		"SetFieldValue(frame='collaboration', user=50, foo=15)",
 		collabFrame.SetIntFieldValue(50, "foo", 15))
+}
+
+func TestSetValueK(t *testing.T) {
+	comparePQL(t,
+		"SetFieldValue(frame='sample-frame', columnID='mycol', sample-field=22)",
+		sampleField.SetIntValueK("mycol", 22))
 }
 
 func TestUnion(t *testing.T) {

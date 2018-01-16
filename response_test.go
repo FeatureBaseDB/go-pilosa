@@ -33,6 +33,7 @@
 package pilosa
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -173,9 +174,22 @@ func TestNewQueryResponseFromInternalFailure(t *testing.T) {
 }
 
 func TestCountResultItemToString(t *testing.T) {
-	item := &CountResultItem{ID: 100, Count: 50}
-	target := "100:50"
-	if target != item.String() {
-		t.Fatalf("%s != %s", target, item.String())
+	tests := []struct {
+		item     *CountResultItem
+		expected string
+	}{
+		{item: &CountResultItem{ID: 100, Count: 50}, expected: "100:50"},
+		{item: &CountResultItem{Key: "blah", Count: 50}, expected: "blah:50"},
+		{item: &CountResultItem{Key: "blah", ID: 22, Count: 50}, expected: "blah:50"},
+		{item: &CountResultItem{Key: "blah", ID: 22}, expected: "blah:0"},
+		{item: &CountResultItem{}, expected: "0:0"},
+	}
+
+	for i, tst := range tests {
+		t.Run(fmt.Sprintf("%d: ", i), func(t *testing.T) {
+			if tst.expected != tst.item.String() {
+				t.Fatalf("%s != %s", tst.expected, tst.item.String())
+			}
+		})
 	}
 }

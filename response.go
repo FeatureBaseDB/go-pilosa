@@ -143,17 +143,21 @@ func newQueryResultFromInternal(result *pbuf.QueryResult) (*QueryResult, error) 
 // CountResultItem represents a result from TopN call.
 type CountResultItem struct {
 	ID    uint64
+	Key   string
 	Count uint64
 }
 
 func (c *CountResultItem) String() string {
+	if c.Key != "" {
+		return fmt.Sprintf("%s:%d", c.Key, c.Count)
+	}
 	return fmt.Sprintf("%d:%d", c.ID, c.Count)
 }
 
 func countItemsFromInternal(items []*pbuf.Pair) []*CountResultItem {
 	result := make([]*CountResultItem, 0, len(items))
 	for _, v := range items {
-		result = append(result, &CountResultItem{ID: v.Key, Count: v.Count})
+		result = append(result, &CountResultItem{ID: v.ID, Key: v.Key, Count: v.Count})
 	}
 	return result
 }
@@ -162,6 +166,7 @@ func countItemsFromInternal(items []*pbuf.Pair) []*CountResultItem {
 type BitmapResult struct {
 	Attributes map[string]interface{}
 	Bits       []uint64
+	Keys       []string
 }
 
 func newBitmapResultFromInternal(bitmap *pbuf.Bitmap) (*BitmapResult, error) {
@@ -172,6 +177,7 @@ func newBitmapResultFromInternal(bitmap *pbuf.Bitmap) (*BitmapResult, error) {
 	result := &BitmapResult{
 		Attributes: attrs,
 		Bits:       bitmap.Bits,
+		Keys:       bitmap.Keys,
 	}
 	return result, nil
 }
@@ -207,6 +213,7 @@ func convertInternalAttrsToMap(attrs []*pbuf.Attr) (attrsMap map[string]interfac
 // Column data is only returned if QueryOptions.Columns was set to true.
 type ColumnItem struct {
 	ID         uint64                 `json:"id,omitempty"`
+	Key        string                 `json:"key,omitempty"`
 	Attributes map[string]interface{} `json:"attributes,omitempty"`
 }
 
@@ -217,6 +224,7 @@ func newColumnItemFromInternal(column *pbuf.ColumnAttrSet) (*ColumnItem, error) 
 	}
 	return &ColumnItem{
 		ID:         column.ID,
+		Key:        column.Key,
 		Attributes: attrs,
 	}, nil
 }

@@ -42,6 +42,7 @@ import (
 	"net"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -60,8 +61,9 @@ var protobufHeaders = map[string]string{
 
 // Client is the HTTP client for Pilosa server.
 type Client struct {
-	cluster *Cluster
-	client  *http.Client
+	cluster   *Cluster
+	client    *http.Client
+	userAgent string
 }
 
 // DefaultClient creates a client with the default address and options.
@@ -610,7 +612,7 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 			return nil, nil, ErrEmptyCluster
 		}
 
-		response, err = c.doRequest(host, method, path, headers, reader)
+		response, err = c.doRequest(host, method, path, c.augmentHeaders(headers), reader)
 		if err == nil {
 			break
 		}
@@ -680,6 +682,21 @@ func (c *Client) statusToNodeSlicesForIndex(status *Status, indexName string) ma
 		}
 	}
 	return result
+}
+
+func (c *Client) augmentHeaders(headers map[string]string) map[string]string {
+	if headers == nil {
+		headers = map[string]string{}
+	}
+	if c.userAgent == "" {
+		version := Version
+		if strings.HasPrefix(version, "v") {
+			version = version[1:]
+		}
+		c.userAgent = fmt.Sprintf("go-pilosa/%s", version)
+	}
+	headers["User-Agent"] = c.userAgent
+	return headers
 }
 
 func makeRequest(host *URI, method, path string, headers map[string]string, reader io.Reader) (*http.Request, error) {
@@ -1030,4 +1047,10 @@ func (r *exportReader) Read(p []byte) (n int, err error) {
 		r.currentSlice++
 	}
 	return
+}
+
+type ClientDiagnosticsInfo struct {
+	Client   string `json:"client,omitempty"`
+	Runtime  string `json:"runtime,omitempty"`
+	Platform string `json:"platform,omitempty"`
 }

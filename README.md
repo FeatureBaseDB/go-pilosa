@@ -534,13 +534,6 @@ If you are using a self signed certificate, just pass `pilosa.TLSConfig(&tls.Con
 client, _ := NewClient("https://01.pilosa.local:10501", TLSConfig(&tls.Config{InsecureSkipVerify: true}))
 ```
 
-## Diagnostics
-
-This library sends client library version to the Pilosa server in the HTTP user agent header. This information allow us to understand our community better. Below is a sample user agent header:
-```
-User-Agent: go-pilosa/0.8.0-16-g46c8a62
-```
-
 ## Contribution
 
 Please check our [Contributor's Guidelines](https://github.com/pilosa/pilosa/CONTRIBUTING.md).

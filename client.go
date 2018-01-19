@@ -179,7 +179,7 @@ func (c *Client) CreateIndex(index *Index) error {
 	path := fmt.Sprintf("/index/%s", index.name)
 	response, _, err := c.httpRequest("POST", path, data, nil)
 	if err != nil {
-		if response.StatusCode == 409 {
+		if response != nil && response.StatusCode == 409 {
 			return ErrIndexExists
 		}
 		return err
@@ -197,7 +197,7 @@ func (c *Client) CreateFrame(frame *Frame) error {
 	path := fmt.Sprintf("/index/%s/frame/%s", frame.index.name, frame.name)
 	response, _, err := c.httpRequest("POST", path, data, nil)
 	if err != nil {
-		if response.StatusCode == 409 {
+		if response != nil && response.StatusCode == 409 {
 			return ErrFrameExists
 		}
 		return err

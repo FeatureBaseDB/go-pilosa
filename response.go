@@ -142,9 +142,9 @@ func newQueryResultFromInternal(result *pbuf.QueryResult) (*QueryResult, error) 
 
 // CountResultItem represents a result from TopN call.
 type CountResultItem struct {
-	ID    uint64
-	Key   string
-	Count uint64
+	ID    uint64 `json:"id"`
+	Key   string `json:"key,omitempty"`
+	Count uint64 `json:"count"`
 }
 
 func (c *CountResultItem) String() string {

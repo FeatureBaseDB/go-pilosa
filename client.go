@@ -409,6 +409,40 @@ func (c *Client) ImportFrame(frame *Frame, bitIterator BitIterator, batchSize ui
 	return nil
 }
 
+// ImportKFrame imports bitKs from the given CSV iterator.
+func (c *Client) ImportKFrame(frame *Frame, bitKIterator BitKIterator, batchSize uint) error {
+	linesLeft := true
+	bitKs := []BitK{}
+	var currentBatchSize uint
+	indexName := frame.index.name
+	frameName := frame.name
+
+	for linesLeft {
+		bitK, err := bitKIterator.NextBitK()
+		if err == io.EOF {
+			linesLeft = false
+		} else if err != nil {
+			return err
+		}
+
+		bitKs = append(bitKs, bitK)
+		currentBatchSize++
+		// if the batch is full or there's no line left, start importing bits
+		if currentBatchSize >= batchSize || !linesLeft {
+			if len(bitKs) > 0 {
+				err := c.importBitKs(indexName, frameName, bitKs)
+				if err != nil {
+					return err
+				}
+			}
+			bitKs = []BitK{}
+			currentBatchSize = 0
+		}
+	}
+
+	return nil
+}
+
 // ImportValueFrame imports field values from the given CSV iterator.
 func (c *Client) ImportValueFrame(frame *Frame, field string, valueIterator ValueIterator, batchSize uint) error {
 	linesLeft := true
@@ -472,6 +506,16 @@ func (c *Client) importBits(indexName string, frameName string, slice uint64, bi
 	return nil
 }
 
+func (c *Client) importBitKs(indexName string, frameName string, bitKs []BitK) error {
+	uri := c.cluster.Host()
+	err := c.importKNode(uri, bitKsToImportKRequest(indexName, frameName, bitKs))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (c *Client) importValues(indexName string, frameName string, slice uint64, fieldName string, vals []FieldValue) error {
 	sort.Sort(valsForSort(vals))
 	nodes, err := c.fetchFragmentNodes(indexName, slice)
@@ -513,6 +557,18 @@ func (c *Client) importNode(uri *URI, request *pbuf.ImportRequest) error {
 		return errors.Wrap(err, "marshaling to protobuf")
 	}
 	resp, err := c.doRequest(uri, "POST", "/import", defaultProtobufHeaders(), bytes.NewReader(data))
+	if err = anyError(resp, err); err != nil {
+		return errors.Wrap(err, "doing import request")
+	}
+	return errors.Wrap(resp.Body.Close(), "closing import response body")
+}
+
+func (c *Client) importKNode(uri *URI, request *pbuf.ImportKRequest) error {
+	data, err := proto.Marshal(request)
+	if err != nil {
+		return errors.Wrap(err, "marshaling to protobuf")
+	}
+	resp, err := c.doRequest(uri, "POST", "/import", protobufHeaders, bytes.NewReader(data))
 	if err = anyError(resp, err); err != nil {
 		return errors.Wrap(err, "doing import request")
 	}
@@ -760,6 +816,24 @@ func bitsToImportRequest(indexName string, frameName string, slice uint64, bits 
 		Slice:      slice,
 		RowIDs:     rowIDs,
 		ColumnIDs:  columnIDs,
+		Timestamps: timestamps,
+	}
+}
+
+func bitKsToImportKRequest(indexName string, frameName string, bitKs []BitK) *pbuf.ImportKRequest {
+	rowKeys := make([]string, 0, len(bitKs))
+	columnKeys := make([]string, 0, len(bitKs))
+	timestamps := make([]int64, 0, len(bitKs))
+	for _, bitK := range bitKs {
+		rowKeys = append(rowKeys, bitK.RowKey)
+		columnKeys = append(columnKeys, bitK.ColumnKey)
+		timestamps = append(timestamps, bitK.Timestamp)
+	}
+	return &pbuf.ImportKRequest{
+		Index:      indexName,
+		Frame:      frameName,
+		RowKeys:    rowKeys,
+		ColumnKeys: columnKeys,
 		Timestamps: timestamps,
 	}
 }

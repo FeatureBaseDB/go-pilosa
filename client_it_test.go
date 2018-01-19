@@ -738,6 +738,49 @@ func TestCSVImport(t *testing.T) {
 	}
 }
 
+func TestCSVKeyImport(t *testing.T) {
+	client := getProxyClient()
+	text := `row1,col10
+		row1,col20
+		row2,col30
+		row4,col80`
+	iterator := NewCSVBitKIterator(strings.NewReader(text))
+	frame, err := index.Frame("importkframe", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.ImportKFrame(frame, iterator, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	target := []string{"col30", "col80", "col10"}
+	bq := index.BatchQuery(
+		frame.BitmapK("row2"),
+		frame.BitmapK("row4"),
+		frame.BitmapK("row1"),
+	)
+
+	response, err := client.Query(bq, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(response.Results()) != 3 {
+		t.Fatalf("Result count should be 3")
+	}
+	for i, result := range response.Results() {
+		br := result.Bitmap
+		if target[i] != br.Keys[0] {
+			t.Fatalf("%s != %s", target[i], br.Keys[0])
+		}
+	}
+}
+
 func TestValueCSVImport(t *testing.T) {
 	client := getClient()
 	text := `10,7
@@ -1531,6 +1574,22 @@ func getPilosaBindAddress() string {
 		}
 	}
 	return "http://:10101"
+}
+
+func getProxyClient() *Client {
+	uri, err := NewURIFromAddress(getProxyBindAddress())
+	if err != nil {
+		panic(err)
+	}
+	client, err := NewClient(uri, TLSConfig(&tls.Config{InsecureSkipVerify: true}))
+	if err != nil {
+		panic(err)
+	}
+	return client
+}
+
+func getProxyBindAddress() string {
+	return "http://:20202"
 }
 
 func getMockServer(statusCode int, response []byte, contentLength int) *httptest.Server {

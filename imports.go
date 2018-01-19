@@ -147,6 +147,95 @@ func (b bitsForSort) Less(i, j int) bool {
 	return bitCmp < 0
 }
 
+// BitK defines a single Pilosa bitK.
+type BitK struct {
+	RowKey    string
+	ColumnKey string
+	Timestamp int64
+}
+
+// BitKIterator structs return bitKs one by one.
+type BitKIterator interface {
+	NextBitK() (BitK, error)
+}
+
+// CSVBitKIterator reads bits from a Reader.
+// Each line should contain a single bitK in the following form:
+// rowKey,columnKey[,timestamp]
+type CSVBitKIterator struct {
+	reader          io.Reader
+	line            int
+	scanner         *bufio.Scanner
+	timestampFormat string
+}
+
+// NewCSVBitKIterator creates a CSVBitKIterator from a Reader.
+func NewCSVBitKIterator(reader io.Reader) *CSVBitKIterator {
+	return &CSVBitKIterator{
+		reader:  reader,
+		line:    0,
+		scanner: bufio.NewScanner(reader),
+	}
+}
+
+// NewCSVBitKIteratorWithTimestampFormat creates a CSVBitKIterator from a Reader with a custom timestamp format.
+func NewCSVBitKIteratorWithTimestampFormat(reader io.Reader, timestampFormat string) *CSVBitKIterator {
+	return &CSVBitKIterator{
+		reader:          reader,
+		line:            0,
+		scanner:         bufio.NewScanner(reader),
+		timestampFormat: timeFormat,
+	}
+}
+
+// NextBitK iterates on lines of a Reader.
+// Returns io.EOF on end of iteration.
+func (c *CSVBitKIterator) NextBitK() (BitK, error) {
+	if ok := c.scanner.Scan(); ok {
+		c.line++
+		text := strings.TrimSpace(c.scanner.Text())
+		parts := strings.Split(text, ",")
+		if len(parts) < 2 {
+			return BitK{}, fmt.Errorf("Invalid CSV line: %d", c.line)
+		}
+		if parts[0] == "" {
+			return BitK{}, fmt.Errorf("Invalid row Key at line: %d", c.line)
+		}
+		rowKey := parts[0]
+		if parts[1] == "" {
+			return BitK{}, fmt.Errorf("Invalid column Key at line: %d", c.line)
+		}
+		columnKey := parts[1]
+		timestamp := 0
+		var err error
+		if len(parts) == 3 {
+			if c.timestampFormat == "" {
+				timestamp, err = strconv.Atoi(parts[2])
+				if err != nil {
+					return BitK{}, fmt.Errorf("Invalid timestamp at line: %d", c.line)
+				}
+			} else {
+				t, err := time.Parse(c.timestampFormat, parts[2])
+				if err != nil {
+					return BitK{}, fmt.Errorf("Invalid timestamp at line: %d", c.line)
+				}
+				timestamp = int(t.Unix())
+			}
+		}
+		bitK := BitK{
+			RowKey:    rowKey,
+			ColumnKey: columnKey,
+			Timestamp: int64(timestamp),
+		}
+		return bitK, nil
+	}
+	err := c.scanner.Err()
+	if err != nil {
+		return BitK{}, err
+	}
+	return BitK{}, io.EOF
+}
+
 // FieldValue represents the value for a column within a
 // range-encoded frame.
 type FieldValue struct {

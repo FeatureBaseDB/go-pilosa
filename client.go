@@ -423,10 +423,11 @@ func (c *Client) ImportKFrame(frame *Frame, bitKIterator BitKIterator, batchSize
 			linesLeft = false
 		} else if err != nil {
 			return err
+		} else {
+			bitKs = append(bitKs, bitK)
+			currentBatchSize++
 		}
 
-		bitKs = append(bitKs, bitK)
-		currentBatchSize++
 		// if the batch is full or there's no line left, start importing bits
 		if currentBatchSize >= batchSize || !linesLeft {
 			if len(bitKs) > 0 {
@@ -478,6 +479,42 @@ func (c *Client) ImportValueFrame(frame *Frame, field string, valueIterator Valu
 				}
 			}
 			valGroup = map[uint64][]FieldValue{}
+			currentBatchSize = 0
+		}
+	}
+
+	return nil
+}
+
+// ImportValueKFrame imports field valueKs from the given CSV iterator.
+func (c *Client) ImportValueKFrame(frame *Frame, field string, valueKIterator ValueKIterator, batchSize uint) error {
+	linesLeft := true
+	valKs := []FieldValueK{}
+	var currentBatchSize uint
+	indexName := frame.index.name
+	frameName := frame.name
+	fieldName := field
+
+	for linesLeft {
+		val, err := valueKIterator.NextValueK()
+		if err == io.EOF {
+			linesLeft = false
+		} else if err != nil {
+			return err
+		} else {
+			valKs = append(valKs, val)
+			currentBatchSize++
+		}
+
+		// if the batch is full or there's no line left, start importing values
+		if currentBatchSize >= batchSize || !linesLeft {
+			if len(valKs) > 0 {
+				err := c.importValueKs(indexName, frameName, fieldName, valKs)
+				if err != nil {
+					return err
+				}
+			}
+			valKs = []FieldValueK{}
 			currentBatchSize = 0
 		}
 	}
@@ -537,6 +574,16 @@ func (c *Client) importValues(indexName string, frameName string, slice uint64, 
 	return nil
 }
 
+func (c *Client) importValueKs(indexName string, frameName string, fieldName string, valKs []FieldValueK) error {
+	uri := c.cluster.Host()
+	err := c.importValueKNode(uri, valKsToImportValueKRequest(indexName, frameName, fieldName, valKs))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentNode, error) {
 	path := fmt.Sprintf("/fragment/nodes?slice=%d&index=%s", slice, indexName)
 	_, body, err := c.httpRequest("GET", path, []byte{}, nil)
@@ -579,6 +626,17 @@ func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest) err
 	data, _ := proto.Marshal(request)
 	// request.Marshal never returns an error
 	_, err := c.doRequest(uri, "POST", "/import-value", defaultProtobufHeaders(), bytes.NewReader(data))
+	if err != nil {
+		return errors.Wrap(err, "doing /import-value request")
+	}
+
+	return nil
+}
+
+func (c *Client) importValueKNode(uri *URI, request *pbuf.ImportValueKRequest) error {
+	data, _ := proto.Marshal(request)
+	// request.Marshal never returns an error
+	_, err := c.doRequest(uri, "POST", "/import-value", protobufHeaders, bytes.NewReader(data))
 	if err != nil {
 		return errors.Wrap(err, "doing /import-value request")
 	}
@@ -852,6 +910,22 @@ func valsToImportRequest(indexName string, frameName string, slice uint64, field
 		Field:     fieldName,
 		ColumnIDs: columnIDs,
 		Values:    values,
+	}
+}
+
+func valKsToImportValueKRequest(indexName string, frameName string, fieldName string, valKs []FieldValueK) *pbuf.ImportValueKRequest {
+	columnKeys := make([]string, 0, len(valKs))
+	values := make([]int64, 0, len(valKs))
+	for _, valK := range valKs {
+		columnKeys = append(columnKeys, valK.ColumnKey)
+		values = append(values, valK.Value)
+	}
+	return &pbuf.ImportValueKRequest{
+		Index:      indexName,
+		Frame:      frameName,
+		Field:      fieldName,
+		ColumnKeys: columnKeys,
+		Values:     values,
 	}
 }
 

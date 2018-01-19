@@ -310,3 +310,64 @@ func (v valsForSort) Swap(i, j int) {
 func (v valsForSort) Less(i, j int) bool {
 	return v[i].ColumnID < v[j].ColumnID
 }
+
+// FieldValueK represents the valueK for a column within a
+// range-encoded frame with a string column key.
+type FieldValueK struct {
+	ColumnKey string
+	Value     int64
+}
+
+// ValueKIterator structs return fieldK values one by one.
+type ValueKIterator interface {
+	NextValueK() (FieldValueK, error)
+}
+
+// CSVValueKIterator reads field valueKs from a Reader.
+// Each line should contain a single field valueK in the following form:
+// columnKey,value
+type CSVValueKIterator struct {
+	reader  io.Reader
+	line    int
+	scanner *bufio.Scanner
+}
+
+// NewCSVValueKIterator creates a CSVValueKIterator from a Reader.
+func NewCSVValueKIterator(reader io.Reader) *CSVValueKIterator {
+	return &CSVValueKIterator{
+		reader:  reader,
+		line:    0,
+		scanner: bufio.NewScanner(reader),
+	}
+}
+
+// NextValueK iterates on lines of a Reader.
+// Returns io.EOF on end of iteration.
+func (c *CSVValueKIterator) NextValueK() (FieldValueK, error) {
+	if ok := c.scanner.Scan(); ok {
+		c.line++
+		text := strings.TrimSpace(c.scanner.Text())
+		parts := strings.Split(text, ",")
+		if len(parts) < 2 {
+			return FieldValueK{}, fmt.Errorf("Invalid CSV line: %d", c.line)
+		}
+		if parts[0] == "" {
+			return FieldValueK{}, fmt.Errorf("Invalid column Key at line: %d", c.line)
+		}
+		columnKey := parts[0]
+		value, err := strconv.Atoi(parts[1])
+		if err != nil {
+			return FieldValueK{}, fmt.Errorf("Invalid value at line: %d", c.line)
+		}
+		fieldValueK := FieldValueK{
+			ColumnKey: columnKey,
+			Value:     int64(value),
+		}
+		return fieldValueK, nil
+	}
+	err := c.scanner.Err()
+	if err != nil {
+		return FieldValueK{}, err
+	}
+	return FieldValueK{}, io.EOF
+}

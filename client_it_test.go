@@ -818,6 +818,36 @@ func TestValueCSVImport(t *testing.T) {
 	}
 }
 
+func TestValueCSVKeyImport(t *testing.T) {
+	client := getProxyClient()
+	text := `col10,7
+		col7,1`
+	iterator := NewCSVValueKIterator(strings.NewReader(text))
+	frameOptions := &FrameOptions{}
+	frameOptions.AddIntField("foo", 0, 100)
+	frame, err := index.Frame("importvaluekframe", frameOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = client.ImportValueKFrame(frame, "foo", iterator, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := client.Query(frame.Sum(nil, "foo"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := int64(8)
+	if target != response.Result().Sum {
+		t.Fatalf("%d != %d", target, response.Result().Sum)
+	}
+}
+
 func TestCSVExport(t *testing.T) {
 	client := getClient()
 	frame, err := index.Frame("exportframe", nil)

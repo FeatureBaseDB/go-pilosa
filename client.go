@@ -53,16 +53,12 @@ import (
 const maxHosts = 10
 const sliceWidth = 1048576
 
-// // both Content-Type and Accept headers must be set for protobuf content
-var protobufHeaders = map[string]string{
-	"Content-Type": "application/x-protobuf",
-	"Accept":       "application/x-protobuf",
-}
-
 // Client is the HTTP client for Pilosa server.
 type Client struct {
-	cluster   *Cluster
-	client    *http.Client
+	cluster *Cluster
+	client  *http.Client
+	// User-Agent header cache. Not used until cluster-resize support branch is merged
+	// and user agent is saved here in NewClient
 	userAgent string
 }
 
@@ -157,7 +153,7 @@ func (c *Client) Query(query PQLQuery, options ...interface{}) (*QueryResponse, 
 		return nil, errors.Wrap(err, "making request data")
 	}
 	path := fmt.Sprintf("/index/%s/query", query.Index().name)
-	_, buf, err := c.httpRequest("POST", path, data, protobufHeaders)
+	_, buf, err := c.httpRequest("POST", path, data, defaultProtobufHeaders())
 	if err != nil {
 		return nil, err
 	}
@@ -516,7 +512,7 @@ func (c *Client) importNode(uri *URI, request *pbuf.ImportRequest) error {
 	if err != nil {
 		return errors.Wrap(err, "marshaling to protobuf")
 	}
-	resp, err := c.doRequest(uri, "POST", "/import", protobufHeaders, bytes.NewReader(data))
+	resp, err := c.doRequest(uri, "POST", "/import", defaultProtobufHeaders(), bytes.NewReader(data))
 	if err = anyError(resp, err); err != nil {
 		return errors.Wrap(err, "doing import request")
 	}
@@ -526,7 +522,7 @@ func (c *Client) importNode(uri *URI, request *pbuf.ImportRequest) error {
 func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest) error {
 	data, _ := proto.Marshal(request)
 	// request.Marshal never returns an error
-	_, err := c.doRequest(uri, "POST", "/import-value", protobufHeaders, bytes.NewReader(data))
+	_, err := c.doRequest(uri, "POST", "/import-value", defaultProtobufHeaders(), bytes.NewReader(data))
 	if err != nil {
 		return errors.Wrap(err, "doing /import-value request")
 	}
@@ -688,15 +684,22 @@ func (c *Client) augmentHeaders(headers map[string]string) map[string]string {
 	if headers == nil {
 		headers = map[string]string{}
 	}
-	if c.userAgent == "" {
-		version := Version
-		if strings.HasPrefix(version, "v") {
-			version = version[1:]
-		}
-		c.userAgent = fmt.Sprintf("go-pilosa/%s", version)
+
+	// TODO: move the following block to NewClient once cluster-resize support branch is merged.
+	version := Version
+	if strings.HasPrefix(version, "v") {
+		version = version[1:]
 	}
-	headers["User-Agent"] = c.userAgent
+
+	headers["User-Agent"] = fmt.Sprintf("go-pilosa/%s", version)
 	return headers
+}
+
+func defaultProtobufHeaders() map[string]string {
+	return map[string]string{
+		"Content-Type": "application/x-protobuf",
+		"Accept":       "application/x-protobuf",
+	}
 }
 
 func makeRequest(host *URI, method, path string, headers map[string]string, reader io.Reader) (*http.Request, error) {

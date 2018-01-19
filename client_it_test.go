@@ -1499,7 +1499,16 @@ func TestUserAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
 
+func TestClientRace(t *testing.T) {
+	client := getClient()
+	f := func() {
+		client.Query(testFrame.Bitmap(1))
+	}
+	for i := 0; i < 10; i++ {
+		go f()
+	}
 }
 
 func getClient() *Client {

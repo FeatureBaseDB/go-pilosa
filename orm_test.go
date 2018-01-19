@@ -600,6 +600,27 @@ func TestSetRowAttrsInvalidAttr(t *testing.T) {
 	}
 }
 
+func TestSetRowAttrsKTest(t *testing.T) {
+	attrs := map[string]interface{}{
+		"quote":  "\"Don't worry, be happy\"",
+		"active": true,
+	}
+
+	comparePQL(t,
+		"SetRowAttrs(project='foo', frame='collaboration', active=true, quote=\"\\\"Don't worry, be happy\\\"\")",
+		collabFrame.SetRowAttrsK("foo", attrs))
+}
+
+func TestSetRowAttrsKInvalidAttr(t *testing.T) {
+	attrs := map[string]interface{}{
+		"color":     "blue",
+		"$invalid$": true,
+	}
+	if collabFrame.SetRowAttrsK("foo", attrs).Error() == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
 func TestSum(t *testing.T) {
 	b := collabFrame.Bitmap(42)
 	comparePQL(t,
@@ -642,6 +663,17 @@ func TestRange(t *testing.T) {
 	comparePQL(t,
 		"Range(user=10, frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
 		collabFrame.InverseRange(10, start, end))
+}
+
+func TestRangeK(t *testing.T) {
+	start := time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2000, time.February, 2, 3, 4, 0, 0, time.UTC)
+	comparePQL(t,
+		"Range(project='foo', frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
+		collabFrame.RangeK("foo", start, end))
+	comparePQL(t,
+		"Range(user='foo', frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
+		collabFrame.InverseRangeK("foo", start, end))
 }
 
 func TestInvalidColumnLabelFails(t *testing.T) {

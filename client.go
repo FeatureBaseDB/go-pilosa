@@ -179,7 +179,7 @@ func (c *Client) CreateIndex(index *Index) error {
 	path := fmt.Sprintf("/index/%s", index.name)
 	response, _, err := c.httpRequest("POST", path, data, nil)
 	if err != nil {
-		if response.StatusCode == 409 {
+		if response != nil && response.StatusCode == 409 {
 			return ErrIndexExists
 		}
 		return err

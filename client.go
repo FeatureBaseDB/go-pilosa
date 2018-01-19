@@ -409,34 +409,34 @@ func (c *Client) ImportFrame(frame *Frame, bitIterator BitIterator, batchSize ui
 	return nil
 }
 
-// ImportKFrame imports bitKs from the given CSV iterator.
-func (c *Client) ImportKFrame(frame *Frame, bitKIterator BitKIterator, batchSize uint) error {
+// ImportFrameK imports bits from the given iterator.
+func (c *Client) ImportFrameK(frame *Frame, bitIterator BitIterator, batchSize uint) error {
 	linesLeft := true
-	bitKs := []BitK{}
+	bits := []Bit{}
 	var currentBatchSize uint
 	indexName := frame.index.name
 	frameName := frame.name
 
 	for linesLeft {
-		bitK, err := bitKIterator.NextBitK()
+		bit, err := bitIterator.NextBit()
 		if err == io.EOF {
 			linesLeft = false
 		} else if err != nil {
 			return err
 		} else {
-			bitKs = append(bitKs, bitK)
+			bits = append(bits, bit)
 			currentBatchSize++
 		}
 
 		// if the batch is full or there's no line left, start importing bits
 		if currentBatchSize >= batchSize || !linesLeft {
-			if len(bitKs) > 0 {
-				err := c.importBitKs(indexName, frameName, bitKs)
+			if len(bits) > 0 {
+				err := c.importBitsK(indexName, frameName, bits)
 				if err != nil {
 					return err
 				}
 			}
-			bitKs = []BitK{}
+			bits = []Bit{}
 			currentBatchSize = 0
 		}
 	}
@@ -444,7 +444,7 @@ func (c *Client) ImportKFrame(frame *Frame, bitKIterator BitKIterator, batchSize
 	return nil
 }
 
-// ImportValueFrame imports field values from the given CSV iterator.
+// ImportValueFrame imports field values from the given iterator.
 func (c *Client) ImportValueFrame(frame *Frame, field string, valueIterator ValueIterator, batchSize uint) error {
 	linesLeft := true
 	valGroup := map[uint64][]FieldValue{}
@@ -486,35 +486,35 @@ func (c *Client) ImportValueFrame(frame *Frame, field string, valueIterator Valu
 	return nil
 }
 
-// ImportValueKFrame imports field valueKs from the given CSV iterator.
-func (c *Client) ImportValueKFrame(frame *Frame, field string, valueKIterator ValueKIterator, batchSize uint) error {
+// ImportValueFrameK imports field values from the given iterator.
+func (c *Client) ImportValueFrameK(frame *Frame, field string, valueIterator ValueIterator, batchSize uint) error {
 	linesLeft := true
-	valKs := []FieldValueK{}
+	vals := []FieldValue{}
 	var currentBatchSize uint
 	indexName := frame.index.name
 	frameName := frame.name
 	fieldName := field
 
 	for linesLeft {
-		val, err := valueKIterator.NextValueK()
+		val, err := valueIterator.NextValue()
 		if err == io.EOF {
 			linesLeft = false
 		} else if err != nil {
 			return err
 		} else {
-			valKs = append(valKs, val)
+			vals = append(vals, val)
 			currentBatchSize++
 		}
 
 		// if the batch is full or there's no line left, start importing values
 		if currentBatchSize >= batchSize || !linesLeft {
-			if len(valKs) > 0 {
-				err := c.importValueKs(indexName, frameName, fieldName, valKs)
+			if len(vals) > 0 {
+				err := c.importValuesK(indexName, frameName, fieldName, vals)
 				if err != nil {
 					return err
 				}
 			}
-			valKs = []FieldValueK{}
+			vals = []FieldValue{}
 			currentBatchSize = 0
 		}
 	}
@@ -543,9 +543,9 @@ func (c *Client) importBits(indexName string, frameName string, slice uint64, bi
 	return nil
 }
 
-func (c *Client) importBitKs(indexName string, frameName string, bitKs []BitK) error {
+func (c *Client) importBitsK(indexName string, frameName string, bits []Bit) error {
 	uri := c.cluster.Host()
-	err := c.importKNode(uri, bitKsToImportKRequest(indexName, frameName, bitKs))
+	err := c.importNode(uri, bitsToImportRequestK(indexName, frameName, bits))
 	if err != nil {
 		return err
 	}
@@ -574,9 +574,9 @@ func (c *Client) importValues(indexName string, frameName string, slice uint64, 
 	return nil
 }
 
-func (c *Client) importValueKs(indexName string, frameName string, fieldName string, valKs []FieldValueK) error {
+func (c *Client) importValuesK(indexName string, frameName string, fieldName string, vals []FieldValue) error {
 	uri := c.cluster.Host()
-	err := c.importValueKNode(uri, valKsToImportValueKRequest(indexName, frameName, fieldName, valKs))
+	err := c.importValueNodeK(uri, valsToImportValueRequestK(indexName, frameName, fieldName, vals))
 	if err != nil {
 		return err
 	}
@@ -610,18 +610,6 @@ func (c *Client) importNode(uri *URI, request *pbuf.ImportRequest) error {
 	return errors.Wrap(resp.Body.Close(), "closing import response body")
 }
 
-func (c *Client) importKNode(uri *URI, request *pbuf.ImportKRequest) error {
-	data, err := proto.Marshal(request)
-	if err != nil {
-		return errors.Wrap(err, "marshaling to protobuf")
-	}
-	resp, err := c.doRequest(uri, "POST", "/import", protobufHeaders, bytes.NewReader(data))
-	if err = anyError(resp, err); err != nil {
-		return errors.Wrap(err, "doing import request")
-	}
-	return errors.Wrap(resp.Body.Close(), "closing import response body")
-}
-
 func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest) error {
 	data, _ := proto.Marshal(request)
 	// request.Marshal never returns an error
@@ -633,7 +621,7 @@ func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest) err
 	return nil
 }
 
-func (c *Client) importValueKNode(uri *URI, request *pbuf.ImportValueKRequest) error {
+func (c *Client) importValueNodeK(uri *URI, request *pbuf.ImportValueRequest) error {
 	data, _ := proto.Marshal(request)
 	// request.Marshal never returns an error
 	_, err := c.doRequest(uri, "POST", "/import-value", protobufHeaders, bytes.NewReader(data))
@@ -878,16 +866,16 @@ func bitsToImportRequest(indexName string, frameName string, slice uint64, bits 
 	}
 }
 
-func bitKsToImportKRequest(indexName string, frameName string, bitKs []BitK) *pbuf.ImportKRequest {
-	rowKeys := make([]string, 0, len(bitKs))
-	columnKeys := make([]string, 0, len(bitKs))
-	timestamps := make([]int64, 0, len(bitKs))
-	for _, bitK := range bitKs {
-		rowKeys = append(rowKeys, bitK.RowKey)
-		columnKeys = append(columnKeys, bitK.ColumnKey)
-		timestamps = append(timestamps, bitK.Timestamp)
+func bitsToImportRequestK(indexName string, frameName string, bits []Bit) *pbuf.ImportRequest {
+	rowKeys := make([]string, 0, len(bits))
+	columnKeys := make([]string, 0, len(bits))
+	timestamps := make([]int64, 0, len(bits))
+	for _, bit := range bits {
+		rowKeys = append(rowKeys, bit.RowKey)
+		columnKeys = append(columnKeys, bit.ColumnKey)
+		timestamps = append(timestamps, bit.Timestamp)
 	}
-	return &pbuf.ImportKRequest{
+	return &pbuf.ImportRequest{
 		Index:      indexName,
 		Frame:      frameName,
 		RowKeys:    rowKeys,
@@ -913,14 +901,14 @@ func valsToImportRequest(indexName string, frameName string, slice uint64, field
 	}
 }
 
-func valKsToImportValueKRequest(indexName string, frameName string, fieldName string, valKs []FieldValueK) *pbuf.ImportValueKRequest {
-	columnKeys := make([]string, 0, len(valKs))
-	values := make([]int64, 0, len(valKs))
-	for _, valK := range valKs {
-		columnKeys = append(columnKeys, valK.ColumnKey)
-		values = append(values, valK.Value)
+func valsToImportValueRequestK(indexName string, frameName string, fieldName string, vals []FieldValue) *pbuf.ImportValueRequest {
+	columnKeys := make([]string, 0, len(vals))
+	values := make([]int64, 0, len(vals))
+	for _, val := range vals {
+		columnKeys = append(columnKeys, val.ColumnKey)
+		values = append(values, val.Value)
 	}
-	return &pbuf.ImportValueKRequest{
+	return &pbuf.ImportValueRequest{
 		Index:      indexName,
 		Frame:      frameName,
 		Field:      fieldName,

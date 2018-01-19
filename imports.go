@@ -45,6 +45,8 @@ import (
 type Bit struct {
 	RowID     uint64
 	ColumnID  uint64
+	RowKey    string
+	ColumnKey string
 	Timestamp int64
 }
 
@@ -147,40 +149,28 @@ func (b bitsForSort) Less(i, j int) bool {
 	return bitCmp < 0
 }
 
-// BitK defines a single Pilosa bitK.
-type BitK struct {
-	RowKey    string
-	ColumnKey string
-	Timestamp int64
-}
-
-// BitKIterator structs return bitKs one by one.
-type BitKIterator interface {
-	NextBitK() (BitK, error)
-}
-
-// CSVBitKIterator reads bits from a Reader.
+// CSVBitIteratorK reads bits from a Reader.
 // Each line should contain a single bitK in the following form:
 // rowKey,columnKey[,timestamp]
-type CSVBitKIterator struct {
+type CSVBitIteratorK struct {
 	reader          io.Reader
 	line            int
 	scanner         *bufio.Scanner
 	timestampFormat string
 }
 
-// NewCSVBitKIterator creates a CSVBitKIterator from a Reader.
-func NewCSVBitKIterator(reader io.Reader) *CSVBitKIterator {
-	return &CSVBitKIterator{
+// NewCSVBitIteratorK creates a CSVBitIteratorK from a Reader.
+func NewCSVBitIteratorK(reader io.Reader) *CSVBitIteratorK {
+	return &CSVBitIteratorK{
 		reader:  reader,
 		line:    0,
 		scanner: bufio.NewScanner(reader),
 	}
 }
 
-// NewCSVBitKIteratorWithTimestampFormat creates a CSVBitKIterator from a Reader with a custom timestamp format.
-func NewCSVBitKIteratorWithTimestampFormat(reader io.Reader, timestampFormat string) *CSVBitKIterator {
-	return &CSVBitKIterator{
+// NewCSVBitIteratorKWithTimestampFormat creates a CSVBitIteratorK from a Reader with a custom timestamp format.
+func NewCSVBitIteratorKWithTimestampFormat(reader io.Reader, timestampFormat string) *CSVBitIteratorK {
+	return &CSVBitIteratorK{
 		reader:          reader,
 		line:            0,
 		scanner:         bufio.NewScanner(reader),
@@ -188,22 +178,22 @@ func NewCSVBitKIteratorWithTimestampFormat(reader io.Reader, timestampFormat str
 	}
 }
 
-// NextBitK iterates on lines of a Reader.
+// NextBit iterates on lines of a Reader.
 // Returns io.EOF on end of iteration.
-func (c *CSVBitKIterator) NextBitK() (BitK, error) {
+func (c *CSVBitIteratorK) NextBit() (Bit, error) {
 	if ok := c.scanner.Scan(); ok {
 		c.line++
 		text := strings.TrimSpace(c.scanner.Text())
 		parts := strings.Split(text, ",")
 		if len(parts) < 2 {
-			return BitK{}, fmt.Errorf("Invalid CSV line: %d", c.line)
+			return Bit{}, fmt.Errorf("Invalid CSV line: %d", c.line)
 		}
 		if parts[0] == "" {
-			return BitK{}, fmt.Errorf("Invalid row Key at line: %d", c.line)
+			return Bit{}, fmt.Errorf("Invalid row key at line: %d", c.line)
 		}
 		rowKey := parts[0]
 		if parts[1] == "" {
-			return BitK{}, fmt.Errorf("Invalid column Key at line: %d", c.line)
+			return Bit{}, fmt.Errorf("Invalid column key at line: %d", c.line)
 		}
 		columnKey := parts[1]
 		timestamp := 0
@@ -212,35 +202,36 @@ func (c *CSVBitKIterator) NextBitK() (BitK, error) {
 			if c.timestampFormat == "" {
 				timestamp, err = strconv.Atoi(parts[2])
 				if err != nil {
-					return BitK{}, fmt.Errorf("Invalid timestamp at line: %d", c.line)
+					return Bit{}, fmt.Errorf("Invalid timestamp at line: %d", c.line)
 				}
 			} else {
 				t, err := time.Parse(c.timestampFormat, parts[2])
 				if err != nil {
-					return BitK{}, fmt.Errorf("Invalid timestamp at line: %d", c.line)
+					return Bit{}, fmt.Errorf("Invalid timestamp at line: %d", c.line)
 				}
 				timestamp = int(t.Unix())
 			}
 		}
-		bitK := BitK{
+		bit := Bit{
 			RowKey:    rowKey,
 			ColumnKey: columnKey,
 			Timestamp: int64(timestamp),
 		}
-		return bitK, nil
+		return bit, nil
 	}
 	err := c.scanner.Err()
 	if err != nil {
-		return BitK{}, err
+		return Bit{}, err
 	}
-	return BitK{}, io.EOF
+	return Bit{}, io.EOF
 }
 
 // FieldValue represents the value for a column within a
 // range-encoded frame.
 type FieldValue struct {
-	ColumnID uint64
-	Value    int64
+	ColumnID  uint64
+	ColumnKey string
+	Value     int64
 }
 
 // ValueIterator structs return field values one by one.
@@ -311,30 +302,18 @@ func (v valsForSort) Less(i, j int) bool {
 	return v[i].ColumnID < v[j].ColumnID
 }
 
-// FieldValueK represents the valueK for a column within a
-// range-encoded frame with a string column key.
-type FieldValueK struct {
-	ColumnKey string
-	Value     int64
-}
-
-// ValueKIterator structs return fieldK values one by one.
-type ValueKIterator interface {
-	NextValueK() (FieldValueK, error)
-}
-
-// CSVValueKIterator reads field valueKs from a Reader.
+// CSVValueIteratorK reads field valueKs from a Reader.
 // Each line should contain a single field valueK in the following form:
 // columnKey,value
-type CSVValueKIterator struct {
+type CSVValueIteratorK struct {
 	reader  io.Reader
 	line    int
 	scanner *bufio.Scanner
 }
 
-// NewCSVValueKIterator creates a CSVValueKIterator from a Reader.
-func NewCSVValueKIterator(reader io.Reader) *CSVValueKIterator {
-	return &CSVValueKIterator{
+// NewCSVValueIteratorK creates a CSVValueIteratorK from a Reader.
+func NewCSVValueIteratorK(reader io.Reader) *CSVValueIteratorK {
+	return &CSVValueIteratorK{
 		reader:  reader,
 		line:    0,
 		scanner: bufio.NewScanner(reader),
@@ -343,31 +322,31 @@ func NewCSVValueKIterator(reader io.Reader) *CSVValueKIterator {
 
 // NextValueK iterates on lines of a Reader.
 // Returns io.EOF on end of iteration.
-func (c *CSVValueKIterator) NextValueK() (FieldValueK, error) {
+func (c *CSVValueIteratorK) NextValue() (FieldValue, error) {
 	if ok := c.scanner.Scan(); ok {
 		c.line++
 		text := strings.TrimSpace(c.scanner.Text())
 		parts := strings.Split(text, ",")
 		if len(parts) < 2 {
-			return FieldValueK{}, fmt.Errorf("Invalid CSV line: %d", c.line)
+			return FieldValue{}, fmt.Errorf("Invalid CSV line: %d", c.line)
 		}
 		if parts[0] == "" {
-			return FieldValueK{}, fmt.Errorf("Invalid column Key at line: %d", c.line)
+			return FieldValue{}, fmt.Errorf("Invalid column key at line: %d", c.line)
 		}
 		columnKey := parts[0]
 		value, err := strconv.Atoi(parts[1])
 		if err != nil {
-			return FieldValueK{}, fmt.Errorf("Invalid value at line: %d", c.line)
+			return FieldValue{}, fmt.Errorf("Invalid value at line: %d", c.line)
 		}
-		fieldValueK := FieldValueK{
+		fieldValue := FieldValue{
 			ColumnKey: columnKey,
 			Value:     int64(value),
 		}
-		return fieldValueK, nil
+		return fieldValue, nil
 	}
 	err := c.scanner.Err()
 	if err != nil {
-		return FieldValueK{}, err
+		return FieldValue{}, err
 	}
-	return FieldValueK{}, io.EOF
+	return FieldValue{}, io.EOF
 }

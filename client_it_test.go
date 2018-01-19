@@ -744,7 +744,7 @@ func TestCSVKeyImport(t *testing.T) {
 		row1,col20
 		row2,col30
 		row4,col80`
-	iterator := NewCSVBitKIterator(strings.NewReader(text))
+	iterator := NewCSVBitIteratorK(strings.NewReader(text))
 	frame, err := index.Frame("importkframe", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -753,7 +753,7 @@ func TestCSVKeyImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportKFrame(frame, iterator, 10)
+	err = client.ImportFrameK(frame, iterator, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -822,7 +822,7 @@ func TestValueCSVKeyImport(t *testing.T) {
 	client := getProxyClient()
 	text := `col10,7
 		col7,1`
-	iterator := NewCSVValueKIterator(strings.NewReader(text))
+	iterator := NewCSVValueIteratorK(strings.NewReader(text))
 	frameOptions := &FrameOptions{}
 	frameOptions.AddIntField("foo", 0, 100)
 	frame, err := index.Frame("importvaluekframe", frameOptions)
@@ -834,7 +834,7 @@ func TestValueCSVKeyImport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = client.ImportValueKFrame(frame, "foo", iterator, 10)
+	err = client.ImportValueFrameK(frame, "foo", iterator, 10)
 	if err != nil {
 		t.Fatal(err)
 	}

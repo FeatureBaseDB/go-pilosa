@@ -739,7 +739,7 @@ func TestCSVImport(t *testing.T) {
 }
 
 func TestCSVKeyImport(t *testing.T) {
-	client := getProxyClient()
+	proxyClient := getProxyClient()
 	text := `row1,col10
 		row1,col20
 		row2,col30
@@ -749,11 +749,11 @@ func TestCSVKeyImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.EnsureFrame(frame)
+	err = proxyClient.EnsureFrame(frame)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportFrameK(frame, iterator, 10)
+	err = proxyClient.ImportFrameK(frame, iterator, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -765,7 +765,7 @@ func TestCSVKeyImport(t *testing.T) {
 		frame.BitmapK("row1"),
 	)
 
-	response, err := client.Query(bq, nil)
+	response, err := proxyClient.Query(bq, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -819,7 +819,8 @@ func TestValueCSVImport(t *testing.T) {
 }
 
 func TestValueCSVKeyImport(t *testing.T) {
-	client := getProxyClient()
+	client := getClient()
+	proxyClient := getProxyClient()
 	text := `col10,7
 		col7,1`
 	iterator := NewCSVValueIteratorK(strings.NewReader(text))
@@ -829,12 +830,12 @@ func TestValueCSVKeyImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.EnsureFrame(frame)
+	err = proxyClient.EnsureFrame(frame)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = client.ImportValueFrameK(frame, "foo", iterator, 10)
+	err = proxyClient.ImportValueFrameK(frame, "foo", iterator, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -842,9 +843,13 @@ func TestValueCSVKeyImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	target := int64(8)
-	if target != response.Result().Sum {
-		t.Fatalf("%d != %d", target, response.Result().Sum)
+	targetSum := int64(8)
+	if targetSum != response.Result().Sum {
+		t.Fatalf("sum %d != %d", targetSum, response.Result().Sum)
+	}
+	targetCount := uint64(2)
+	if targetCount != response.Result().Count {
+		t.Fatalf("count %d != %d", targetCount, response.Result().Count)
 	}
 }
 

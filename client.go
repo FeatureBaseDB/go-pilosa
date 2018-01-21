@@ -382,14 +382,15 @@ func (c *Client) ImportFrame(frame *Frame, bitIterator BitIterator, batchSize ui
 			linesLeft = false
 		} else if err != nil {
 			return err
+		} else {
+			slice := bit.ColumnID / sliceWidth
+			if sliceArray, ok := bitGroup[slice]; ok {
+				bitGroup[slice] = append(sliceArray, bit)
+			} else {
+				bitGroup[slice] = []Bit{bit}
+			}
 		}
 
-		slice := bit.ColumnID / sliceWidth
-		if sliceArray, ok := bitGroup[slice]; ok {
-			bitGroup[slice] = append(sliceArray, bit)
-		} else {
-			bitGroup[slice] = []Bit{bit}
-		}
 		currentBatchSize++
 		// if the batch is full or there's no line left, start importing bits
 		if currentBatchSize >= batchSize || !linesLeft {
@@ -459,14 +460,15 @@ func (c *Client) ImportValueFrame(frame *Frame, field string, valueIterator Valu
 			linesLeft = false
 		} else if err != nil {
 			return err
+		} else {
+			slice := val.ColumnID / sliceWidth
+			if sliceArray, ok := valGroup[slice]; ok {
+				valGroup[slice] = append(sliceArray, val)
+			} else {
+				valGroup[slice] = []FieldValue{val}
+			}
 		}
 
-		slice := val.ColumnID / sliceWidth
-		if sliceArray, ok := valGroup[slice]; ok {
-			valGroup[slice] = append(sliceArray, val)
-		} else {
-			valGroup[slice] = []FieldValue{val}
-		}
 		currentBatchSize++
 		// if the batch is full or there's no line left, start importing values
 		if currentBatchSize >= batchSize || !linesLeft {

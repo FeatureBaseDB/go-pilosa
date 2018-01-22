@@ -738,49 +738,6 @@ func TestCSVImport(t *testing.T) {
 	}
 }
 
-func TestCSVKeyImport(t *testing.T) {
-	proxyClient := getProxyClient()
-	text := `row1,col10
-		row1,col20
-		row2,col30
-		row4,col80`
-	iterator := NewCSVBitIteratorK(strings.NewReader(text))
-	frame, err := index.Frame("importkframe", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = proxyClient.EnsureFrame(frame)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = proxyClient.ImportFrameK(frame, iterator, 10)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	target := []string{"col30", "col80", "col10"}
-	bq := index.BatchQuery(
-		frame.BitmapK("row2"),
-		frame.BitmapK("row4"),
-		frame.BitmapK("row1"),
-	)
-
-	response, err := proxyClient.Query(bq, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(response.Results()) != 3 {
-		t.Fatalf("Result count should be 3")
-	}
-	for i, result := range response.Results() {
-		br := result.Bitmap
-		if target[i] != br.Keys[0] {
-			t.Fatalf("%s != %s", target[i], br.Keys[0])
-		}
-	}
-}
-
 func TestValueCSVImport(t *testing.T) {
 	client := getClient()
 	text := `10,7
@@ -815,41 +772,6 @@ func TestValueCSVImport(t *testing.T) {
 	target := int64(8)
 	if target != response.Result().Sum {
 		t.Fatalf("%d != %d", target, response.Result().Sum)
-	}
-}
-
-func TestValueCSVKeyImport(t *testing.T) {
-	client := getClient()
-	proxyClient := getProxyClient()
-	text := `col10,7
-		col7,1`
-	iterator := NewCSVValueIteratorK(strings.NewReader(text))
-	frameOptions := &FrameOptions{}
-	frameOptions.AddIntField("foo", 0, 100)
-	frame, err := index.Frame("importvaluekframe", frameOptions)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = proxyClient.EnsureFrame(frame)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = proxyClient.ImportValueFrameK(frame, "foo", iterator, 10)
-	if err != nil {
-		t.Fatal(err)
-	}
-	response, err := client.Query(frame.Sum(nil, "foo"), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	targetSum := int64(8)
-	if targetSum != response.Result().Sum {
-		t.Fatalf("sum %d != %d", targetSum, response.Result().Sum)
-	}
-	targetCount := uint64(2)
-	if targetCount != response.Result().Count {
-		t.Fatalf("count %d != %d", targetCount, response.Result().Count)
 	}
 }
 
@@ -1609,22 +1531,6 @@ func getPilosaBindAddress() string {
 		}
 	}
 	return "http://:10101"
-}
-
-func getProxyClient() *Client {
-	uri, err := NewURIFromAddress(getProxyBindAddress())
-	if err != nil {
-		panic(err)
-	}
-	client, err := NewClient(uri, TLSConfig(&tls.Config{InsecureSkipVerify: true}))
-	if err != nil {
-		panic(err)
-	}
-	return client
-}
-
-func getProxyBindAddress() string {
-	return "http://:20202"
 }
 
 func getMockServer(statusCode int, response []byte, contentLength int) *httptest.Server {

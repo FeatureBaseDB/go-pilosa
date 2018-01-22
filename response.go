@@ -41,7 +41,8 @@ import (
 
 // QueryResponse types.
 const (
-	QueryResultTypeBitmap uint32 = iota
+	QueryResultTypeNil uint32 = iota
+	QueryResultTypeBitmap
 	QueryResultTypePairs
 	QueryResultTypeSumCount
 	QueryResultTypeUint64

@@ -626,7 +626,7 @@ func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest) err
 func (c *Client) importValueNodeK(uri *URI, request *pbuf.ImportValueRequest) error {
 	data, _ := proto.Marshal(request)
 	// request.Marshal never returns an error
-	_, err := c.doRequest(uri, "POST", "/import-value", protobufHeaders, bytes.NewReader(data))
+	_, err := c.doRequest(uri, "POST", "/import-value", defaultProtobufHeaders(), bytes.NewReader(data))
 	if err != nil {
 		return errors.Wrap(err, "doing /import-value request")
 	}

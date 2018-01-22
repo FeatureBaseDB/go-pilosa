@@ -106,10 +106,11 @@ func (qr *QueryResponse) Column() *ColumnItem {
 
 // QueryResult represent one of the results in the response.
 type QueryResult struct {
-	Bitmap     *BitmapResult      `json:"bitmap,omitempty"`
-	CountItems []*CountResultItem `json:"count-items,omitempty"`
-	Count      uint64             `json:"count,omitempty"`
-	Sum        int64              `json:"sum,omitempty"`
+	Bitmap         *BitmapResult      `json:"bitmap,omitempty"`
+	CountItems     []*CountResultItem `json:"count-items,omitempty"`
+	Count          uint64             `json:"count,omitempty"`
+	Sum            int64              `json:"sum,omitempty"`
+	IsBitmapResult bool
 }
 
 func newQueryResultFromInternal(result *pbuf.QueryResult) (*QueryResult, error) {
@@ -117,12 +118,14 @@ func newQueryResultFromInternal(result *pbuf.QueryResult) (*QueryResult, error) 
 	var err error
 	var sum int64
 	var count uint64
+	isBitmapResult := false
 
 	if result.Bitmap != nil {
 		bitmapResult, err = newBitmapResultFromInternal(result.Bitmap)
 		if err != nil {
 			return nil, err
 		}
+		isBitmapResult = true
 	} else {
 		bitmapResult = &BitmapResult{}
 	}
@@ -133,10 +136,11 @@ func newQueryResultFromInternal(result *pbuf.QueryResult) (*QueryResult, error) 
 		count = result.N
 	}
 	return &QueryResult{
-		Bitmap:     bitmapResult,
-		CountItems: countItemsFromInternal(result.Pairs),
-		Count:      count,
-		Sum:        sum,
+		Bitmap:         bitmapResult,
+		CountItems:     countItemsFromInternal(result.Pairs),
+		Count:          count,
+		Sum:            sum,
+		IsBitmapResult: isBitmapResult,
 	}, nil
 }
 

@@ -126,32 +126,37 @@ type QueryResult struct {
 
 func newQueryResultFromInternal(result *pbuf.QueryResult) (*QueryResult, error) {
 	var bitmapResult *BitmapResult
+	var countItems []*CountResultItem
 	var err error
 	var sum int64
 	var count uint64
 	var changed bool
 
-	if result.Type == QueryResultTypeBitmap {
+	// TODO: consider removing these defaults and only apply them to the switch
+	// cases for which they pertain.
+	bitmapResult = &BitmapResult{}
+	count = result.N
+	countItems = countItemsFromInternal(result.Pairs)
+
+	switch result.Type {
+	case QueryResultTypeBitmap:
 		bitmapResult, err = newBitmapResultFromInternal(result.Bitmap)
 		if err != nil {
 			return nil, err
 		}
-	} else {
-		bitmapResult = &BitmapResult{}
-	}
-	if result.Type == QueryResultTypeSumCount {
+	case QueryResultTypePairs:
+		//countItems = countItemsFromInternal(result.Pairs)
+	case QueryResultTypeSumCount:
 		sum = result.SumCount.Sum
 		count = uint64(result.SumCount.Count)
-	} else {
-		count = result.N
-	}
-	if result.Type == QueryResultTypeBool {
+	case QueryResultTypeBool:
 		changed = result.Changed
 	}
+
 	return &QueryResult{
 		Type:       result.Type,
 		Bitmap:     bitmapResult,
-		CountItems: countItemsFromInternal(result.Pairs),
+		CountItems: countItems,
 		Count:      count,
 		Sum:        sum,
 		Changed:    changed,

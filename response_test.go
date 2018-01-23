@@ -33,10 +33,12 @@
 package pilosa
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
+	pil "github.com/pilosa/pilosa"
 )
 
 func TestNewBitmapResultFromInternal(t *testing.T) {
@@ -92,12 +94,12 @@ func TestNewQueryResponseFromInternal(t *testing.T) {
 		Bits:  []uint64{5, 10},
 	}
 	pairs := []*pbuf.Pair{
-		{Key: 10, Count: 100},
+		{ID: 10, Count: 100},
 	}
 	response := &pbuf.QueryResponse{
 		Results: []*pbuf.QueryResult{
-			{Bitmap: bitmap},
-			{Pairs: pairs},
+			{Type: pil.QueryResultTypeBitmap, Bitmap: bitmap},
+			{Type: pil.QueryResultTypePairs, Pairs: pairs},
 		},
 		Err: "",
 	}
@@ -157,7 +159,7 @@ func TestNewQueryResponseFromInternalFailure(t *testing.T) {
 		Attrs: attrs,
 	}
 	response := &pbuf.QueryResponse{
-		Results: []*pbuf.QueryResult{{Bitmap: bitmap}},
+		Results: []*pbuf.QueryResult{{Type: pil.QueryResultTypeBitmap, Bitmap: bitmap}},
 	}
 	qr, err := newQueryResponseFromInternal(response)
 	if qr != nil && err == nil {
@@ -173,9 +175,22 @@ func TestNewQueryResponseFromInternalFailure(t *testing.T) {
 }
 
 func TestCountResultItemToString(t *testing.T) {
-	item := &CountResultItem{ID: 100, Count: 50}
-	target := "100:50"
-	if target != item.String() {
-		t.Fatalf("%s != %s", target, item.String())
+	tests := []struct {
+		item     *CountResultItem
+		expected string
+	}{
+		{item: &CountResultItem{ID: 100, Count: 50}, expected: "100:50"},
+		{item: &CountResultItem{Key: "blah", Count: 50}, expected: "blah:50"},
+		{item: &CountResultItem{Key: "blah", ID: 22, Count: 50}, expected: "blah:50"},
+		{item: &CountResultItem{Key: "blah", ID: 22}, expected: "blah:0"},
+		{item: &CountResultItem{}, expected: "0:0"},
+	}
+
+	for i, tst := range tests {
+		t.Run(fmt.Sprintf("%d: ", i), func(t *testing.T) {
+			if tst.expected != tst.item.String() {
+				t.Fatalf("%s != %s", tst.expected, tst.item.String())
+			}
+		})
 	}
 }

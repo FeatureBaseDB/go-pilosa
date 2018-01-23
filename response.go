@@ -39,6 +39,16 @@ import (
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
 )
 
+// QueryResponse types.
+const (
+	QueryResultTypeNil uint32 = iota
+	QueryResultTypeBitmap
+	QueryResultTypePairs
+	QueryResultTypeSumCount
+	QueryResultTypeUint64
+	QueryResultTypeBool
+)
+
 // QueryResponse represents the response from a Pilosa query.
 type QueryResponse struct {
 	ResultList   []*QueryResult `json:"results,omitempty"`
@@ -106,10 +116,12 @@ func (qr *QueryResponse) Column() *ColumnItem {
 
 // QueryResult represent one of the results in the response.
 type QueryResult struct {
+	Type       uint32
 	Bitmap     *BitmapResult      `json:"bitmap,omitempty"`
 	CountItems []*CountResultItem `json:"count-items,omitempty"`
 	Count      uint64             `json:"count,omitempty"`
 	Sum        int64              `json:"sum,omitempty"`
+	Changed    bool               `json:"changed,omitempty"`
 }
 
 func newQueryResultFromInternal(result *pbuf.QueryResult) (*QueryResult, error) {
@@ -117,8 +129,9 @@ func newQueryResultFromInternal(result *pbuf.QueryResult) (*QueryResult, error) 
 	var err error
 	var sum int64
 	var count uint64
+	var changed bool
 
-	if result.Bitmap != nil {
+	if result.Type == QueryResultTypeBitmap {
 		bitmapResult, err = newBitmapResultFromInternal(result.Bitmap)
 		if err != nil {
 			return nil, err
@@ -126,34 +139,43 @@ func newQueryResultFromInternal(result *pbuf.QueryResult) (*QueryResult, error) 
 	} else {
 		bitmapResult = &BitmapResult{}
 	}
-	if result.SumCount != nil {
+	if result.Type == QueryResultTypeSumCount {
 		sum = result.SumCount.Sum
 		count = uint64(result.SumCount.Count)
 	} else {
 		count = result.N
 	}
+	if result.Type == QueryResultTypeBool {
+		changed = result.Changed
+	}
 	return &QueryResult{
+		Type:       result.Type,
 		Bitmap:     bitmapResult,
 		CountItems: countItemsFromInternal(result.Pairs),
 		Count:      count,
 		Sum:        sum,
+		Changed:    changed,
 	}, nil
 }
 
 // CountResultItem represents a result from TopN call.
 type CountResultItem struct {
-	ID    uint64
-	Count uint64
+	ID    uint64 `json:"id"`
+	Key   string `json:"key,omitempty"`
+	Count uint64 `json:"count"`
 }
 
 func (c *CountResultItem) String() string {
+	if c.Key != "" {
+		return fmt.Sprintf("%s:%d", c.Key, c.Count)
+	}
 	return fmt.Sprintf("%d:%d", c.ID, c.Count)
 }
 
 func countItemsFromInternal(items []*pbuf.Pair) []*CountResultItem {
 	result := make([]*CountResultItem, 0, len(items))
 	for _, v := range items {
-		result = append(result, &CountResultItem{ID: v.Key, Count: v.Count})
+		result = append(result, &CountResultItem{ID: v.ID, Key: v.Key, Count: v.Count})
 	}
 	return result
 }
@@ -162,6 +184,7 @@ func countItemsFromInternal(items []*pbuf.Pair) []*CountResultItem {
 type BitmapResult struct {
 	Attributes map[string]interface{}
 	Bits       []uint64
+	Keys       []string
 }
 
 func newBitmapResultFromInternal(bitmap *pbuf.Bitmap) (*BitmapResult, error) {
@@ -172,6 +195,7 @@ func newBitmapResultFromInternal(bitmap *pbuf.Bitmap) (*BitmapResult, error) {
 	result := &BitmapResult{
 		Attributes: attrs,
 		Bits:       bitmap.Bits,
+		Keys:       bitmap.Keys,
 	}
 	return result, nil
 }
@@ -207,6 +231,7 @@ func convertInternalAttrsToMap(attrs []*pbuf.Attr) (attrsMap map[string]interfac
 // Column data is only returned if QueryOptions.Columns was set to true.
 type ColumnItem struct {
 	ID         uint64                 `json:"id,omitempty"`
+	Key        string                 `json:"key,omitempty"`
 	Attributes map[string]interface{} `json:"attributes,omitempty"`
 }
 
@@ -217,6 +242,7 @@ func newColumnItemFromInternal(column *pbuf.ColumnAttrSet) (*ColumnItem, error) 
 	}
 	return &ColumnItem{
 		ID:         column.ID,
+		Key:        column.Key,
 		Attributes: attrs,
 	}, nil
 }

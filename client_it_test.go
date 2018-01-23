@@ -38,6 +38,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -1551,6 +1552,37 @@ func TestServerVersionFail(t *testing.T) {
 	_, err = client.fetchServerVersion()
 	if err == nil {
 		t.Fatal("should have failed")
+	}
+}
+
+func TestUserAgent(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		version := Version
+		if strings.HasPrefix(version, "v") {
+			version = version[1:]
+		}
+		targetUserAgent := fmt.Sprintf("go-pilosa/%s", version)
+		if targetUserAgent != r.UserAgent() {
+			t.Fatalf("UserAgent %s != %s", targetUserAgent, r.UserAgent())
+		}
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	uri, _ := NewURIFromAddress(server.URL)
+	client := NewClientWithURI(uri)
+	_, _, err := client.HttpRequest("GET", "/version", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestClientRace(t *testing.T) {
+	client := getClient()
+	f := func() {
+		client.Query(testFrame.Bitmap(1))
+	}
+	for i := 0; i < 10; i++ {
+		go f()
 	}
 }
 

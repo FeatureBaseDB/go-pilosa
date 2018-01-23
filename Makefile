@@ -1,6 +1,8 @@
 
 .PHONY: all cover fast-cover generate-proto test test-all
 
+VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
+
 all: test
 
 cover:
@@ -16,4 +18,7 @@ test:
 	go test
 
 test-all:
-	go test -tags=integration
+	go test -race -tags=integration
+
+release:
+	printf "package pilosa\nconst Version = \"$(VERSION)\"" > version.go

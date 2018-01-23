@@ -47,6 +47,7 @@ var sampleIndex = mustNewIndex(schema, "sample-index")
 var sampleFrame = mustNewFrame(sampleIndex, "sample-frame")
 var projectIndex = mustNewIndex(schema, "project-index")
 var collabFrame = mustNewFrame(projectIndex, "collaboration")
+var sampleField = sampleFrame.Field("sample-field")
 var b1 = sampleFrame.Bitmap(10)
 var b2 = sampleFrame.Bitmap(20)
 var b3 = sampleFrame.Bitmap(42)
@@ -241,6 +242,15 @@ func TestBitmap(t *testing.T) {
 		collabFrame.Bitmap(10))
 }
 
+func TestBitmapK(t *testing.T) {
+	comparePQL(t,
+		"Bitmap(rowID='myrow', frame='sample-frame')",
+		sampleFrame.BitmapK("myrow"))
+	comparePQL(t,
+		"Bitmap(project='myrow2', frame='collaboration')",
+		collabFrame.BitmapK("myrow2"))
+}
+
 func TestInverseBitmap(t *testing.T) {
 	options := &FrameOptions{
 		InverseEnabled: true,
@@ -254,6 +264,20 @@ func TestInverseBitmap(t *testing.T) {
 		f1.InverseBitmap(5))
 }
 
+func TestInverseBitmapK(t *testing.T) {
+	options := &FrameOptions{
+		RowLabel:       "row_label",
+		InverseEnabled: true,
+	}
+	f1, err := projectIndex.Frame("f1-inversable", options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	comparePQL(t,
+		"Bitmap(user='myrow', frame='f1-inversable')",
+		f1.InverseBitmapK("myrow"))
+}
+
 func TestSetBit(t *testing.T) {
 	comparePQL(t,
 		"SetBit(rowID=5, frame='sample-frame', columnID=10)",
@@ -263,11 +287,27 @@ func TestSetBit(t *testing.T) {
 		collabFrame.SetBit(10, 20))
 }
 
+func TestSetBitK(t *testing.T) {
+	comparePQL(t,
+		"SetBit(rowID='myrow', frame='sample-frame', columnID='mycol')",
+		sampleFrame.SetBitK("myrow", "mycol"))
+	comparePQL(t,
+		"SetBit(project='myrow2', frame='collaboration', user='mycol2')",
+		collabFrame.SetBitK("myrow2", "mycol2"))
+}
+
 func TestSetBitTimestamp(t *testing.T) {
 	timestamp := time.Date(2017, time.April, 24, 12, 14, 0, 0, time.UTC)
 	comparePQL(t,
 		"SetBit(rowID=10, frame='collaboration', columnID=20, timestamp='2017-04-24T12:14')",
 		collabFrame.SetBitTimestamp(10, 20, timestamp))
+}
+
+func TestSetBitTimestampK(t *testing.T) {
+	timestamp := time.Date(2017, time.April, 24, 12, 14, 0, 0, time.UTC)
+	comparePQL(t,
+		"SetBit(project='myrow', frame='collaboration', user='mycol', timestamp='2017-04-24T12:14')",
+		collabFrame.SetBitTimestampK("myrow", "mycol", timestamp))
 }
 
 func TestClearBit(t *testing.T) {
@@ -279,10 +319,25 @@ func TestClearBit(t *testing.T) {
 		collabFrame.ClearBit(10, 20))
 }
 
+func TestClearBitK(t *testing.T) {
+	comparePQL(t,
+		"ClearBit(rowID='myrow', frame='sample-frame', columnID='mycol')",
+		sampleFrame.ClearBitK("myrow", "mycol"))
+	comparePQL(t,
+		"ClearBit(project='myrow2', frame='collaboration', user='mycol2')",
+		collabFrame.ClearBitK("myrow2", "mycol2"))
+}
+
 func TestSetFieldValue(t *testing.T) {
 	comparePQL(t,
 		"SetFieldValue(frame='collaboration', columnID=50, foo=15)",
 		collabFrame.SetIntFieldValue(50, "foo", 15))
+}
+
+func TestSetValueK(t *testing.T) {
+	comparePQL(t,
+		"SetFieldValue(frame='sample-frame', columnID='mycol', sample-field=22)",
+		sampleField.SetIntValueK("mycol", 22))
 }
 
 func TestUnion(t *testing.T) {
@@ -529,6 +584,27 @@ func TestSetRowAttrsInvalidAttr(t *testing.T) {
 	}
 }
 
+func TestSetRowAttrsKTest(t *testing.T) {
+	attrs := map[string]interface{}{
+		"quote":  "\"Don't worry, be happy\"",
+		"active": true,
+	}
+
+	comparePQL(t,
+		"SetRowAttrs(project='foo', frame='collaboration', active=true, quote=\"\\\"Don't worry, be happy\\\"\")",
+		collabFrame.SetRowAttrsK("foo", attrs))
+}
+
+func TestSetRowAttrsKInvalidAttr(t *testing.T) {
+	attrs := map[string]interface{}{
+		"color":     "blue",
+		"$invalid$": true,
+	}
+	if collabFrame.SetRowAttrsK("foo", attrs).Error() == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
 func TestSum(t *testing.T) {
 	b := collabFrame.Bitmap(42)
 	comparePQL(t,
@@ -571,6 +647,36 @@ func TestRange(t *testing.T) {
 	comparePQL(t,
 		"Range(columnID=10, frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
 		collabFrame.InverseRange(10, start, end))
+}
+
+func TestRangeK(t *testing.T) {
+	start := time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2000, time.February, 2, 3, 4, 0, 0, time.UTC)
+	comparePQL(t,
+		"Range(project='foo', frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
+		collabFrame.RangeK("foo", start, end))
+	comparePQL(t,
+		"Range(user='foo', frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
+		collabFrame.InverseRangeK("foo", start, end))
+}
+
+func TestInvalidColumnLabelFails(t *testing.T) {
+	options := &IndexOptions{
+		ColumnLabel: "$$INVALID$$",
+	}
+	_, err := NewIndex("foo", options)
+	if err == nil {
+		t.Fatalf("Setting invalid column label should fail")
+	}
+
+}
+
+func TestInvalidRowLabelFails(t *testing.T) {
+	options := &FrameOptions{RowLabel: "$INVALID$"}
+	_, err := sampleIndex.Frame("foo", options)
+	if err == nil {
+		t.Fatalf("Creating frames with invalid row label should fail")
+	}
 }
 
 func TestFrameOptionsToString(t *testing.T) {

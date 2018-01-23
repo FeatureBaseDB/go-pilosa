@@ -38,7 +38,6 @@ import (
 	"testing"
 
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
-	pil "github.com/pilosa/pilosa"
 )
 
 func TestNewBitmapResultFromInternal(t *testing.T) {
@@ -98,8 +97,8 @@ func TestNewQueryResponseFromInternal(t *testing.T) {
 	}
 	response := &pbuf.QueryResponse{
 		Results: []*pbuf.QueryResult{
-			{Type: pil.QueryResultTypeBitmap, Bitmap: bitmap},
-			{Type: pil.QueryResultTypePairs, Pairs: pairs},
+			{Type: QueryResultTypeBitmap, Bitmap: bitmap},
+			{Type: QueryResultTypePairs, Pairs: pairs},
 		},
 		Err: "",
 	}
@@ -159,7 +158,7 @@ func TestNewQueryResponseFromInternalFailure(t *testing.T) {
 		Attrs: attrs,
 	}
 	response := &pbuf.QueryResponse{
-		Results: []*pbuf.QueryResult{{Type: pil.QueryResultTypeBitmap, Bitmap: bitmap}},
+		Results: []*pbuf.QueryResult{{Type: QueryResultTypeBitmap, Bitmap: bitmap}},
 	}
 	qr, err := newQueryResponseFromInternal(response)
 	if qr != nil && err == nil {

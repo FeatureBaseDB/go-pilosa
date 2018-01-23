@@ -121,6 +121,7 @@ type QueryResult struct {
 	CountItems []*CountResultItem `json:"count-items,omitempty"`
 	Count      uint64             `json:"count,omitempty"`
 	Sum        int64              `json:"sum,omitempty"`
+	Changed    bool               `json:"changed,omitempty"`
 }
 
 func newQueryResultFromInternal(result *pbuf.QueryResult) (*QueryResult, error) {
@@ -128,6 +129,7 @@ func newQueryResultFromInternal(result *pbuf.QueryResult) (*QueryResult, error) 
 	var err error
 	var sum int64
 	var count uint64
+	var changed bool
 
 	if result.Type == QueryResultTypeBitmap {
 		bitmapResult, err = newBitmapResultFromInternal(result.Bitmap)
@@ -143,12 +145,16 @@ func newQueryResultFromInternal(result *pbuf.QueryResult) (*QueryResult, error) 
 	} else {
 		count = result.N
 	}
+	if result.Type == QueryResultTypeBool {
+		changed = result.Changed
+	}
 	return &QueryResult{
 		Type:       result.Type,
 		Bitmap:     bitmapResult,
 		CountItems: countItemsFromInternal(result.Pairs),
 		Count:      count,
 		Sum:        sum,
+		Changed:    changed,
 	}, nil
 }
 

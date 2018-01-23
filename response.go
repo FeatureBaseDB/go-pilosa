@@ -39,6 +39,16 @@ import (
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
 )
 
+// QueryResponse types.
+const (
+	QueryResultTypeNil uint32 = iota
+	QueryResultTypeBitmap
+	QueryResultTypePairs
+	QueryResultTypeSumCount
+	QueryResultTypeUint64
+	QueryResultTypeBool
+)
+
 // QueryResponse represents the response from a Pilosa query.
 type QueryResponse struct {
 	ResultList   []*QueryResult `json:"results,omitempty"`
@@ -106,6 +116,7 @@ func (qr *QueryResponse) Column() *ColumnItem {
 
 // QueryResult represent one of the results in the response.
 type QueryResult struct {
+	Type       uint32
 	Bitmap     *BitmapResult      `json:"bitmap,omitempty"`
 	CountItems []*CountResultItem `json:"count-items,omitempty"`
 	Count      uint64             `json:"count,omitempty"`
@@ -118,7 +129,7 @@ func newQueryResultFromInternal(result *pbuf.QueryResult) (*QueryResult, error) 
 	var sum int64
 	var count uint64
 
-	if result.Bitmap != nil {
+	if result.Type == QueryResultTypeBitmap {
 		bitmapResult, err = newBitmapResultFromInternal(result.Bitmap)
 		if err != nil {
 			return nil, err
@@ -126,13 +137,14 @@ func newQueryResultFromInternal(result *pbuf.QueryResult) (*QueryResult, error) 
 	} else {
 		bitmapResult = &BitmapResult{}
 	}
-	if result.SumCount != nil {
+	if result.Type == QueryResultTypeSumCount {
 		sum = result.SumCount.Sum
 		count = uint64(result.SumCount.Count)
 	} else {
 		count = result.N
 	}
 	return &QueryResult{
+		Type:       result.Type,
 		Bitmap:     bitmapResult,
 		CountItems: countItemsFromInternal(result.Pairs),
 		Count:      count,

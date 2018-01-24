@@ -149,6 +149,8 @@ func newQueryResultFromInternal(result *pbuf.QueryResult) (*QueryResult, error) 
 	case QueryResultTypeSumCount:
 		sum = result.SumCount.Sum
 		count = uint64(result.SumCount.Count)
+	case QueryResultTypeUint64:
+		count = result.N
 	case QueryResultTypeBool:
 		changed = result.Changed
 	}

@@ -531,7 +531,7 @@ func (f *Frame) copy() *Frame {
 	return frame
 }
 
-// Bitmap creates a bitmap query using the row label.
+// Bitmap creates a bitmap query.
 // Bitmap retrieves the indices of all the set bits in a row or column based on whether the row label or column label is given in the query.
 // It also retrieves any attributes set on that row or column.
 func (f *Frame) Bitmap(rowID uint64) *PQLBitmapQuery {
@@ -542,8 +542,8 @@ func (f *Frame) Bitmap(rowID uint64) *PQLBitmapQuery {
 // BitmapK creates a Bitmap query using a string key instead of an integer
 // rowID. This will only work against a Pilosa Enterprise server.
 func (f *Frame) BitmapK(rowKey string) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("Bitmap(%s='%s', frame='%s')",
-		f.options.RowLabel, rowKey, f.name), f.index, nil)
+	return NewPQLBitmapQuery(fmt.Sprintf("Bitmap(rowID='%s', frame='%s')",
+		rowKey, f.name), f.index, nil)
 }
 
 // InverseBitmap creates a bitmap query using the column label.
@@ -557,8 +557,8 @@ func (f *Frame) InverseBitmap(columnID uint64) *PQLBaseQuery {
 // InverseBitmapK creates a Bitmap query using a string key instead of an
 // integer columnID. This will only work against a Pilosa Enterprise server.
 func (f *Frame) InverseBitmapK(columnKey string) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("Bitmap(%s='%s', frame='%s')",
-		f.index.options.ColumnLabel, columnKey, f.name), f.index, nil)
+	return NewPQLBaseQuery(fmt.Sprintf("Bitmap(columnID='%s', frame='%s')",
+		columnKey, f.name), f.index, nil)
 }
 
 // SetBit creates a SetBit query.
@@ -571,8 +571,8 @@ func (f *Frame) SetBit(rowID uint64, columnID uint64) *PQLBaseQuery {
 // SetBitK creates a SetBit query using string row and column keys. This will
 // only work against a Pilosa Enterprise server.
 func (f *Frame) SetBitK(rowKey string, columnKey string) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("SetBit(%s='%s', frame='%s', %s='%s')",
-		f.options.RowLabel, rowKey, f.name, f.index.options.ColumnLabel, columnKey), f.index, nil)
+	return NewPQLBaseQuery(fmt.Sprintf("SetBit(rowID='%s', frame='%s', columnID='%s')",
+		rowKey, f.name, columnKey), f.index, nil)
 }
 
 // SetBitTimestamp creates a SetBit query with timestamp.
@@ -586,8 +586,8 @@ func (f *Frame) SetBitTimestamp(rowID uint64, columnID uint64, timestamp time.Ti
 
 // SetBitTimestampK creates a SetBitK query with timestamp.
 func (f *Frame) SetBitTimestampK(rowKey string, columnKey string, timestamp time.Time) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("SetBit(%s='%s', frame='%s', %s='%s', timestamp='%s')",
-		f.options.RowLabel, rowKey, f.name, f.index.options.ColumnLabel, columnKey, timestamp.Format(timeFormat)),
+	return NewPQLBaseQuery(fmt.Sprintf("SetBit(rowID='%s', frame='%s', columnID='%s', timestamp='%s')",
+		rowKey, f.name, columnKey, timestamp.Format(timeFormat)),
 		f.index, nil)
 }
 
@@ -601,8 +601,8 @@ func (f *Frame) ClearBit(rowID uint64, columnID uint64) *PQLBaseQuery {
 // ClearBitK creates a ClearBit query using string row and column keys. This
 // will only work against a Pilosa Enterprise server.
 func (f *Frame) ClearBitK(rowKey string, columnKey string) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("ClearBit(%s='%s', frame='%s', %s='%s')",
-		f.options.RowLabel, rowKey, f.name, f.index.options.ColumnLabel, columnKey), f.index, nil)
+	return NewPQLBaseQuery(fmt.Sprintf("ClearBit(rowID='%s', frame='%s', columnID='%s')",
+		rowKey, f.name, columnKey), f.index, nil)
 }
 
 // TopN creates a TopN query with the given item count.
@@ -675,8 +675,8 @@ func (f *Frame) Range(rowID uint64, start time.Time, end time.Time) *PQLBitmapQu
 // RangeK creates a Range query using a string row key. This will only work
 // against a Pilosa Enterprise server.
 func (f *Frame) RangeK(rowKey string, start time.Time, end time.Time) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("Range(%s='%s', frame='%s', start='%s', end='%s')",
-		f.options.RowLabel, rowKey, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
+	return NewPQLBitmapQuery(fmt.Sprintf("Range(rowID='%s', frame='%s', start='%s', end='%s')",
+		rowKey, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
 }
 
 // InverseRange creates a Range query.
@@ -689,8 +689,8 @@ func (f *Frame) InverseRange(columnID uint64, start time.Time, end time.Time) *P
 // InverseRangeK creates a Range query using a string column key. This will only
 // work against a Pilosa Enterprise server.
 func (f *Frame) InverseRangeK(columnKey string, start time.Time, end time.Time) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("Range(%s='%s', frame='%s', start='%s', end='%s')",
-		f.index.options.ColumnLabel, columnKey, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
+	return NewPQLBitmapQuery(fmt.Sprintf("Range(columnID='%s', frame='%s', start='%s', end='%s')",
+		columnKey, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
 }
 
 // SetRowAttrs creates a SetRowAttrs query.
@@ -712,8 +712,8 @@ func (f *Frame) SetRowAttrsK(rowKey string, attrs map[string]interface{}) *PQLBa
 	if err != nil {
 		return NewPQLBaseQuery("", f.index, err)
 	}
-	return NewPQLBaseQuery(fmt.Sprintf("SetRowAttrs(%s='%s', frame='%s', %s)",
-		f.options.RowLabel, rowKey, f.name, attrsString), f.index, nil)
+	return NewPQLBaseQuery(fmt.Sprintf("SetRowAttrs(rowID='%s', frame='%s', %s)",
+		rowKey, f.name, attrsString), f.index, nil)
 }
 
 // Sum creates a Sum query.
@@ -896,8 +896,8 @@ func (field *RangeField) SetIntValue(columnID uint64, value int) *PQLBaseQuery {
 // only work against a Pilosa Enterprise server.
 func (field *RangeField) SetIntValueK(columnKey string, value int) *PQLBaseQuery {
 	index := field.frame.index
-	qry := fmt.Sprintf("SetFieldValue(frame='%s', %s='%s', %s=%d)",
-		field.frame.name, index.options.ColumnLabel, columnKey, field.name, value)
+	qry := fmt.Sprintf("SetFieldValue(frame='%s', columnID='%s', %s=%d)",
+		field.frame.name, columnKey, field.name, value)
 	return NewPQLBaseQuery(qry, index, nil)
 }
 

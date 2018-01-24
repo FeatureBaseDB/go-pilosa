@@ -51,10 +51,10 @@ const (
 
 // QueryResponse represents the response from a Pilosa query.
 type QueryResponse struct {
-	ResultList   []*QueryResult `json:"results,omitempty"`
-	ColumnList   []*ColumnItem  `json:"columns,omitempty"`
-	ErrorMessage string         `json:"error-message,omitempty"`
-	Success      bool           `json:"success,omitempty"`
+	ResultList   []QueryResult `json:"results,omitempty"`
+	ColumnList   []*ColumnItem `json:"columns,omitempty"`
+	ErrorMessage string        `json:"error-message,omitempty"`
+	Success      bool          `json:"success,omitempty"`
 }
 
 func newQueryResponseFromInternal(response *pbuf.QueryResponse) (*QueryResponse, error) {
@@ -64,7 +64,7 @@ func newQueryResponseFromInternal(response *pbuf.QueryResponse) (*QueryResponse,
 			Success:      false,
 		}, nil
 	}
-	results := make([]*QueryResult, 0, len(response.Results))
+	results := make([]QueryResult, 0, len(response.Results))
 	for _, r := range response.Results {
 		result, err := newQueryResultFromInternal(r)
 		if err != nil {
@@ -89,12 +89,12 @@ func newQueryResponseFromInternal(response *pbuf.QueryResponse) (*QueryResponse,
 }
 
 // Results returns all results in the response.
-func (qr *QueryResponse) Results() []*QueryResult {
+func (qr *QueryResponse) Results() []QueryResult {
 	return qr.ResultList
 }
 
 // Result returns the first result or nil.
-func (qr *QueryResponse) Result() *QueryResult {
+func (qr *QueryResponse) Result() QueryResult {
 	if len(qr.ResultList) == 0 {
 		return nil
 	}
@@ -114,48 +114,35 @@ func (qr *QueryResponse) Column() *ColumnItem {
 	return qr.ColumnList[0]
 }
 
-// QueryResult represent one of the results in the response.
-type QueryResult struct {
-	Type       uint32
-	Bitmap     *BitmapResult      `json:"bitmap,omitempty"`
-	CountItems []*CountResultItem `json:"count-items,omitempty"`
-	Count      uint64             `json:"count,omitempty"`
-	Sum        int64              `json:"sum,omitempty"`
-	Changed    bool               `json:"changed,omitempty"`
+// QueryResult represents one of the results in the response.
+type QueryResult interface {
+	Type() uint32
+	Bitmap() *BitmapResult
+	CountItems() []*CountResultItem
+	Count() int64
+	Sum() int64
+	Changed() bool
 }
 
-func newQueryResultFromInternal(result *pbuf.QueryResult) (*QueryResult, error) {
-	var bitmapResult *BitmapResult
-	var err error
-	var sum int64
-	var count uint64
-	var changed bool
-
-	if result.Type == QueryResultTypeBitmap {
-		bitmapResult, err = newBitmapResultFromInternal(result.Bitmap)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		bitmapResult = &BitmapResult{}
+func newQueryResultFromInternal(result *pbuf.QueryResult) (QueryResult, error) {
+	switch result.Type {
+	case QueryResultTypeNil:
+		return NilResult(false), nil
+	case QueryResultTypeBitmap:
+		return newBitmapResultFromInternal(result.Bitmap)
+	case QueryResultTypePairs:
+		return countItemsFromInternal(result.Pairs), nil
+	case QueryResultTypeSumCount:
+		return &SumCountResult{
+			sum:   result.SumCount.Sum,
+			count: result.SumCount.Count,
+		}, nil
+	case QueryResultTypeUint64:
+		return IntResult(result.N), nil
+	case QueryResultTypeBool:
+		return BoolResult(result.Changed), nil
 	}
-	if result.Type == QueryResultTypeSumCount {
-		sum = result.SumCount.Sum
-		count = uint64(result.SumCount.Count)
-	} else {
-		count = result.N
-	}
-	if result.Type == QueryResultTypeBool {
-		changed = result.Changed
-	}
-	return &QueryResult{
-		Type:       result.Type,
-		Bitmap:     bitmapResult,
-		CountItems: countItemsFromInternal(result.Pairs),
-		Count:      count,
-		Sum:        sum,
-		Changed:    changed,
-	}, nil
+	return nil, ErrUnknownType
 }
 
 // CountResultItem represents a result from TopN call.
@@ -172,12 +159,38 @@ func (c *CountResultItem) String() string {
 	return fmt.Sprintf("%d:%d", c.ID, c.Count)
 }
 
-func countItemsFromInternal(items []*pbuf.Pair) []*CountResultItem {
+func countItemsFromInternal(items []*pbuf.Pair) TopNResult {
 	result := make([]*CountResultItem, 0, len(items))
 	for _, v := range items {
 		result = append(result, &CountResultItem{ID: v.ID, Key: v.Key, Count: v.Count})
 	}
-	return result
+	return TopNResult(result)
+}
+
+type TopNResult []*CountResultItem
+
+func (TopNResult) Type() uint32 {
+	return QueryResultTypePairs
+}
+
+func (TopNResult) Bitmap() *BitmapResult {
+	return &BitmapResult{}
+}
+
+func (t TopNResult) CountItems() []*CountResultItem {
+	return t
+}
+
+func (TopNResult) Count() int64 {
+	return 0
+}
+
+func (TopNResult) Sum() int64 {
+	return 0
+}
+
+func (TopNResult) Changed() bool {
+	return false
 }
 
 // BitmapResult represents a result from Bitmap, Union, Intersect, Difference and Range PQL calls.
@@ -198,6 +211,137 @@ func newBitmapResultFromInternal(bitmap *pbuf.Bitmap) (*BitmapResult, error) {
 		Keys:       bitmap.Keys,
 	}
 	return result, nil
+}
+
+func (BitmapResult) Type() uint32 {
+	return QueryResultTypeBitmap
+}
+
+func (b BitmapResult) Bitmap() *BitmapResult {
+	return &b
+}
+
+func (BitmapResult) CountItems() []*CountResultItem {
+	return []*CountResultItem{}
+}
+
+func (BitmapResult) Count() int64 {
+	return 0
+}
+
+func (BitmapResult) Sum() int64 {
+	return 0
+}
+
+func (BitmapResult) Changed() bool {
+	return false
+}
+
+type SumCountResult struct {
+	sum   int64
+	count int64
+}
+
+func (SumCountResult) Type() uint32 {
+	return QueryResultTypeSumCount
+}
+
+func (SumCountResult) Bitmap() *BitmapResult {
+	return &BitmapResult{}
+}
+
+func (SumCountResult) CountItems() []*CountResultItem {
+	return []*CountResultItem{}
+}
+
+func (c SumCountResult) Count() int64 {
+	return c.count
+}
+
+func (c SumCountResult) Sum() int64 {
+	return c.sum
+}
+
+func (SumCountResult) Changed() bool {
+	return false
+}
+
+type IntResult int64
+
+func (IntResult) Type() uint32 {
+	return QueryResultTypeUint64
+}
+
+func (IntResult) Bitmap() *BitmapResult {
+	return &BitmapResult{}
+}
+
+func (IntResult) CountItems() []*CountResultItem {
+	return []*CountResultItem{}
+}
+
+func (i IntResult) Count() int64 {
+	return int64(i)
+}
+
+func (IntResult) Sum() int64 {
+	return 0
+}
+
+func (IntResult) Changed() bool {
+	return false
+}
+
+type BoolResult bool
+
+func (BoolResult) Type() uint32 {
+	return QueryResultTypeBool
+}
+
+func (BoolResult) Bitmap() *BitmapResult {
+	return &BitmapResult{}
+}
+
+func (BoolResult) CountItems() []*CountResultItem {
+	return []*CountResultItem{}
+}
+
+func (BoolResult) Count() int64 {
+	return 0
+}
+
+func (BoolResult) Sum() int64 {
+	return 0
+}
+
+func (b BoolResult) Changed() bool {
+	return bool(b)
+}
+
+type NilResult bool
+
+func (NilResult) Type() uint32 {
+	return QueryResultTypeNil
+}
+
+func (NilResult) Bitmap() *BitmapResult {
+	return &BitmapResult{}
+}
+
+func (NilResult) CountItems() []*CountResultItem {
+	return []*CountResultItem{}
+}
+
+func (NilResult) Count() int64 {
+	return 0
+}
+
+func (NilResult) Sum() int64 {
+	return 0
+}
+
+func (NilResult) Changed() bool {
+	return false
 }
 
 const (

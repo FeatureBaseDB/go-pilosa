@@ -75,4 +75,5 @@ var (
 	ErrInvalidQueryOption     = NewError("Invalid query option")
 	ErrInvalidIndexOption     = NewError("Invalid index option")
 	ErrInvalidFrameOption     = NewError("Invalid frame option")
+	ErrUnknownType            = NewError("Unknown type")
 )

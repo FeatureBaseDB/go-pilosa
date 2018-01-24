@@ -120,13 +120,13 @@ func TestNewQueryResponseFromInternal(t *testing.T) {
 	if results[0] != qr.Result() {
 		t.Fatalf("Result() should return the first result")
 	}
-	if !reflect.DeepEqual(targetAttrs, results[0].Bitmap.Attributes) {
+	if !reflect.DeepEqual(targetAttrs, results[0].Bitmap().Attributes) {
 		t.Fatalf("The bitmap result should contain the attributes")
 	}
-	if !reflect.DeepEqual(targetBits, results[0].Bitmap.Bits) {
+	if !reflect.DeepEqual(targetBits, results[0].Bitmap().Bits) {
 		t.Fatalf("The bitmap result should contain the bits")
 	}
-	if !reflect.DeepEqual(targetCountItems, results[1].CountItems) {
+	if !reflect.DeepEqual(targetCountItems, results[1].CountItems()) {
 		t.Fatalf("The response should include count items")
 	}
 }

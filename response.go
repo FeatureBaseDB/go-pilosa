@@ -33,6 +33,7 @@
 package pilosa
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -117,7 +118,7 @@ func (qr *QueryResponse) Column() *ColumnItem {
 // QueryResult represents one of the results in the response.
 type QueryResult interface {
 	Type() uint32
-	Bitmap() *BitmapResult
+	Bitmap() BitmapResult
 	CountItems() []*CountResultItem
 	Count() int64
 	Sum() int64
@@ -173,8 +174,8 @@ func (TopNResult) Type() uint32 {
 	return QueryResultTypePairs
 }
 
-func (TopNResult) Bitmap() *BitmapResult {
-	return &BitmapResult{}
+func (TopNResult) Bitmap() BitmapResult {
+	return defaultBitmapResult()
 }
 
 func (t TopNResult) CountItems() []*CountResultItem {
@@ -195,9 +196,9 @@ func (TopNResult) Changed() bool {
 
 // BitmapResult represents a result from Bitmap, Union, Intersect, Difference and Range PQL calls.
 type BitmapResult struct {
-	Attributes map[string]interface{}
-	Bits       []uint64
-	Keys       []string
+	Attributes map[string]interface{} `json:"attrs"`
+	Bits       []uint64               `json:"bits"`
+	Keys       []string               `json:"keys"`
 }
 
 func newBitmapResultFromInternal(bitmap *pbuf.Bitmap) (*BitmapResult, error) {
@@ -205,20 +206,36 @@ func newBitmapResultFromInternal(bitmap *pbuf.Bitmap) (*BitmapResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	bits := bitmap.Bits
+	if bits == nil {
+		bits = []uint64{}
+	}
+	keys := bitmap.Keys
+	if keys == nil {
+		keys = []string{}
+	}
 	result := &BitmapResult{
 		Attributes: attrs,
-		Bits:       bitmap.Bits,
-		Keys:       bitmap.Keys,
+		Bits:       bits,
+		Keys:       keys,
 	}
 	return result, nil
+}
+
+func defaultBitmapResult() BitmapResult {
+	return BitmapResult{
+		Attributes: map[string]interface{}{},
+		Bits:       []uint64{},
+		Keys:       []string{},
+	}
 }
 
 func (BitmapResult) Type() uint32 {
 	return QueryResultTypeBitmap
 }
 
-func (b BitmapResult) Bitmap() *BitmapResult {
-	return &b
+func (b BitmapResult) Bitmap() BitmapResult {
+	return b
 }
 
 func (BitmapResult) CountItems() []*CountResultItem {
@@ -246,8 +263,8 @@ func (SumCountResult) Type() uint32 {
 	return QueryResultTypeSumCount
 }
 
-func (SumCountResult) Bitmap() *BitmapResult {
-	return &BitmapResult{}
+func (SumCountResult) Bitmap() BitmapResult {
+	return defaultBitmapResult()
 }
 
 func (SumCountResult) CountItems() []*CountResultItem {
@@ -266,14 +283,24 @@ func (SumCountResult) Changed() bool {
 	return false
 }
 
+func (c SumCountResult) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Sum   int64 `json:"sum"`
+		Count int64 `json:"count"`
+	}{
+		Sum:   c.sum,
+		Count: c.count,
+	})
+}
+
 type IntResult int64
 
 func (IntResult) Type() uint32 {
 	return QueryResultTypeUint64
 }
 
-func (IntResult) Bitmap() *BitmapResult {
-	return &BitmapResult{}
+func (IntResult) Bitmap() BitmapResult {
+	return defaultBitmapResult()
 }
 
 func (IntResult) CountItems() []*CountResultItem {
@@ -298,8 +325,8 @@ func (BoolResult) Type() uint32 {
 	return QueryResultTypeBool
 }
 
-func (BoolResult) Bitmap() *BitmapResult {
-	return &BitmapResult{}
+func (BoolResult) Bitmap() BitmapResult {
+	return defaultBitmapResult()
 }
 
 func (BoolResult) CountItems() []*CountResultItem {
@@ -318,14 +345,21 @@ func (b BoolResult) Changed() bool {
 	return bool(b)
 }
 
+func (b BoolResult) MarshalJSON() ([]byte, error) {
+	if b {
+		return []byte("true"), nil
+	}
+	return []byte("false"), nil
+}
+
 type NilResult bool
 
 func (NilResult) Type() uint32 {
 	return QueryResultTypeNil
 }
 
-func (NilResult) Bitmap() *BitmapResult {
-	return &BitmapResult{}
+func (NilResult) Bitmap() BitmapResult {
+	return defaultBitmapResult()
 }
 
 func (NilResult) CountItems() []*CountResultItem {
@@ -342,6 +376,10 @@ func (NilResult) Sum() int64 {
 
 func (NilResult) Changed() bool {
 	return false
+}
+
+func (NilResult) MarshalJSON() ([]byte, error) {
+	return []byte("null"), nil
 }
 
 const (

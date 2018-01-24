@@ -124,7 +124,8 @@ func TestClientReturnsResponse(t *testing.T) {
 
 func TestResponseDefaults(t *testing.T) {
 	assertResult := func(r QueryResult) {
-		if r.Bitmap() == nil {
+		b := r.Bitmap()
+		if b.Attributes == nil || b.Bits == nil || b.Keys == nil {
 			t.Fatalf("Default should be set for bitmap result")
 		}
 		if r.CountItems() == nil {
@@ -134,20 +135,20 @@ func TestResponseDefaults(t *testing.T) {
 
 	client := getClient()
 
-	frame, _ := index.Frame("defaults-frame", nil)
+	frame, _ := index.Frame("defaults-frame")
 	err := client.CreateFrame(frame)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	response, err := client.Query(frame.TopN(5), nil)
+	response, err := client.Query(frame.TopN(5))
 	if err != nil {
 		t.Fatal(err)
 	}
 	result := response.Result()
 	assertResult(result)
 
-	response, err = client.Query(frame.Bitmap(99999), nil)
+	response, err = client.Query(frame.Bitmap(99999))
 	if err != nil {
 		t.Fatal(err)
 	}

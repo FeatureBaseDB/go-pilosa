@@ -103,7 +103,7 @@ func NewClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 	return &Client{
 		cluster:        cluster,
 		client:         newHTTPClient(options.withDefaults()),
-		versionChecked: !options.SkipVersionCheck,
+		versionChecked: options.SkipVersionCheck,
 	}
 }
 

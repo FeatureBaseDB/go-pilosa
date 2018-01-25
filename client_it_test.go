@@ -694,7 +694,7 @@ func TestCSVImport(t *testing.T) {
 		2,3
 		7,1`
 	iterator := NewCSVBitIterator(strings.NewReader(text))
-	frame, err := index.Frame("importframe", nil)
+	frame, err := index.Frame("importframe")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -713,7 +713,7 @@ func TestCSVImport(t *testing.T) {
 		frame.Bitmap(7),
 		frame.Bitmap(10),
 	)
-	response, err := client.Query(bq, nil)
+	response, err := client.Query(bq)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -722,6 +722,9 @@ func TestCSVImport(t *testing.T) {
 	}
 	for i, result := range response.Results() {
 		br := result.Bitmap
+		if len(br.Bits) == 0 {
+			t.Fatalf("%d. len(Bits) == 0", i)
+		}
 		if target[i] != br.Bits[0] {
 			t.Fatalf("%d != %d", target[i], br.Bits[0])
 		}

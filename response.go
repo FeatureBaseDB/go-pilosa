@@ -53,7 +53,7 @@ const (
 // QueryResponse represents the response from a Pilosa query.
 type QueryResponse struct {
 	ResultList   []QueryResult `json:"results,omitempty"`
-	ColumnList   []*ColumnItem `json:"columns,omitempty"`
+	ColumnList   []ColumnItem  `json:"columns,omitempty"`
 	ErrorMessage string        `json:"error-message,omitempty"`
 	Success      bool          `json:"success,omitempty"`
 }
@@ -73,7 +73,7 @@ func newQueryResponseFromInternal(response *pbuf.QueryResponse) (*QueryResponse,
 		}
 		results = append(results, result)
 	}
-	columns := make([]*ColumnItem, 0, len(response.ColumnAttrSets))
+	columns := make([]ColumnItem, 0, len(response.ColumnAttrSets))
 	for _, p := range response.ColumnAttrSets {
 		columnItem, err := newColumnItemFromInternal(p)
 		if err != nil {
@@ -103,7 +103,7 @@ func (qr *QueryResponse) Result() QueryResult {
 }
 
 // Columns returns all columns in the response.
-func (qr *QueryResponse) Columns() []*ColumnItem {
+func (qr *QueryResponse) Columns() []ColumnItem {
 	return qr.ColumnList
 }
 
@@ -112,14 +112,14 @@ func (qr *QueryResponse) Column() *ColumnItem {
 	if len(qr.ColumnList) == 0 {
 		return nil
 	}
-	return qr.ColumnList[0]
+	return &qr.ColumnList[0]
 }
 
 // QueryResult represents one of the results in the response.
 type QueryResult interface {
 	Type() uint32
 	Bitmap() BitmapResult
-	CountItems() []*CountResultItem
+	CountItems() []CountResultItem
 	Count() int64
 	Sum() int64
 	Changed() bool
@@ -161,14 +161,14 @@ func (c *CountResultItem) String() string {
 }
 
 func countItemsFromInternal(items []*pbuf.Pair) TopNResult {
-	result := make([]*CountResultItem, 0, len(items))
+	result := make([]CountResultItem, 0, len(items))
 	for _, v := range items {
-		result = append(result, &CountResultItem{ID: v.ID, Key: v.Key, Count: v.Count})
+		result = append(result, CountResultItem{ID: v.ID, Key: v.Key, Count: v.Count})
 	}
 	return TopNResult(result)
 }
 
-type TopNResult []*CountResultItem
+type TopNResult []CountResultItem
 
 func (TopNResult) Type() uint32 {
 	return QueryResultTypePairs
@@ -178,7 +178,7 @@ func (TopNResult) Bitmap() BitmapResult {
 	return defaultBitmapResult()
 }
 
-func (t TopNResult) CountItems() []*CountResultItem {
+func (t TopNResult) CountItems() []CountResultItem {
 	return t
 }
 
@@ -206,28 +206,16 @@ func newBitmapResultFromInternal(bitmap *pbuf.Bitmap) (*BitmapResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	bits := bitmap.Bits
-	if bits == nil {
-		bits = []uint64{}
-	}
-	keys := bitmap.Keys
-	if keys == nil {
-		keys = []string{}
-	}
 	result := &BitmapResult{
 		Attributes: attrs,
-		Bits:       bits,
-		Keys:       keys,
+		Bits:       bitmap.Bits,
+		Keys:       bitmap.Keys,
 	}
 	return result, nil
 }
 
 func defaultBitmapResult() BitmapResult {
-	return BitmapResult{
-		Attributes: map[string]interface{}{},
-		Bits:       []uint64{},
-		Keys:       []string{},
-	}
+	return BitmapResult{}
 }
 
 func (BitmapResult) Type() uint32 {
@@ -238,8 +226,8 @@ func (b BitmapResult) Bitmap() BitmapResult {
 	return b
 }
 
-func (BitmapResult) CountItems() []*CountResultItem {
-	return []*CountResultItem{}
+func (BitmapResult) CountItems() []CountResultItem {
+	return nil
 }
 
 func (BitmapResult) Count() int64 {
@@ -252,6 +240,26 @@ func (BitmapResult) Sum() int64 {
 
 func (BitmapResult) Changed() bool {
 	return false
+}
+
+func (b BitmapResult) MarshalJSON() ([]byte, error) {
+	bits := b.Bits
+	if bits == nil {
+		bits = []uint64{}
+	}
+	keys := b.Keys
+	if keys == nil {
+		keys = []string{}
+	}
+	return json.Marshal(struct {
+		Attributes map[string]interface{} `json:"attrs"`
+		Bits       []uint64               `json:"bits"`
+		Keys       []string               `json:"keys"`
+	}{
+		Attributes: b.Attributes,
+		Bits:       bits,
+		Keys:       keys,
+	})
 }
 
 type SumCountResult struct {
@@ -267,8 +275,8 @@ func (SumCountResult) Bitmap() BitmapResult {
 	return defaultBitmapResult()
 }
 
-func (SumCountResult) CountItems() []*CountResultItem {
-	return []*CountResultItem{}
+func (SumCountResult) CountItems() []CountResultItem {
+	return nil
 }
 
 func (c SumCountResult) Count() int64 {
@@ -303,8 +311,8 @@ func (IntResult) Bitmap() BitmapResult {
 	return defaultBitmapResult()
 }
 
-func (IntResult) CountItems() []*CountResultItem {
-	return []*CountResultItem{}
+func (IntResult) CountItems() []CountResultItem {
+	return nil
 }
 
 func (i IntResult) Count() int64 {
@@ -329,8 +337,8 @@ func (BoolResult) Bitmap() BitmapResult {
 	return defaultBitmapResult()
 }
 
-func (BoolResult) CountItems() []*CountResultItem {
-	return []*CountResultItem{}
+func (BoolResult) CountItems() []CountResultItem {
+	return nil
 }
 
 func (BoolResult) Count() int64 {
@@ -362,8 +370,8 @@ func (NilResult) Bitmap() BitmapResult {
 	return defaultBitmapResult()
 }
 
-func (NilResult) CountItems() []*CountResultItem {
-	return []*CountResultItem{}
+func (NilResult) CountItems() []CountResultItem {
+	return nil
 }
 
 func (NilResult) Count() int64 {
@@ -417,12 +425,12 @@ type ColumnItem struct {
 	Attributes map[string]interface{} `json:"attributes,omitempty"`
 }
 
-func newColumnItemFromInternal(column *pbuf.ColumnAttrSet) (*ColumnItem, error) {
+func newColumnItemFromInternal(column *pbuf.ColumnAttrSet) (ColumnItem, error) {
 	attrs, err := convertInternalAttrsToMap(column.Attrs)
 	if err != nil {
-		return nil, err
+		return ColumnItem{}, err
 	}
-	return &ColumnItem{
+	return ColumnItem{
 		ID:         column.ID,
 		Key:        column.Key,
 		Attributes: attrs,

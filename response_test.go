@@ -80,7 +80,7 @@ func TestNewQueryResponseFromInternal(t *testing.T) {
 		"height":     1.83,
 	}
 	targetBits := []uint64{5, 10}
-	targetCountItems := []*CountResultItem{
+	targetCountItems := []CountResultItem{
 		{ID: 10, Count: 100},
 	}
 	attrs := []*pbuf.Attr{

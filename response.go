@@ -128,7 +128,7 @@ type QueryResult interface {
 func newQueryResultFromInternal(result *pbuf.QueryResult) (QueryResult, error) {
 	switch result.Type {
 	case QueryResultTypeNil:
-		return NilResult(false), nil
+		return NilResult{}, nil
 	case QueryResultTypeBitmap:
 		return newBitmapResultFromInternal(result.Bitmap)
 	case QueryResultTypePairs:
@@ -170,29 +170,12 @@ func countItemsFromInternal(items []*pbuf.Pair) TopNResult {
 
 type TopNResult []CountResultItem
 
-func (TopNResult) Type() uint32 {
-	return QueryResultTypePairs
-}
-
-func (TopNResult) Bitmap() BitmapResult {
-	return defaultBitmapResult()
-}
-
-func (t TopNResult) CountItems() []CountResultItem {
-	return t
-}
-
-func (TopNResult) Count() int64 {
-	return 0
-}
-
-func (TopNResult) Sum() int64 {
-	return 0
-}
-
-func (TopNResult) Changed() bool {
-	return false
-}
+func (TopNResult) Type() uint32                    { return QueryResultTypePairs }
+func (TopNResult) Bitmap() BitmapResult            { return BitmapResult{} }
+func (t TopNResult) CountItems() []CountResultItem { return t }
+func (TopNResult) Count() int64                    { return 0 }
+func (TopNResult) Sum() int64                      { return 0 }
+func (TopNResult) Changed() bool                   { return false }
 
 // BitmapResult represents a result from Bitmap, Union, Intersect, Difference and Range PQL calls.
 type BitmapResult struct {
@@ -214,33 +197,12 @@ func newBitmapResultFromInternal(bitmap *pbuf.Bitmap) (*BitmapResult, error) {
 	return result, nil
 }
 
-func defaultBitmapResult() BitmapResult {
-	return BitmapResult{}
-}
-
-func (BitmapResult) Type() uint32 {
-	return QueryResultTypeBitmap
-}
-
-func (b BitmapResult) Bitmap() BitmapResult {
-	return b
-}
-
-func (BitmapResult) CountItems() []CountResultItem {
-	return nil
-}
-
-func (BitmapResult) Count() int64 {
-	return 0
-}
-
-func (BitmapResult) Sum() int64 {
-	return 0
-}
-
-func (BitmapResult) Changed() bool {
-	return false
-}
+func (BitmapResult) Type() uint32                  { return QueryResultTypeBitmap }
+func (b BitmapResult) Bitmap() BitmapResult        { return b }
+func (BitmapResult) CountItems() []CountResultItem { return nil }
+func (BitmapResult) Count() int64                  { return 0 }
+func (BitmapResult) Sum() int64                    { return 0 }
+func (BitmapResult) Changed() bool                 { return false }
 
 func (b BitmapResult) MarshalJSON() ([]byte, error) {
 	bits := b.Bits
@@ -267,29 +229,12 @@ type SumCountResult struct {
 	count int64
 }
 
-func (SumCountResult) Type() uint32 {
-	return QueryResultTypeSumCount
-}
-
-func (SumCountResult) Bitmap() BitmapResult {
-	return defaultBitmapResult()
-}
-
-func (SumCountResult) CountItems() []CountResultItem {
-	return nil
-}
-
-func (c SumCountResult) Count() int64 {
-	return c.count
-}
-
-func (c SumCountResult) Sum() int64 {
-	return c.sum
-}
-
-func (SumCountResult) Changed() bool {
-	return false
-}
+func (SumCountResult) Type() uint32                  { return QueryResultTypeSumCount }
+func (SumCountResult) Bitmap() BitmapResult          { return BitmapResult{} }
+func (SumCountResult) CountItems() []CountResultItem { return nil }
+func (c SumCountResult) Count() int64                { return c.count }
+func (c SumCountResult) Sum() int64                  { return c.sum }
+func (SumCountResult) Changed() bool                 { return false }
 
 func (c SumCountResult) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
@@ -303,55 +248,21 @@ func (c SumCountResult) MarshalJSON() ([]byte, error) {
 
 type IntResult int64
 
-func (IntResult) Type() uint32 {
-	return QueryResultTypeUint64
-}
-
-func (IntResult) Bitmap() BitmapResult {
-	return defaultBitmapResult()
-}
-
-func (IntResult) CountItems() []CountResultItem {
-	return nil
-}
-
-func (i IntResult) Count() int64 {
-	return int64(i)
-}
-
-func (IntResult) Sum() int64 {
-	return 0
-}
-
-func (IntResult) Changed() bool {
-	return false
-}
+func (IntResult) Type() uint32                  { return QueryResultTypeUint64 }
+func (IntResult) Bitmap() BitmapResult          { return BitmapResult{} }
+func (IntResult) CountItems() []CountResultItem { return nil }
+func (i IntResult) Count() int64                { return int64(i) }
+func (IntResult) Sum() int64                    { return 0 }
+func (IntResult) Changed() bool                 { return false }
 
 type BoolResult bool
 
-func (BoolResult) Type() uint32 {
-	return QueryResultTypeBool
-}
-
-func (BoolResult) Bitmap() BitmapResult {
-	return defaultBitmapResult()
-}
-
-func (BoolResult) CountItems() []CountResultItem {
-	return nil
-}
-
-func (BoolResult) Count() int64 {
-	return 0
-}
-
-func (BoolResult) Sum() int64 {
-	return 0
-}
-
-func (b BoolResult) Changed() bool {
-	return bool(b)
-}
+func (BoolResult) Type() uint32                  { return QueryResultTypeBool }
+func (BoolResult) Bitmap() BitmapResult          { return BitmapResult{} }
+func (BoolResult) CountItems() []CountResultItem { return nil }
+func (BoolResult) Count() int64                  { return 0 }
+func (BoolResult) Sum() int64                    { return 0 }
+func (b BoolResult) Changed() bool               { return bool(b) }
 
 func (b BoolResult) MarshalJSON() ([]byte, error) {
 	if b {
@@ -360,31 +271,14 @@ func (b BoolResult) MarshalJSON() ([]byte, error) {
 	return []byte("false"), nil
 }
 
-type NilResult bool
+type NilResult struct{}
 
-func (NilResult) Type() uint32 {
-	return QueryResultTypeNil
-}
-
-func (NilResult) Bitmap() BitmapResult {
-	return defaultBitmapResult()
-}
-
-func (NilResult) CountItems() []CountResultItem {
-	return nil
-}
-
-func (NilResult) Count() int64 {
-	return 0
-}
-
-func (NilResult) Sum() int64 {
-	return 0
-}
-
-func (NilResult) Changed() bool {
-	return false
-}
+func (NilResult) Type() uint32                  { return QueryResultTypeNil }
+func (NilResult) Bitmap() BitmapResult          { return BitmapResult{} }
+func (NilResult) CountItems() []CountResultItem { return nil }
+func (NilResult) Count() int64                  { return 0 }
+func (NilResult) Sum() int64                    { return 0 }
+func (NilResult) Changed() bool                 { return false }
 
 func (NilResult) MarshalJSON() ([]byte, error) {
 	return []byte("null"), nil

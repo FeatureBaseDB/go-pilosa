@@ -160,22 +160,22 @@ func TestQueryWithSlices(t *testing.T) {
 	Reset()
 	const sliceWidth = 1048576
 	client := getClient()
-	if _, err := client.Query(testFrame.SetBit(1, 100), nil); err != nil {
+	if _, err := client.Query(testFrame.SetBit(1, 100)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := client.Query(testFrame.SetBit(1, sliceWidth), nil); err != nil {
+	if _, err := client.Query(testFrame.SetBit(1, sliceWidth)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := client.Query(testFrame.SetBit(1, sliceWidth*3), nil); err != nil {
+	if _, err := client.Query(testFrame.SetBit(1, sliceWidth*3)); err != nil {
 		t.Fatal(err)
 	}
 
-	response, err := client.Query(testFrame.Bitmap(1))
+	response, err := client.Query(testFrame.Bitmap(1), Slices(0, 3))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if bits := response.Result().Bitmap.Bits; !reflect.DeepEqual(bits, []uint64{100, sliceWidth * 3}) {
-		t.Fatalf("Unexpected results: %#v", bits)
+		t.Fatalf("Unexpected results: %v", bits)
 	}
 }
 
@@ -478,7 +478,7 @@ func TestQueryInverseBitmap(t *testing.T) {
 
 func TestQueryFailsIfAddressNotResolved(t *testing.T) {
 	uri, _ := NewURIFromAddress("nonexisting.domain.pilosa.com:3456")
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(uri, SkipVersionCheck(true))
 	_, err := client.Query(index.RawQuery("bar"), nil)
 	if err == nil {
 		t.Fatal()
@@ -508,7 +508,7 @@ func TestErrorResponseNotRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(uri, SkipVersionCheck(true))
 	response, err := client.Query(testFrame.Bitmap(1), nil)
 	if err == nil {
 		t.Fatalf("Got response: %v", response)
@@ -522,7 +522,7 @@ func TestResponseNotRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(uri, SkipVersionCheck(true))
 	response, err := client.Query(testFrame.Bitmap(1), nil)
 	if err == nil {
 		t.Fatalf("Got response: %v", response)
@@ -532,11 +532,7 @@ func TestResponseNotRead(t *testing.T) {
 func TestInvalidResponse(t *testing.T) {
 	server := getMockServer(200, []byte("unmarshal this!"), -1)
 	defer server.Close()
-	uri, err := NewURIFromAddress(server.URL)
-	if err != nil {
-		panic(err)
-	}
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
 	response, err := client.Query(index.RawQuery("don't care"), nil)
 	if err == nil {
 		t.Fatalf("Got response: %v", response)
@@ -621,7 +617,7 @@ func TestSyncFailure(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(uri, SkipVersionCheck(true))
 	err = client.SyncSchema(NewSchema())
 	if err == nil {
 		t.Fatal("should have failed")
@@ -635,7 +631,7 @@ func TestErrorRetrievingSchema(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(uri, SkipVersionCheck(true))
 	_, err = client.Schema()
 	if err == nil {
 		t.Fatal("should have failed")
@@ -656,7 +652,7 @@ func TestInvalidSchemaInvalidIndex(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(uri, SkipVersionCheck(true))
 	_, err = client.Schema()
 	if err == nil {
 		t.Fatal("should have failed")
@@ -676,12 +672,8 @@ func TestInvalidSchemaInvalidFrame(t *testing.T) {
 	`)
 	server := getMockServer(200, data, len(data))
 	defer server.Close()
-	uri, err := NewURIFromAddress(server.URL)
-	if err != nil {
-		panic(err)
-	}
-	client := NewClientWithURI(uri)
-	schema, err = client.Schema()
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
+	_, err := client.Schema()
 	if err == nil {
 		t.Fatal("should have failed")
 	}
@@ -811,11 +803,7 @@ func TestCSVExport(t *testing.T) {
 func TestCSVExportFailure(t *testing.T) {
 	server := getMockServer(404, []byte("sorry, not found"), -1)
 	defer server.Close()
-	uri, err := NewURIFromAddress(server.URL)
-	if err != nil {
-		panic(err)
-	}
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
 	frame, err := index.Frame("exportframe", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -840,7 +828,7 @@ func TestExportReaderFailure(t *testing.T) {
 	sliceURIs := map[uint64]*URI{
 		0: uri,
 	}
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(uri, SkipVersionCheck(true))
 	reader := newExportReader(client, sliceURIs, frame, "standard")
 	buf := make([]byte, 1000)
 	_, err = reader.Read(buf)
@@ -861,7 +849,7 @@ func TestExportReaderReadBodyFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	sliceURIs := map[uint64]*URI{0: uri}
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(uri, SkipVersionCheck(true))
 	reader := newExportReader(client, sliceURIs, frame, "standard")
 	buf := make([]byte, 1000)
 	_, err = reader.Read(buf)
@@ -1073,12 +1061,8 @@ func TestImportValueIteratorError(t *testing.T) {
 func TestImportFailsOnImportBitsError(t *testing.T) {
 	server := getMockServer(500, []byte{}, 0)
 	defer server.Close()
-	uri, err := NewURIFromAddress(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := NewClientWithURI(uri)
-	err = client.importBits("foo", "bar", 0, []Bit{})
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
+	err := client.importBits("foo", "bar", 0, []Bit{})
 	if err == nil {
 		t.Fatalf("importBits should fail when fetch fragment nodes fails")
 	}
@@ -1087,12 +1071,8 @@ func TestImportFailsOnImportBitsError(t *testing.T) {
 func TestValueImportFailsOnImportValueError(t *testing.T) {
 	server := getMockServer(500, []byte{}, 0)
 	defer server.Close()
-	uri, err := NewURIFromAddress(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := NewClientWithURI(uri)
-	err = client.importValues("foo", "bar", 0, "foo", []FieldValue{})
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
+	err := client.importValues("foo", "bar", 0, "foo", []FieldValue{})
 	if err == nil {
 		t.Fatalf("importValues should fail when fetch fragment nodes fails")
 	}
@@ -1102,11 +1082,7 @@ func TestImportFrameFailsIfImportBitsFails(t *testing.T) {
 	data := []byte(`[{"host":"non-existing-domain:9999","internalHost":"10101"}]`)
 	server := getMockServer(200, data, len(data))
 	defer server.Close()
-	uri, err := NewURIFromAddress(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
 	iterator := NewCSVBitIterator(strings.NewReader("10,7"))
 	frame, err := index.Frame("importframe", nil)
 	if err != nil {
@@ -1122,11 +1098,7 @@ func TestImportValueFrameFailsIfImportValuesFails(t *testing.T) {
 	data := []byte(`[{"host":"non-existing-domain:9999","internalHost":"10101"}]`)
 	server := getMockServer(200, data, len(data))
 	defer server.Close()
-	uri, err := NewURIFromAddress(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
 	iterator := NewCSVValueIterator(strings.NewReader("10,7"))
 	frame, err := index.Frame("importframe", nil)
 	if err != nil {
@@ -1142,12 +1114,8 @@ func TestImportBitsFailInvalidNodeAddress(t *testing.T) {
 	data := []byte(`[{"host":"10101:","internalHost":"doesn'tmatter"}]`)
 	server := getMockServer(200, data, len(data))
 	defer server.Close()
-	uri, err := NewURIFromAddress(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := NewClientWithURI(uri)
-	err = client.importBits("foo", "bar", 0, []Bit{})
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
+	err := client.importBits("foo", "bar", 0, []Bit{})
 	if err == nil {
 		t.Fatalf("importBits should fail on invalid node host")
 	}
@@ -1157,12 +1125,8 @@ func TestImportValuesFailInvalidNodeAddress(t *testing.T) {
 	data := []byte(`[{"host":"10101:","internalHost":"doesn'tmatter"}]`)
 	server := getMockServer(200, data, len(data))
 	defer server.Close()
-	uri, err := NewURIFromAddress(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := NewClientWithURI(uri)
-	err = client.importValues("foo", "bar", 0, "foo", []FieldValue{})
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
+	err := client.importValues("foo", "bar", 0, "foo", []FieldValue{})
 	if err == nil {
 		t.Fatalf("importValues should fail on invalid node host")
 	}
@@ -1171,12 +1135,8 @@ func TestImportValuesFailInvalidNodeAddress(t *testing.T) {
 func TestDecodingFragmentNodesFails(t *testing.T) {
 	server := getMockServer(200, []byte("notjson"), 7)
 	defer server.Close()
-	uri, err := NewURIFromAddress(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := NewClientWithURI(uri)
-	_, err = client.fetchFragmentNodes("foo", 0)
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
+	_, err := client.fetchFragmentNodes("foo", 0)
 	if err == nil {
 		t.Fatalf("fetchFragmentNodes should fail when response from /fragment/nodes cannot be decoded")
 	}
@@ -1185,11 +1145,8 @@ func TestDecodingFragmentNodesFails(t *testing.T) {
 func TestImportNodeFails(t *testing.T) {
 	server := getMockServer(500, []byte{}, 0)
 	defer server.Close()
-	uri, err := NewURIFromAddress(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := NewClientWithURI(uri)
+	uri, _ := NewURIFromAddress(server.URL)
+	client, _ := NewClient(uri, SkipVersionCheck(true))
 	importRequest := &pbuf.ImportRequest{
 		ColumnIDs:  []uint64{},
 		RowIDs:     []uint64{},
@@ -1198,7 +1155,7 @@ func TestImportNodeFails(t *testing.T) {
 		Frame:      "bar",
 		Slice:      0,
 	}
-	err = client.importNode(uri, importRequest)
+	err := client.importNode(uri, importRequest)
 	if err == nil {
 		t.Fatalf("importNode should fail when posting to /import fails")
 	}
@@ -1241,11 +1198,7 @@ func TestResponseWithInvalidType(t *testing.T) {
 	}
 	server := getMockServer(200, data, -1)
 	defer server.Close()
-	uri, err := NewURIFromAddress(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
 	_, err = client.Query(testFrame.Bitmap(1), nil)
 	if err == nil {
 		t.Fatalf("Should have failed")
@@ -1255,12 +1208,8 @@ func TestResponseWithInvalidType(t *testing.T) {
 func TestStatusFails(t *testing.T) {
 	server := getMockServer(404, nil, 0)
 	defer server.Close()
-	uri, err := NewURIFromAddress(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := NewClientWithURI(uri)
-	_, err = client.status()
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
+	_, err := client.status()
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -1269,12 +1218,8 @@ func TestStatusFails(t *testing.T) {
 func TestStatusUnmarshalFails(t *testing.T) {
 	server := getMockServer(200, []byte("foo"), 3)
 	defer server.Close()
-	uri, err := NewURIFromAddress(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := NewClientWithURI(uri)
-	_, err = client.status()
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
+	_, err := client.status()
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -1283,13 +1228,9 @@ func TestStatusUnmarshalFails(t *testing.T) {
 func TestFetchViewsFails(t *testing.T) {
 	server := getMockServer(404, nil, 0)
 	defer server.Close()
-	uri, err := NewURIFromAddress(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
 	frame, _ := index.Frame("viewfail", nil)
-	_, err = client.Views(frame)
+	_, err := client.Views(frame)
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -1298,13 +1239,9 @@ func TestFetchViewsFails(t *testing.T) {
 func TestFetchViewsUnmarshalFails(t *testing.T) {
 	server := getMockServer(200, []byte("foo"), 3)
 	defer server.Close()
-	uri, err := NewURIFromAddress(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
 	frame, _ := index.Frame("viewfail", nil)
-	_, err = client.Views(frame)
+	_, err := client.Views(frame)
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -1313,13 +1250,9 @@ func TestFetchViewsUnmarshalFails(t *testing.T) {
 func TestCreateIntFieldFails(t *testing.T) {
 	server := getMockServer(404, nil, 0)
 	defer server.Close()
-	uri, err := NewURIFromAddress(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
 	frame, _ := index.Frame("rangeframe-addfield", nil)
-	err = client.CreateIntField(frame, "foo", 10, 20)
+	err := client.CreateIntField(frame, "foo", 10, 20)
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -1328,13 +1261,9 @@ func TestCreateIntFieldFails(t *testing.T) {
 func TestDeleteFieldFails(t *testing.T) {
 	server := getMockServer(404, nil, 0)
 	defer server.Close()
-	uri, err := NewURIFromAddress(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
 	frame, _ := index.Frame("rangeframe-deletefield", nil)
-	err = client.DeleteField(frame, "foo")
+	err := client.DeleteField(frame, "foo")
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -1402,12 +1331,8 @@ func TestInvalidFieldInStatus(t *testing.T) {
 	}
 	server := getMockServer(200, response, -1)
 	defer server.Close()
-	uri, err := NewURIFromAddress(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := NewClientWithURI(uri)
-	schema, err = client.Schema()
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
+	_, err = client.Schema()
 	if err == nil {
 		t.Fatalf("should have failed")
 	}
@@ -1416,14 +1341,10 @@ func TestInvalidFieldInStatus(t *testing.T) {
 func TestSyncSchemaCantCreateIndex(t *testing.T) {
 	server := getMockServer(404, nil, 0)
 	defer server.Close()
-	uri, err := NewURIFromAddress(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
 	schema = NewSchema()
 	schema.Index("foo")
-	err = client.syncSchema(schema, NewSchema())
+	err := client.syncSchema(schema, NewSchema())
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -1432,17 +1353,13 @@ func TestSyncSchemaCantCreateIndex(t *testing.T) {
 func TestSyncSchemaCantCreateFrame(t *testing.T) {
 	server := getMockServer(404, nil, 0)
 	defer server.Close()
-	uri, err := NewURIFromAddress(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
 	schema = NewSchema()
 	index, _ := schema.Index("foo")
 	index.Frame("fooframe")
 	serverSchema := NewSchema()
 	serverSchema.Index("foo")
-	err = client.syncSchema(schema, serverSchema)
+	err := client.syncSchema(schema, serverSchema)
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -1463,8 +1380,7 @@ func TestExportFrameFailure(t *testing.T) {
 	}
 	server := getMockPathServer(paths)
 	defer server.Close()
-	uri, _ := NewURIFromAddress(server.URL)
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
 	_, err := client.ExportFrame(testFrame, "standard")
 	if err == nil {
 		t.Fatal("should have failed")
@@ -1488,8 +1404,7 @@ func TestExportFrameFailure(t *testing.T) {
 func TestSlicesMaxDecodeFailure(t *testing.T) {
 	server := getMockServer(200, []byte(`{`), 0)
 	defer server.Close()
-	uri, _ := NewURIFromAddress(server.URL)
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
 	_, err := client.slicesMax()
 	if err == nil {
 		t.Fatal("should have failed")
@@ -1499,8 +1414,7 @@ func TestSlicesMaxDecodeFailure(t *testing.T) {
 func TestReadSchemaDecodeFailure(t *testing.T) {
 	server := getMockServer(200, []byte(`{`), 0)
 	defer server.Close()
-	uri, _ := NewURIFromAddress(server.URL)
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
 	_, err := client.readSchema()
 	if err == nil {
 		t.Fatal("should have failed")
@@ -1510,8 +1424,7 @@ func TestReadSchemaDecodeFailure(t *testing.T) {
 func TestStatusToNodeSlicesForIndexFailure(t *testing.T) {
 	server := getMockServer(200, []byte(`[]`), -1)
 	defer server.Close()
-	uri, _ := NewURIFromAddress(server.URL)
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
 	// no slice
 	status := Status{
 		indexMaxSlice: map[string]uint64{},
@@ -1543,8 +1456,7 @@ func TestServerVersionFail(t *testing.T) {
 	}
 	server := getMockPathServer(paths)
 	defer server.Close()
-	uri, _ := NewURIFromAddress(server.URL)
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(server.URL, SkipVersionCheck(true))
 	_, err := client.fetchServerVersion()
 	if err == nil {
 		t.Fatal("should have failed")

@@ -1502,7 +1502,15 @@ func TestUserAgent(t *testing.T) {
 }
 
 func TestClientRace(t *testing.T) {
-	client := getClient()
+	// Using a custom client with SkipVersionCheck to test race conditions in version checking
+	uri, err := NewURIFromAddress(getPilosaBindAddress())
+	if err != nil {
+		panic(err)
+	}
+	client, err := NewClient(uri, TLSConfig(&tls.Config{InsecureSkipVerify: true}))
+	if err != nil {
+		panic(err)
+	}
 	f := func() {
 		client.Query(testFrame.Bitmap(1))
 	}
@@ -1516,7 +1524,9 @@ func getClient() *Client {
 	if err != nil {
 		panic(err)
 	}
-	client, err := NewClient(uri, TLSConfig(&tls.Config{InsecureSkipVerify: true}))
+	client, err := NewClient(uri,
+		TLSConfig(&tls.Config{InsecureSkipVerify: true}),
+		SkipVersionCheck(true))
 	if err != nil {
 		panic(err)
 	}

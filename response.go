@@ -225,8 +225,8 @@ func (b BitmapResult) MarshalJSON() ([]byte, error) {
 }
 
 type SumCountResult struct {
-	sum   int64
-	count int64
+	sum   int64 `json:"sum"`
+	count int64 `json:"count"`
 }
 
 func (SumCountResult) Type() uint32                  { return QueryResultTypeSumCount }
@@ -235,16 +235,6 @@ func (SumCountResult) CountItems() []CountResultItem { return nil }
 func (c SumCountResult) Count() int64                { return c.count }
 func (c SumCountResult) Sum() int64                  { return c.sum }
 func (SumCountResult) Changed() bool                 { return false }
-
-func (c SumCountResult) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		Sum   int64 `json:"sum"`
-		Count int64 `json:"count"`
-	}{
-		Sum:   c.sum,
-		Count: c.count,
-	})
-}
 
 type IntResult int64
 

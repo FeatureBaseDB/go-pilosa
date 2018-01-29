@@ -107,12 +107,12 @@ func (qr *QueryResponse) Columns() []ColumnItem {
 	return qr.ColumnList
 }
 
-// Column returns the first column or nil.
-func (qr *QueryResponse) Column() *ColumnItem {
+// Column returns the first column.
+func (qr *QueryResponse) Column() ColumnItem {
 	if len(qr.ColumnList) == 0 {
-		return nil
+		return ColumnItem{}
 	}
-	return &qr.ColumnList[0]
+	return qr.ColumnList[0]
 }
 
 // QueryResult represents one of the results in the response.
@@ -264,13 +264,6 @@ func (BoolResult) Count() int64                  { return 0 }
 func (BoolResult) Sum() int64                    { return 0 }
 func (b BoolResult) Changed() bool               { return bool(b) }
 
-func (b BoolResult) MarshalJSON() ([]byte, error) {
-	if b {
-		return []byte("true"), nil
-	}
-	return []byte("false"), nil
-}
-
 type NilResult struct{}
 
 func (NilResult) Type() uint32                  { return QueryResultTypeNil }
@@ -279,10 +272,6 @@ func (NilResult) CountItems() []CountResultItem { return nil }
 func (NilResult) Count() int64                  { return 0 }
 func (NilResult) Sum() int64                    { return 0 }
 func (NilResult) Changed() bool                 { return false }
-
-func (NilResult) MarshalJSON() ([]byte, error) {
-	return []byte("null"), nil
-}
 
 const (
 	stringType = 1

@@ -122,41 +122,6 @@ func TestClientReturnsResponse(t *testing.T) {
 	}
 }
 
-func TestResponseDefaults(t *testing.T) {
-	assertResult := func(r QueryResult) {
-		b := r.Bitmap()
-		if b.Attributes == nil || b.Bits == nil || b.Keys == nil {
-			t.Fatalf("Default should be set for bitmap result")
-		}
-		if r.CountItems() == nil {
-			t.Fatalf("CountItems should be set for bitmap result")
-		}
-	}
-
-	client := getClient()
-
-	frame, _ := index.Frame("defaults-frame")
-	err := client.CreateFrame(frame)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	response, err := client.Query(frame.TopN(5))
-	if err != nil {
-		t.Fatal(err)
-	}
-	result := response.Result()
-	assertResult(result)
-
-	response, err = client.Query(frame.Bitmap(99999))
-	if err != nil {
-		t.Fatal(err)
-	}
-	result = response.Result()
-	assertResult(result)
-
-}
-
 func TestQueryWithSlices(t *testing.T) {
 	Reset()
 	const sliceWidth = 1048576
@@ -197,7 +162,7 @@ func TestQueryWithColumns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response.Column() != nil {
+	if !reflect.DeepEqual(response.Column(), ColumnItem{}) {
 		t.Fatalf("No columns should be returned if it wasn't explicitly requested")
 	}
 	response, err = client.Query(testFrame.Bitmap(1), &QueryOptions{Columns: true})

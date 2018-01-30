@@ -135,8 +135,8 @@ func newQueryResultFromInternal(result *pbuf.QueryResult) (QueryResult, error) {
 		return countItemsFromInternal(result.Pairs), nil
 	case QueryResultTypeSumCount:
 		return &SumCountResult{
-			sum:   result.SumCount.Sum,
-			count: result.SumCount.Count,
+			SumValue:   result.SumCount.Sum,
+			CountValue: result.SumCount.Count,
 		}, nil
 	case QueryResultTypeUint64:
 		return IntResult(result.N), nil
@@ -225,26 +225,16 @@ func (b BitmapResult) MarshalJSON() ([]byte, error) {
 }
 
 type SumCountResult struct {
-	sum   int64
-	count int64
+	SumValue   int64 `json:"sum"`
+	CountValue int64 `json:"count"`
 }
 
 func (SumCountResult) Type() uint32                  { return QueryResultTypeSumCount }
 func (SumCountResult) Bitmap() BitmapResult          { return BitmapResult{} }
 func (SumCountResult) CountItems() []CountResultItem { return nil }
-func (c SumCountResult) Count() int64                { return c.count }
-func (c SumCountResult) Sum() int64                  { return c.sum }
+func (c SumCountResult) Count() int64                { return c.CountValue }
+func (c SumCountResult) Sum() int64                  { return c.SumValue }
 func (SumCountResult) Changed() bool                 { return false }
-
-func (c SumCountResult) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		Sum   int64 `json:"sum"`
-		Count int64 `json:"count"`
-	}{
-		Sum:   c.sum,
-		Count: c.count,
-	})
-}
 
 type IntResult int64
 

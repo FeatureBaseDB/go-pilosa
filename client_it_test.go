@@ -122,40 +122,6 @@ func TestClientReturnsResponse(t *testing.T) {
 	}
 }
 
-func TestResponseDefaults(t *testing.T) {
-	assertResult := func(r *QueryResult) {
-		if r.Bitmap == nil {
-			t.Fatalf("Default should be set for bitmap result")
-		}
-		if r.CountItems == nil {
-			t.Fatalf("CountItems should be set for bitmap result")
-		}
-	}
-
-	client := getClient()
-
-	frame, _ := index.Frame("defaults-frame", nil)
-	err := client.CreateFrame(frame)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	response, err := client.Query(frame.TopN(5), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	result := response.Result()
-	assertResult(result)
-
-	response, err = client.Query(frame.Bitmap(99999), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	result = response.Result()
-	assertResult(result)
-
-}
-
 func TestQueryWithSlices(t *testing.T) {
 	Reset()
 	const sliceWidth = 1048576
@@ -174,8 +140,8 @@ func TestQueryWithSlices(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bits := response.Result().Bitmap.Bits; !reflect.DeepEqual(bits, []uint64{100, sliceWidth * 3}) {
-		t.Fatalf("Unexpected results: %v", bits)
+	if bits := response.Result().Bitmap().Bits; !reflect.DeepEqual(bits, []uint64{100, sliceWidth * 3}) {
+		t.Fatalf("Unexpected results: %#v", bits)
 	}
 }
 
@@ -196,7 +162,7 @@ func TestQueryWithColumns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response.Column() != nil {
+	if !reflect.DeepEqual(response.Column(), ColumnItem{}) {
 		t.Fatalf("No columns should be returned if it wasn't explicitly requested")
 	}
 	response, err = client.Query(testFrame.Bitmap(1), &QueryOptions{Columns: true})
@@ -240,7 +206,7 @@ func TestSetRowAttrs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(targetAttrs, response.Result().Bitmap.Attributes) {
+	if !reflect.DeepEqual(targetAttrs, response.Result().Bitmap().Attributes) {
 		t.Fatalf("Bitmap attributes should be set")
 	}
 }
@@ -265,7 +231,7 @@ func TestOrmCount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response.Result().Count != 2 {
+	if response.Result().Count() != 2 {
 		t.Fatalf("Count should be 2")
 	}
 }
@@ -297,6 +263,8 @@ func TestIntersectReturns(t *testing.T) {
 	}
 	if !reflect.DeepEqual(response.Result().Bitmap.Bits, []uint64{10}) {
 		t.Fatalf("Returned bits [10] != %v", response.Result().Bitmap.Bits)
+	if !reflect.DeepEqual(response.Result().Bitmap().Bits, []uint64{10}) {
+		t.Fatal("Returned bits must be: [10]")
 	}
 }
 
@@ -324,7 +292,7 @@ func TestTopNReturns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	items := response.Result().CountItems
+	items := response.Result().CountItems()
 	if len(items) != 2 {
 		t.Fatalf("There should be 2 count items: %v", items)
 	}
@@ -464,12 +432,12 @@ func TestQueryInverseBitmap(t *testing.T) {
 	if len(response.Results()) != 2 {
 		t.Fatalf("Response should contain 2 results")
 	}
-	bits1 := response.Results()[0].Bitmap.Bits
+	bits1 := response.Results()[0].Bitmap().Bits
 	targetBits1 := []uint64{5000, 6000}
 	if !reflect.DeepEqual(targetBits1, bits1) {
 		t.Fatalf("bits should be: %v, but it is: %v", targetBits1, bits1)
 	}
-	bits2 := response.Results()[1].Bitmap.Bits
+	bits2 := response.Results()[1].Bitmap().Bits
 	targetBits2 := []uint64{1000, 3000}
 	if !reflect.DeepEqual(targetBits2, bits2) {
 		t.Fatalf("bits should be: %v, but it is: %v", targetBits2, bits2)
@@ -713,10 +681,7 @@ func TestCSVImport(t *testing.T) {
 		t.Fatalf("Result count should be 3")
 	}
 	for i, result := range response.Results() {
-		br := result.Bitmap
-		if len(br.Bits) == 0 {
-			t.Fatalf("%d. len(Bits) == 0", i)
-		}
+		br := result.Bitmap()
 		if target[i] != br.Bits[0] {
 			t.Fatalf("%d != %d", target[i], br.Bits[0])
 		}
@@ -755,8 +720,8 @@ func TestValueCSVImport(t *testing.T) {
 		t.Fatal(err)
 	}
 	target := int64(8)
-	if target != response.Result().Sum {
-		t.Fatalf("%d != %d", target, response.Result().Sum)
+	if target != response.Result().Sum() {
+		t.Fatalf("%d != %d", target, response.Result().Sum())
 	}
 }
 
@@ -922,22 +887,22 @@ func TestRangeFrame(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Result().Sum != 26 {
-		t.Fatalf("Sum 26 != %d", resp.Result().Sum)
+	if resp.Result().Sum() != 26 {
+		t.Fatalf("Sum 26 != %d", resp.Result().Sum())
 	}
-	if resp.Result().Count != 2 {
-		t.Fatalf("Count 2 != %d", resp.Result().Count)
+	if resp.Result().Count() != 2 {
+		t.Fatalf("Count 2 != %d", resp.Result().Count())
 	}
 
 	resp, err = client.Query(frame.Field("foo").LT(15), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(resp.Result().Bitmap.Bits) != 1 {
-		t.Fatalf("Count 1 != %d", len(resp.Result().Bitmap.Bits))
+	if len(resp.Result().Bitmap().Bits) != 1 {
+		t.Fatalf("Count 1 != %d", len(resp.Result().Bitmap().Bits))
 	}
-	if resp.Result().Bitmap.Bits[0] != 10 {
-		t.Fatalf("Bit 10 != %d", resp.Result().Bitmap.Bits[0])
+	if resp.Result().Bitmap().Bits[0] != 10 {
+		t.Fatalf("Bit 10 != %d", resp.Result().Bitmap().Bits[0])
 	}
 }
 
@@ -966,11 +931,11 @@ func TestCreateIntField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Result().Sum != 26 {
-		t.Fatalf("Sum 26 != %d", resp.Result().Sum)
+	if resp.Result().Sum() != 26 {
+		t.Fatalf("Sum 26 != %d", resp.Result().Sum())
 	}
-	if resp.Result().Count != 2 {
-		t.Fatalf("Count 2 != %d", resp.Result().Count)
+	if resp.Result().Count() != 2 {
+		t.Fatalf("Count 2 != %d", resp.Result().Count())
 	}
 }
 
@@ -1012,10 +977,10 @@ func TestExcludeAttrsBits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(resp.Result().Bitmap.Bits) != 0 {
+	if len(resp.Result().Bitmap().Bits) != 0 {
 		t.Fatalf("bits should be excluded")
 	}
-	if len(resp.Result().Bitmap.Attributes) != 1 {
+	if len(resp.Result().Bitmap().Attributes) != 1 {
 		t.Fatalf("attributes should be included")
 	}
 
@@ -1024,10 +989,10 @@ func TestExcludeAttrsBits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(resp.Result().Bitmap.Bits) != 1 {
+	if len(resp.Result().Bitmap().Bits) != 1 {
 		t.Fatalf("bits should be included")
 	}
-	if len(resp.Result().Bitmap.Attributes) != 0 {
+	if len(resp.Result().Bitmap().Attributes) != 0 {
 		t.Fatalf("attributes should be excluded")
 	}
 }

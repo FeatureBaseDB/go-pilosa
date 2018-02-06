@@ -77,4 +77,5 @@ var (
 	ErrInvalidFrameOption     = NewError("Invalid frame option")
 	ErrNoFragmentNodes        = NewError("No fragment nodes")
 	ErrNoSlice                = NewError("Index has no slices")
+	ErrUnknownType            = NewError("Unknown type")
 )

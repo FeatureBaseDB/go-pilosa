@@ -39,12 +39,14 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/blang/semver"
 	"github.com/golang/protobuf/proto"
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
 	"github.com/pkg/errors"
@@ -53,11 +55,13 @@ import (
 
 const maxHosts = 10
 const sliceWidth = 1048576
+const pilosaMinVersion = ">=0.9.0"
 
 // Client is the HTTP client for Pilosa server.
 type Client struct {
-	cluster *Cluster
-	client  *http.Client
+	cluster        *Cluster
+	client         *http.Client
+	versionChecked bool
 	// User-Agent header cache. Not used until cluster-resize support branch is merged
 	// and user agent is saved here in NewClient
 	userAgent string
@@ -97,8 +101,9 @@ func NewClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 		options = &ClientOptions{}
 	}
 	return &Client{
-		cluster: cluster,
-		client:  newHTTPClient(options.withDefaults()),
+		cluster:        cluster,
+		client:         newHTTPClient(options.withDefaults()),
+		versionChecked: options.SkipVersionCheck,
 	}
 }
 
@@ -132,10 +137,7 @@ func NewClient(addrUriOrCluster interface{}, options ...ClientOption) (*Client, 
 		return nil, ErrAddrURIClusterExpected
 	}
 
-	return &Client{
-		cluster: cluster,
-		client:  newHTTPClient(clientOptions.withDefaults()),
-	}, nil
+	return NewClientWithCluster(cluster, clientOptions), nil
 }
 
 // Query runs the given query against the server with the given options.
@@ -760,6 +762,19 @@ func anyError(resp *http.Response, err error) error {
 
 // doRequest creates and performs an http request.
 func (c *Client) doRequest(host *URI, method, path string, headers map[string]string, reader io.Reader) (*http.Response, error) {
+	if !c.versionChecked {
+		// check the server version on the first request
+		c.versionChecked = true
+		ver, err := c.ServerVersion()
+		if err != nil {
+			log.Println("Pilosa server version is not available:", err)
+		} else {
+			err = checkServerVersion(ver)
+			if err != nil {
+				log.Println(err)
+			}
+		}
+	}
 	req, err := makeRequest(host, method, path, headers, reader)
 	if err != nil {
 		return nil, errors.Wrap(err, "building request")
@@ -787,6 +802,38 @@ func (c *Client) statusToNodeSlicesForIndex(status *Status, indexName string) ma
 		}
 	}
 	return result
+}
+
+func (c *Client) ServerVersion() (string, error) {
+	_, data, err := c.httpRequest("GET", "/version", nil, nil)
+	if err != nil {
+		return "", errors.Wrap(err, "requesting /version")
+	}
+	versionInfo := versionInfo{}
+	err = json.Unmarshal(data, &versionInfo)
+	if err != nil {
+		return "", errors.Wrap(err, "unmarshaling /version data")
+	}
+	return versionInfo.Version, nil
+}
+
+func checkServerVersion(version string) error {
+	if version == "" {
+		return errors.New("Pilosa server version is not available.")
+	}
+	if strings.HasPrefix(version, "v") {
+		version = version[1:]
+	}
+	serverVersion, err1 := semver.Make(version)
+	minVersion, err2 := semver.ParseRange(pilosaMinVersion)
+	// check err of serverVersion and minVersion together, otherwise it's not possible to write a test for coverage
+	if err1 != nil || err2 != nil {
+		return fmt.Errorf("Invalid Pilosa server version: %s or minimum server version: %s.", version, pilosaMinVersion)
+	}
+	if !minVersion(serverVersion) {
+		return fmt.Errorf("Pilosa server's version is %s, does not meet the minimum required for this version of the client: %s.", version, pilosaMinVersion)
+	}
+	return nil
 }
 
 func (c *Client) augmentHeaders(headers map[string]string) map[string]string {
@@ -931,6 +978,7 @@ type ClientOptions struct {
 	PoolSizePerRoute int
 	TotalPoolSize    int
 	TLSConfig        *tls.Config
+	SkipVersionCheck bool
 }
 
 func (co *ClientOptions) addOptions(options ...ClientOption) error {
@@ -984,6 +1032,17 @@ func TLSConfig(config *tls.Config) ClientOption {
 		options.TLSConfig = config
 		return nil
 	}
+}
+
+func SkipVersionCheck() ClientOption {
+	return func(options *ClientOptions) error {
+		options.SkipVersionCheck = true
+		return nil
+	}
+}
+
+type versionInfo struct {
+	Version string `json:"version"`
 }
 
 func (co *ClientOptions) withDefaults() (updated *ClientOptions) {

@@ -760,11 +760,14 @@ func (c *Client) doRequest(host *URI, method, path string, headers map[string]st
 	if !c.versionChecked {
 		// check the server version on the first request
 		c.versionChecked = true
-		// don't care about fetching the version, it's not vital
-		ver, _ := c.fetchServerVersion()
-		err := checkServerVersion(ver)
+		ver, err := c.ServerVersion()
 		if err != nil {
-			log.Println(err)
+			log.Println("Pilosa server version is not available:", err)
+		} else {
+			err = checkServerVersion(ver)
+			if err != nil {
+				log.Println(err)
+			}
 		}
 	}
 	req, err := makeRequest(host, method, path, headers, reader)
@@ -796,7 +799,7 @@ func (c *Client) statusToNodeSlicesForIndex(status *Status, indexName string) ma
 	return result
 }
 
-func (c *Client) fetchServerVersion() (string, error) {
+func (c *Client) ServerVersion() (string, error) {
 	_, data, err := c.httpRequest("GET", "/version", nil, nil)
 	if err != nil {
 		return "", errors.Wrap(err, "requesting /version")
@@ -1026,9 +1029,9 @@ func TLSConfig(config *tls.Config) ClientOption {
 	}
 }
 
-func SkipVersionCheck(skip bool) ClientOption {
+func SkipVersionCheck() ClientOption {
 	return func(options *ClientOptions) error {
-		options.SkipVersionCheck = skip
+		options.SkipVersionCheck = true
 		return nil
 	}
 }

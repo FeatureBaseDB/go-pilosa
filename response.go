@@ -33,6 +33,7 @@
 package pilosa
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -51,10 +52,10 @@ const (
 
 // QueryResponse represents the response from a Pilosa query.
 type QueryResponse struct {
-	ResultList   []*QueryResult `json:"results,omitempty"`
-	ColumnList   []*ColumnItem  `json:"columns,omitempty"`
-	ErrorMessage string         `json:"error-message,omitempty"`
-	Success      bool           `json:"success,omitempty"`
+	ResultList   []QueryResult `json:"results,omitempty"`
+	ColumnList   []ColumnItem  `json:"columns,omitempty"`
+	ErrorMessage string        `json:"error-message,omitempty"`
+	Success      bool          `json:"success,omitempty"`
 }
 
 func newQueryResponseFromInternal(response *pbuf.QueryResponse) (*QueryResponse, error) {
@@ -64,7 +65,7 @@ func newQueryResponseFromInternal(response *pbuf.QueryResponse) (*QueryResponse,
 			Success:      false,
 		}, nil
 	}
-	results := make([]*QueryResult, 0, len(response.Results))
+	results := make([]QueryResult, 0, len(response.Results))
 	for _, r := range response.Results {
 		result, err := newQueryResultFromInternal(r)
 		if err != nil {
@@ -72,7 +73,7 @@ func newQueryResponseFromInternal(response *pbuf.QueryResponse) (*QueryResponse,
 		}
 		results = append(results, result)
 	}
-	columns := make([]*ColumnItem, 0, len(response.ColumnAttrSets))
+	columns := make([]ColumnItem, 0, len(response.ColumnAttrSets))
 	for _, p := range response.ColumnAttrSets {
 		columnItem, err := newColumnItemFromInternal(p)
 		if err != nil {
@@ -89,12 +90,12 @@ func newQueryResponseFromInternal(response *pbuf.QueryResponse) (*QueryResponse,
 }
 
 // Results returns all results in the response.
-func (qr *QueryResponse) Results() []*QueryResult {
+func (qr *QueryResponse) Results() []QueryResult {
 	return qr.ResultList
 }
 
 // Result returns the first result or nil.
-func (qr *QueryResponse) Result() *QueryResult {
+func (qr *QueryResponse) Result() QueryResult {
 	if len(qr.ResultList) == 0 {
 		return nil
 	}
@@ -102,67 +103,47 @@ func (qr *QueryResponse) Result() *QueryResult {
 }
 
 // Columns returns all columns in the response.
-func (qr *QueryResponse) Columns() []*ColumnItem {
+func (qr *QueryResponse) Columns() []ColumnItem {
 	return qr.ColumnList
 }
 
-// Column returns the first column or nil.
-func (qr *QueryResponse) Column() *ColumnItem {
+// Column returns the first column.
+func (qr *QueryResponse) Column() ColumnItem {
 	if len(qr.ColumnList) == 0 {
-		return nil
+		return ColumnItem{}
 	}
 	return qr.ColumnList[0]
 }
 
-// QueryResult represent one of the results in the response.
-type QueryResult struct {
-	Type       uint32
-	Bitmap     *BitmapResult      `json:"bitmap,omitempty"`
-	CountItems []*CountResultItem `json:"count-items,omitempty"`
-	Count      uint64             `json:"count,omitempty"`
-	Sum        int64              `json:"sum,omitempty"`
-	Changed    bool               `json:"changed,omitempty"`
+// QueryResult represents one of the results in the response.
+type QueryResult interface {
+	Type() uint32
+	Bitmap() BitmapResult
+	CountItems() []CountResultItem
+	Count() int64
+	Sum() int64
+	Changed() bool
 }
 
-func newQueryResultFromInternal(result *pbuf.QueryResult) (*QueryResult, error) {
-	var bitmapResult *BitmapResult
-	var countItems []*CountResultItem
-	var err error
-	var sum int64
-	var count uint64
-	var changed bool
-
-	// TODO: consider removing these defaults and only apply them to the switch
-	// cases for which they pertain.
-	bitmapResult = &BitmapResult{}
-	count = result.N
-	countItems = countItemsFromInternal(result.Pairs)
-
+func newQueryResultFromInternal(result *pbuf.QueryResult) (QueryResult, error) {
 	switch result.Type {
+	case QueryResultTypeNil:
+		return NilResult{}, nil
 	case QueryResultTypeBitmap:
-		bitmapResult, err = newBitmapResultFromInternal(result.Bitmap)
-		if err != nil {
-			return nil, err
-		}
+		return newBitmapResultFromInternal(result.Bitmap)
 	case QueryResultTypePairs:
-		//countItems = countItemsFromInternal(result.Pairs)
+		return countItemsFromInternal(result.Pairs), nil
 	case QueryResultTypeSumCount:
-		sum = result.SumCount.Sum
-		count = uint64(result.SumCount.Count)
+		return &SumCountResult{
+			SumValue:   result.SumCount.Sum,
+			CountValue: result.SumCount.Count,
+		}, nil
 	case QueryResultTypeUint64:
-		count = result.N
+		return IntResult(result.N), nil
 	case QueryResultTypeBool:
-		changed = result.Changed
+		return BoolResult(result.Changed), nil
 	}
-
-	return &QueryResult{
-		Type:       result.Type,
-		Bitmap:     bitmapResult,
-		CountItems: countItems,
-		Count:      count,
-		Sum:        sum,
-		Changed:    changed,
-	}, nil
+	return nil, ErrUnknownType
 }
 
 // CountResultItem represents a result from TopN call.
@@ -179,19 +160,28 @@ func (c *CountResultItem) String() string {
 	return fmt.Sprintf("%d:%d", c.ID, c.Count)
 }
 
-func countItemsFromInternal(items []*pbuf.Pair) []*CountResultItem {
-	result := make([]*CountResultItem, 0, len(items))
+func countItemsFromInternal(items []*pbuf.Pair) TopNResult {
+	result := make([]CountResultItem, 0, len(items))
 	for _, v := range items {
-		result = append(result, &CountResultItem{ID: v.ID, Key: v.Key, Count: v.Count})
+		result = append(result, CountResultItem{ID: v.ID, Key: v.Key, Count: v.Count})
 	}
-	return result
+	return TopNResult(result)
 }
+
+type TopNResult []CountResultItem
+
+func (TopNResult) Type() uint32                    { return QueryResultTypePairs }
+func (TopNResult) Bitmap() BitmapResult            { return BitmapResult{} }
+func (t TopNResult) CountItems() []CountResultItem { return t }
+func (TopNResult) Count() int64                    { return 0 }
+func (TopNResult) Sum() int64                      { return 0 }
+func (TopNResult) Changed() bool                   { return false }
 
 // BitmapResult represents a result from Bitmap, Union, Intersect, Difference and Range PQL calls.
 type BitmapResult struct {
-	Attributes map[string]interface{}
-	Bits       []uint64
-	Keys       []string
+	Attributes map[string]interface{} `json:"attrs"`
+	Bits       []uint64               `json:"bits"`
+	Keys       []string               `json:"keys"`
 }
 
 func newBitmapResultFromInternal(bitmap *pbuf.Bitmap) (*BitmapResult, error) {
@@ -206,6 +196,72 @@ func newBitmapResultFromInternal(bitmap *pbuf.Bitmap) (*BitmapResult, error) {
 	}
 	return result, nil
 }
+
+func (BitmapResult) Type() uint32                  { return QueryResultTypeBitmap }
+func (b BitmapResult) Bitmap() BitmapResult        { return b }
+func (BitmapResult) CountItems() []CountResultItem { return nil }
+func (BitmapResult) Count() int64                  { return 0 }
+func (BitmapResult) Sum() int64                    { return 0 }
+func (BitmapResult) Changed() bool                 { return false }
+
+func (b BitmapResult) MarshalJSON() ([]byte, error) {
+	bits := b.Bits
+	if bits == nil {
+		bits = []uint64{}
+	}
+	keys := b.Keys
+	if keys == nil {
+		keys = []string{}
+	}
+	return json.Marshal(struct {
+		Attributes map[string]interface{} `json:"attrs"`
+		Bits       []uint64               `json:"bits"`
+		Keys       []string               `json:"keys"`
+	}{
+		Attributes: b.Attributes,
+		Bits:       bits,
+		Keys:       keys,
+	})
+}
+
+type SumCountResult struct {
+	SumValue   int64 `json:"sum"`
+	CountValue int64 `json:"count"`
+}
+
+func (SumCountResult) Type() uint32                  { return QueryResultTypeSumCount }
+func (SumCountResult) Bitmap() BitmapResult          { return BitmapResult{} }
+func (SumCountResult) CountItems() []CountResultItem { return nil }
+func (c SumCountResult) Count() int64                { return c.CountValue }
+func (c SumCountResult) Sum() int64                  { return c.SumValue }
+func (SumCountResult) Changed() bool                 { return false }
+
+type IntResult int64
+
+func (IntResult) Type() uint32                  { return QueryResultTypeUint64 }
+func (IntResult) Bitmap() BitmapResult          { return BitmapResult{} }
+func (IntResult) CountItems() []CountResultItem { return nil }
+func (i IntResult) Count() int64                { return int64(i) }
+func (IntResult) Sum() int64                    { return 0 }
+func (IntResult) Changed() bool                 { return false }
+
+type BoolResult bool
+
+func (BoolResult) Type() uint32                  { return QueryResultTypeBool }
+func (BoolResult) Bitmap() BitmapResult          { return BitmapResult{} }
+func (BoolResult) CountItems() []CountResultItem { return nil }
+func (BoolResult) Count() int64                  { return 0 }
+func (BoolResult) Sum() int64                    { return 0 }
+func (b BoolResult) Changed() bool               { return bool(b) }
+
+type NilResult struct{}
+
+func (NilResult) Type() uint32                  { return QueryResultTypeNil }
+func (NilResult) Bitmap() BitmapResult          { return BitmapResult{} }
+func (NilResult) CountItems() []CountResultItem { return nil }
+func (NilResult) Count() int64                  { return 0 }
+func (NilResult) Sum() int64                    { return 0 }
+func (NilResult) Changed() bool                 { return false }
 
 const (
 	stringType = 1
@@ -242,12 +298,12 @@ type ColumnItem struct {
 	Attributes map[string]interface{} `json:"attributes,omitempty"`
 }
 
-func newColumnItemFromInternal(column *pbuf.ColumnAttrSet) (*ColumnItem, error) {
+func newColumnItemFromInternal(column *pbuf.ColumnAttrSet) (ColumnItem, error) {
 	attrs, err := convertInternalAttrsToMap(column.Attrs)
 	if err != nil {
-		return nil, err
+		return ColumnItem{}, err
 	}
-	return &ColumnItem{
+	return ColumnItem{
 		ID:         column.ID,
 		Key:        column.Key,
 		Attributes: attrs,

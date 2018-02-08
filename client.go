@@ -762,7 +762,10 @@ func (c *Client) doRequest(host *URI, method, path string, headers map[string]st
 		c.versionChecked = true
 		// don't care about fetching the version, it's not vital
 		ver, _ := c.fetchServerVersion()
-		checkServerVersion(ver)
+		err := checkServerVersion(ver)
+		if err != nil {
+			log.Println(err)
+		}
 	}
 	req, err := makeRequest(host, method, path, headers, reader)
 	if err != nil {
@@ -806,10 +809,9 @@ func (c *Client) fetchServerVersion() (string, error) {
 	return versionInfo.Version, nil
 }
 
-func checkServerVersion(version string) {
+func checkServerVersion(version string) error {
 	if version == "" {
-		log.Println("Pilosa server version is not available.")
-		return
+		return errors.New("Pilosa server version is not available.")
 	}
 	if strings.HasPrefix(version, "v") {
 		version = version[1:]
@@ -818,11 +820,12 @@ func checkServerVersion(version string) {
 	minVersion, err2 := semver.ParseRange(pilosaMinVersion)
 	// check err of serverVersion and minVersion together, otherwise it's not possible to write a test for coverage
 	if err1 != nil || err2 != nil {
-		log.Printf("Invalid Pilosa server version: %s or minimum server version: %s.", version, pilosaMinVersion)
+		return fmt.Errorf("Invalid Pilosa server version: %s or minimum server version: %s.", version, pilosaMinVersion)
 	}
 	if !minVersion(serverVersion) {
-		log.Printf("Pilosa server's version is %s, does not meet the minimum required for this version of the client: %s.", version, pilosaMinVersion)
+		return fmt.Errorf("Pilosa server's version is %s, does not meet the minimum required for this version of the client: %s.", version, pilosaMinVersion)
 	}
+	return nil
 }
 
 func (c *Client) augmentHeaders(headers map[string]string) map[string]string {

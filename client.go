@@ -629,7 +629,7 @@ func (c *Client) importValueNodeK(uri *URI, request *pbuf.ImportValueRequest) er
 
 // ExportFrame exports bits for a frame.
 func (c *Client) ExportFrame(frame *Frame, view string) (BitIterator, error) {
-	status, err := c.status()
+	status, err := c.Status()
 	if err != nil {
 		return nil, err
 	}
@@ -660,7 +660,7 @@ func (c *Client) Views(frame *Frame) ([]string, error) {
 	return viewsInfo.Views, nil
 }
 
-func (c *Client) status() (Status, error) {
+func (c *Client) Status() (Status, error) {
 	_, data, err := c.httpRequest("GET", "/status", nil, nil)
 	if err != nil {
 		return Status{}, errors.Wrap(err, "requesting /status")

@@ -39,11 +39,14 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/blang/semver"
 
 	"github.com/golang/protobuf/proto"
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
@@ -52,11 +55,13 @@ import (
 
 const maxHosts = 10
 const sliceWidth = 1048576
+const pilosaMinVersion = ">=0.9.0"
 
 // Client is the HTTP client for Pilosa server.
 type Client struct {
-	cluster *Cluster
-	client  *http.Client
+	cluster        *Cluster
+	client         *http.Client
+	versionChecked bool
 	// User-Agent header cache. Not used until cluster-resize support branch is merged
 	// and user agent is saved here in NewClient
 	userAgent string
@@ -96,8 +101,9 @@ func NewClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 		options = &ClientOptions{}
 	}
 	return &Client{
-		cluster: cluster,
-		client:  newHTTPClient(options.withDefaults()),
+		cluster:        cluster,
+		client:         newHTTPClient(options.withDefaults()),
+		versionChecked: options.SkipVersionCheck,
 	}
 }
 
@@ -131,10 +137,7 @@ func NewClient(addrUriOrCluster interface{}, options ...ClientOption) (*Client, 
 		return nil, ErrAddrURIClusterExpected
 	}
 
-	return &Client{
-		cluster: cluster,
-		client:  newHTTPClient(clientOptions.withDefaults()),
-	}, nil
+	return NewClientWithCluster(cluster, clientOptions), nil
 }
 
 // Query runs the given query against the server with the given options.
@@ -171,7 +174,7 @@ func (c *Client) Query(query PQLQuery, options ...interface{}) (*QueryResponse, 
 
 // CreateIndex creates an index on the server using the given Index struct.
 func (c *Client) CreateIndex(index *Index) error {
-	data := []byte(index.options.String())
+	data := []byte("")
 	path := fmt.Sprintf("/index/%s", index.name)
 	response, _, err := c.httpRequest("POST", path, data, nil)
 	if err != nil {
@@ -180,10 +183,7 @@ func (c *Client) CreateIndex(index *Index) error {
 		}
 		return err
 	}
-	if index.options.TimeQuantum != TimeQuantumNone {
-		err = c.patchIndexTimeQuantum(index)
-	}
-	return err
+	return nil
 
 }
 
@@ -198,10 +198,7 @@ func (c *Client) CreateFrame(frame *Frame) error {
 		}
 		return err
 	}
-	if frame.options.TimeQuantum != TimeQuantumNone {
-		err = c.patchFrameTimeQuantum(frame)
-	}
-	return err
+	return nil
 }
 
 // EnsureIndex creates an index on the server if it does not exist.
@@ -317,34 +314,26 @@ func (c *Client) syncSchema(schema *Schema, serverSchema *Schema) error {
 
 // Schema returns the indexes and frames on the server.
 func (c *Client) Schema() (*Schema, error) {
-	status, err := c.status()
+	schemaInfo, err := c.readSchema()
 	if err != nil {
 		return nil, err
 	}
-	if len(status.Nodes) == 0 {
-		return nil, errors.New("Status should contain at least 1 node")
-	}
 	schema := NewSchema()
-	for _, indexInfo := range status.Nodes[0].Indexes {
-		options := &IndexOptions{
-			ColumnLabel: indexInfo.Meta.ColumnLabel,
-			TimeQuantum: TimeQuantum(indexInfo.Meta.TimeQuantum),
-		}
-		index, err := schema.Index(indexInfo.Name, options)
+	for _, indexInfo := range schemaInfo.Indexes {
+		index, err := schema.Index(indexInfo.Name)
 		if err != nil {
 			return nil, err
 		}
 		for _, frameInfo := range indexInfo.Frames {
 			fields := make(map[string]rangeField)
 			frameOptions := &FrameOptions{
-				RowLabel:       frameInfo.Meta.RowLabel,
-				CacheSize:      frameInfo.Meta.CacheSize,
-				CacheType:      CacheType(frameInfo.Meta.CacheType),
-				InverseEnabled: frameInfo.Meta.InverseEnabled,
-				TimeQuantum:    TimeQuantum(frameInfo.Meta.TimeQuantum),
-				RangeEnabled:   frameInfo.Meta.RangeEnabled,
+				CacheSize:      frameInfo.Options.CacheSize,
+				CacheType:      CacheType(frameInfo.Options.CacheType),
+				InverseEnabled: frameInfo.Options.InverseEnabled,
+				TimeQuantum:    TimeQuantum(frameInfo.Options.TimeQuantum),
+				RangeEnabled:   frameInfo.Options.RangeEnabled,
 			}
-			for _, fieldInfo := range frameInfo.Meta.Fields {
+			for _, fieldInfo := range frameInfo.Options.Fields {
 				fields[fieldInfo.Name] = map[string]interface{}{
 					"Name": fieldInfo.Name,
 					"Type": fieldInfo.Type,
@@ -531,11 +520,11 @@ func (c *Client) importBits(indexName string, frameName string, slice uint64, bi
 		return err
 	}
 	for _, node := range nodes {
-		uri, err := NewURIFromAddress(node.Host)
-		if err != nil {
-			return err
+		uri := &URI{
+			scheme: node.Scheme,
+			host:   node.Host,
+			port:   node.Port,
 		}
-		uri.SetScheme(node.Scheme)
 		err = c.importNode(uri, bitsToImportRequest(indexName, frameName, slice, bits))
 		if err != nil {
 			return err
@@ -562,11 +551,11 @@ func (c *Client) importValues(indexName string, frameName string, slice uint64, 
 		return err
 	}
 	for _, node := range nodes {
-		uri, err := NewURIFromAddress(node.Host)
-		if err != nil {
-			return err
+		uri := &URI{
+			scheme: node.Scheme,
+			host:   node.Host,
+			port:   node.Port,
 		}
-		uri.SetScheme(node.Scheme)
 		err = c.importValueNode(uri, valsToImportRequest(indexName, frameName, slice, fieldName, vals))
 		if err != nil {
 			return err
@@ -592,10 +581,14 @@ func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentN
 	if err != nil {
 		return nil, err
 	}
-	var fragmentNodes []fragmentNode
-	err = json.Unmarshal(body, &fragmentNodes)
+	var fragmentNodeURIs []fragmentNodeRoot
+	err = json.Unmarshal(body, &fragmentNodeURIs)
 	if err != nil {
 		return nil, err
+	}
+	fragmentNodes := []fragmentNode{}
+	for _, nodeURI := range fragmentNodeURIs {
+		fragmentNodes = append(fragmentNodes, nodeURI.URI)
 	}
 	return fragmentNodes, nil
 }
@@ -636,11 +629,19 @@ func (c *Client) importValueNodeK(uri *URI, request *pbuf.ImportValueRequest) er
 
 // ExportFrame exports bits for a frame.
 func (c *Client) ExportFrame(frame *Frame, view string) (BitIterator, error) {
-	status, err := c.status()
+	status, err := c.Status()
 	if err != nil {
 		return nil, err
 	}
-	sliceURIs := c.statusToNodeSlicesForIndex(status, frame.index.Name())
+	slicesMax, err := c.slicesMax()
+	if err != nil {
+		return nil, err
+	}
+	status.indexMaxSlice = slicesMax
+	sliceURIs, err := c.statusToNodeSlicesForIndex(status, frame.index.Name())
+	if err != nil {
+		return nil, err
+	}
 	return NewCSVBitIterator(newExportReader(c, sliceURIs, frame, view)), nil
 }
 
@@ -659,32 +660,43 @@ func (c *Client) Views(frame *Frame) ([]string, error) {
 	return viewsInfo.Views, nil
 }
 
-func (c *Client) patchIndexTimeQuantum(index *Index) error {
-	data := []byte(fmt.Sprintf(`{"timeQuantum": "%s"}`, index.options.TimeQuantum))
-	path := fmt.Sprintf("/index/%s/time-quantum", index.name)
-	_, _, err := c.httpRequest("PATCH", path, data, nil)
-	return err
-}
-
-func (c *Client) patchFrameTimeQuantum(frame *Frame) error {
-	data := []byte(fmt.Sprintf(`{"index": "%s", "frame": "%s", "timeQuantum": "%s"}`,
-		frame.index.name, frame.name, frame.options.TimeQuantum))
-	path := fmt.Sprintf("/index/%s/frame/%s/time-quantum", frame.index.name, frame.name)
-	_, _, err := c.httpRequest("PATCH", path, data, nil)
-	return err
-}
-
-func (c *Client) status() (*Status, error) {
+func (c *Client) Status() (Status, error) {
 	_, data, err := c.httpRequest("GET", "/status", nil, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "requesting /status")
+		return Status{}, errors.Wrap(err, "requesting /status")
 	}
-	root := &statusRoot{}
-	err = json.Unmarshal(data, root)
+	status := Status{}
+	err = json.Unmarshal(data, &status)
 	if err != nil {
-		return nil, errors.Wrap(err, "unmarshaling /status data")
+		return Status{}, errors.Wrap(err, "unmarshaling /status data")
 	}
-	return root.Status, nil
+	return status, nil
+}
+
+func (c *Client) readSchema() (SchemaInfo, error) {
+	_, data, err := c.httpRequest("GET", "/schema", nil, nil)
+	if err != nil {
+		return SchemaInfo{}, errors.Wrap(err, "requesting /schema")
+	}
+	schemaInfo := SchemaInfo{}
+	err = json.Unmarshal(data, &schemaInfo)
+	if err != nil {
+		return SchemaInfo{}, errors.Wrap(err, "unmarshaling /schema data")
+	}
+	return schemaInfo, nil
+}
+
+func (c *Client) slicesMax() (map[string]uint64, error) {
+	_, data, err := c.httpRequest("GET", "/slices/max", nil, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "requesting /slices/max")
+	}
+	m := map[string]map[string]uint64{}
+	err = json.Unmarshal(data, &m)
+	if err != nil {
+		return nil, errors.Wrap(err, "unmarshaling /slices/max data")
+	}
+	return m["standard"], nil
 }
 
 // HttpRequest sends an HTTP request to the Pilosa server.
@@ -755,6 +767,13 @@ func anyError(resp *http.Response, err error) error {
 
 // doRequest creates and performs an http request.
 func (c *Client) doRequest(host *URI, method, path string, headers map[string]string, reader io.Reader) (*http.Response, error) {
+	if !c.versionChecked {
+		// check the server version on the first request
+		c.versionChecked = true
+		// don't care about fetching the version, it's not vital
+		ver, _ := c.fetchServerVersion()
+		checkServerVersion(ver)
+	}
 	req, err := makeRequest(host, method, path, headers, reader)
 	if err != nil {
 		return nil, errors.Wrap(err, "building request")
@@ -763,25 +782,61 @@ func (c *Client) doRequest(host *URI, method, path string, headers map[string]st
 }
 
 // statusToNodeSlicesForIndex finds the hosts which contains slices for the given index
-func (c *Client) statusToNodeSlicesForIndex(status *Status, indexName string) map[uint64]*URI {
+func (c *Client) statusToNodeSlicesForIndex(status Status, indexName string) (map[uint64]*URI, error) {
 	result := make(map[uint64]*URI)
-	for _, node := range status.Nodes {
-		for _, index := range node.Indexes {
-			if index.Name != indexName {
-				continue
+	if maxSlice, ok := status.indexMaxSlice[indexName]; ok {
+		for slice := 0; slice <= int(maxSlice); slice++ {
+			fragmentNodes, err := c.fetchFragmentNodes(indexName, uint64(slice))
+			if err != nil {
+				return nil, err
 			}
-			for _, slice := range index.Slices {
-				uri, err := NewURIFromAddress(node.Host)
-				// err will always be nil, but prevent a panic in the odd chance the server returns an invalid URI
-				if err == nil {
-					uri.SetScheme(node.Scheme)
-					result[slice] = uri
-				}
+			if len(fragmentNodes) == 0 {
+				return nil, ErrNoFragmentNodes
 			}
-			break
+			node := fragmentNodes[0]
+			uri := &URI{
+				host:   node.Host,
+				port:   node.Port,
+				scheme: node.Scheme,
+			}
+
+			result[uint64(slice)] = uri
 		}
+	} else {
+		return nil, ErrNoSlice
 	}
-	return result
+	return result, nil
+}
+
+func (c *Client) fetchServerVersion() (string, error) {
+	_, data, err := c.httpRequest("GET", "/version", nil, nil)
+	if err != nil {
+		return "", errors.Wrap(err, "requesting /version")
+	}
+	versionInfo := versionInfo{}
+	err = json.Unmarshal(data, &versionInfo)
+	if err != nil {
+		return "", errors.Wrap(err, "unmarshaling /version data")
+	}
+	return versionInfo.Version, nil
+}
+
+func checkServerVersion(version string) {
+	if version == "" {
+		log.Println("Pilosa server version is not available")
+	}
+	if strings.HasPrefix(version, "v") {
+		version = version[1:]
+	}
+	serverVersion, err1 := semver.Make(version)
+	minVersion, err2 := semver.ParseRange(pilosaMinVersion)
+	// check err of serverVersion and minVersion together, otherwise it's not possible to write a test for coverage
+	if err1 != nil || err2 != nil {
+		log.Printf("Invalid Pilosa server version: %s or minimum server version: %s", version, pilosaMinVersion)
+	}
+	if !minVersion(serverVersion) {
+		log.Printf("Pilosa server's version is %s, does not meet the minimum required for this version of the client: %s", version, pilosaMinVersion)
+	}
 }
 
 func (c *Client) augmentHeaders(headers map[string]string) map[string]string {
@@ -926,6 +981,7 @@ type ClientOptions struct {
 	PoolSizePerRoute int
 	TotalPoolSize    int
 	TLSConfig        *tls.Config
+	SkipVersionCheck bool
 }
 
 func (co *ClientOptions) addOptions(options ...ClientOption) error {
@@ -979,6 +1035,17 @@ func TLSConfig(config *tls.Config) ClientOption {
 		options.TLSConfig = config
 		return nil
 	}
+}
+
+func SkipVersionCheck(skip bool) ClientOption {
+	return func(options *ClientOptions) error {
+		options.SkipVersionCheck = skip
+		return nil
+	}
+}
+
+type versionInfo struct {
+	Version string `json:"version"`
 }
 
 func (co *ClientOptions) withDefaults() (updated *ClientOptions) {
@@ -1076,52 +1143,56 @@ func ExcludeBits(enable bool) QueryOption {
 	}
 }
 
-type fragmentNode struct {
-	Scheme       string
-	Host         string
-	InternalHost string
+type fragmentNodeRoot struct {
+	URI fragmentNode `json:"uri"`
 }
 
-type statusRoot struct {
-	Status *Status `json:"status"`
+type fragmentNode struct {
+	Scheme string `json:"scheme"`
+	Host   string `json:"host"`
+	Port   uint16 `json:"port"`
 }
 
 // Status contains the status information from a Pilosa server.
 type Status struct {
-	Nodes []StatusNode
+	Nodes         []StatusNode `json:"nodes"`
+	indexMaxSlice map[string]uint64
 }
 
 // StatusNode contains node information.
 type StatusNode struct {
-	Scheme  string
-	Host    string
-	Indexes []StatusIndex
+	Scheme string `json:"scheme"`
+	Host   string `json:"host"`
+	Port   int    `json:"port"`
+}
+
+type SchemaInfo struct {
+	Indexes []StatusIndex `json:"indexes"`
 }
 
 // StatusIndex contains index information.
 type StatusIndex struct {
-	Name   string
-	Meta   StatusMeta
-	Frames []StatusFrame
-	Slices []uint64
+	Name    string        `json:"name"`
+	Options StatusOptions `json:"options"`
+	Frames  []StatusFrame `json:"frames"`
 }
 
 // StatusFrame contains frame information.
 type StatusFrame struct {
-	Name string
-	Meta StatusMeta
+	Name    string        `json:"name"`
+	Options StatusOptions `json:"options"`
 }
 
-// StatusMeta contains options for a frame or an index.
-type StatusMeta struct {
-	ColumnLabel    string
-	RowLabel       string
-	CacheType      string
-	CacheSize      uint
-	InverseEnabled bool
-	RangeEnabled   bool
-	Fields         []StatusField
-	TimeQuantum    string
+// StatusOptions contains options for a frame or an index.
+type StatusOptions struct {
+	ColumnLabel    string        `json:"columnLabel"`
+	RowLabel       string        `json:"rowLabel"`
+	CacheType      string        `json:"cacheType"`
+	CacheSize      uint          `json:"cacheSize"`
+	InverseEnabled bool          `json:"inverseEnabled"`
+	RangeEnabled   bool          `json:"rangeEnabled"`
+	Fields         []StatusField `json:"fields"`
+	TimeQuantum    string        `json:"timeQuantum"`
 }
 
 // StatusField contains a field in the status.

@@ -33,6 +33,7 @@
 package pilosa
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"testing"
@@ -79,7 +80,7 @@ func TestNewQueryResponseFromInternal(t *testing.T) {
 		"height":     1.83,
 	}
 	targetBits := []uint64{5, 10}
-	targetCountItems := []*CountResultItem{
+	targetCountItems := []CountResultItem{
 		{ID: 10, Count: 100},
 	}
 	attrs := []*pbuf.Attr{
@@ -120,13 +121,13 @@ func TestNewQueryResponseFromInternal(t *testing.T) {
 	if results[0] != qr.Result() {
 		t.Fatalf("Result() should return the first result")
 	}
-	if !reflect.DeepEqual(targetAttrs, results[0].Bitmap.Attributes) {
+	if !reflect.DeepEqual(targetAttrs, results[0].Bitmap().Attributes) {
 		t.Fatalf("The bitmap result should contain the attributes")
 	}
-	if !reflect.DeepEqual(targetBits, results[0].Bitmap.Bits) {
+	if !reflect.DeepEqual(targetBits, results[0].Bitmap().Bits) {
 		t.Fatalf("The bitmap result should contain the bits")
 	}
-	if !reflect.DeepEqual(targetCountItems, results[1].CountItems) {
+	if !reflect.DeepEqual(targetCountItems, results[1].CountItems()) {
 		t.Fatalf("The response should include count items")
 	}
 }
@@ -192,4 +193,46 @@ func TestCountResultItemToString(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMarshalResults(t *testing.T) {
+	attrs := []*pbuf.Attr{
+		{Key: "name", StringValue: "some string", Type: 1},
+		{Key: "age", IntValue: 95, Type: 2},
+		{Key: "registered", BoolValue: true, Type: 3},
+		{Key: "height", FloatValue: 1.83, Type: 4},
+	}
+	bitmap := &pbuf.Bitmap{
+		Attrs: attrs,
+		Bits:  []uint64{5, 10},
+	}
+	pairs := []*pbuf.Pair{
+		{ID: 10, Count: 100},
+	}
+	pbufResults := []*pbuf.QueryResult{
+		{Type: QueryResultTypeBitmap, Bitmap: bitmap},
+		{Type: QueryResultTypePairs, Pairs: pairs},
+	}
+	resultJSONStrings := make([]string, len(pbufResults))
+	for i, pr := range pbufResults {
+		r, err := newQueryResultFromInternal(pr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := json.Marshal(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resultJSONStrings[i] = string(b)
+	}
+	targetJSON := []string{
+		`{"attrs":{"age":95,"height":1.83,"name":"some string","registered":true},"bits":[5,10],"keys":[]}`,
+		`[{"id":10,"count":100}]`,
+	}
+	for i := range targetJSON {
+		if sortedString(targetJSON[i]) != sortedString(resultJSONStrings[i]) {
+			t.Fatalf("%v != %v ", targetJSON[i], resultJSONStrings[i])
+		}
+	}
+
 }

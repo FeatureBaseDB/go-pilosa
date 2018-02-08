@@ -261,8 +261,6 @@ func TestIntersectReturns(t *testing.T) {
 	if len(response.Results()) != 1 {
 		t.Fatal("There must be 1 result")
 	}
-	if !reflect.DeepEqual(response.Result().Bitmap.Bits, []uint64{10}) {
-		t.Fatalf("Returned bits [10] != %v", response.Result().Bitmap.Bits)
 	if !reflect.DeepEqual(response.Result().Bitmap().Bits, []uint64{10}) {
 		t.Fatal("Returned bits must be: [10]")
 	}

@@ -70,6 +70,7 @@ var (
 	ErrInvalidIndexName       = NewError("Invalid index name")
 	ErrInvalidFrameName       = NewError("Invalid frame name")
 	ErrInvalidLabel           = NewError("Invalid label")
+	ErrInvalidKey             = NewError("Invalid key")
 	ErrTriedMaxHosts          = NewError("Tried max hosts, still failing")
 	ErrAddrURIClusterExpected = NewError("Addresses, URIs or a cluster is expected")
 	ErrInvalidQueryOption     = NewError("Invalid query option")

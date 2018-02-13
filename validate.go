@@ -63,7 +63,7 @@ func ValidLabel(label string) bool {
 	return len(label) <= maxLabel && labelRegex.Match([]byte(label))
 }
 
-// ValdKey returns true if the given key is valid, otherwise false.
+// ValidKey returns true if the given key is valid, otherwise false.
 func ValidKey(key string) bool {
 	return len(key) <= maxKey && keyRegex.Match([]byte(key))
 }

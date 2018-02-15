@@ -50,6 +50,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 const maxHosts = 10
@@ -524,8 +525,10 @@ func (c *Client) importBits(indexName string, frameName string, slice uint64, bi
 	sort.Sort(bitsForSort(bits))
 	nodes, err := c.fetchFragmentNodes(indexName, slice)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "fetching fragment nodes")
 	}
+
+	eg := errgroup.Group{}
 	for _, node := range nodes {
 		uri := &URI{
 			scheme: node.Scheme,
@@ -534,11 +537,14 @@ func (c *Client) importBits(indexName string, frameName string, slice uint64, bi
 		}
 		err = c.importNode(uri, bitsToImportRequest(indexName, frameName, slice, bits))
 		if err != nil {
-			return err
+			return errors.Wrap(err, "setting scheme on uri")
 		}
+		eg.Go(func() error {
+			return c.importNode(uri, bitsToImportRequest(indexName, frameName, slice, bits))
+		})
 	}
-
-	return nil
+	err = eg.Wait()
+	return errors.Wrap(err, "importing to nodes")
 }
 
 func (c *Client) importBitsK(indexName string, frameName string, bits []Bit) error {

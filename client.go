@@ -982,6 +982,7 @@ type ClientOptions struct {
 	TotalPoolSize    int
 	TLSConfig        *tls.Config
 	SkipVersionCheck bool
+	LegacyMode       bool
 }
 
 func (co *ClientOptions) addOptions(options ...ClientOption) error {
@@ -1040,6 +1041,13 @@ func TLSConfig(config *tls.Config) ClientOption {
 func SkipVersionCheck(skip bool) ClientOption {
 	return func(options *ClientOptions) error {
 		options.SkipVersionCheck = skip
+		return nil
+	}
+}
+
+func LegacyMode(enable bool) ClientOption {
+	return func(options *ClientOptions) error {
+		options.LegacyMode = enable
 		return nil
 	}
 }

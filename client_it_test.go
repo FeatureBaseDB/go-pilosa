@@ -1473,15 +1473,25 @@ func TestClientRace(t *testing.T) {
 }
 
 func getClient() *Client {
+	var client *Client
+	var err error
 	uri, err := NewURIFromAddress(getPilosaBindAddress())
 	if err != nil {
 		panic(err)
 	}
-	client, err := NewClient(uri,
-		TLSConfig(&tls.Config{InsecureSkipVerify: true}),
-		// LegacyMode(true),
-		// SkipVersionCheck()
-	)
+
+	legacyModeOff := getLegacyModeOff()
+	if legacyModeOff {
+		client, err = NewClient(uri,
+			TLSConfig(&tls.Config{InsecureSkipVerify: true}),
+			LegacyMode(false),
+			SkipVersionCheck(),
+		)
+	} else {
+		client, err = NewClient(uri,
+			TLSConfig(&tls.Config{InsecureSkipVerify: true}),
+		)
+	}
 	if err != nil {
 		panic(err)
 	}
@@ -1496,6 +1506,17 @@ func getPilosaBindAddress() string {
 		}
 	}
 	return "http://:10101"
+}
+
+func getLegacyModeOff() bool {
+	for _, kvStr := range os.Environ() {
+		kv := strings.SplitN(kvStr, "=", 2)
+		if kv[0] == "LEGACY_MODE_OFF" {
+			return kv[1] == "true"
+		}
+	}
+	return false
+
 }
 
 func getMockServer(statusCode int, response []byte, contentLength int) *httptest.Server {

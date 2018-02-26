@@ -1485,7 +1485,6 @@ func getClient() *Client {
 		client, err = NewClient(uri,
 			TLSConfig(&tls.Config{InsecureSkipVerify: true}),
 			LegacyMode(false),
-			SkipVersionCheck(),
 		)
 	} else {
 		client, err = NewClient(uri,

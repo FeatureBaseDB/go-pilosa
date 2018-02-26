@@ -1135,6 +1135,7 @@ func SkipVersionCheck() ClientOption {
 func LegacyMode(enable bool) ClientOption {
 	return func(options *ClientOptions) error {
 		options.LegacyMode = enable
+		options.SkipVersionCheck = true
 		return nil
 	}
 }

@@ -2,6 +2,12 @@
 
 
 [[projects]]
+  name = "github.com/blang/semver"
+  packages = ["."]
+  revision = "2ee87856327ba09384cabd113bc6b5d174e9ec0f"
+  version = "v3.5.1"
+
+[[projects]]
   branch = "master"
   name = "github.com/golang/protobuf"
   packages = ["proto"]
@@ -13,9 +19,21 @@
   revision = "645ef00459ed84a119197bfb8d8205042c6df63d"
   version = "v0.8.0"
 
+[[projects]]
+  branch = "master"
+  name = "golang.org/x/net"
+  packages = ["context"]
+  revision = "f5dfe339be1d06f81b22525fe34671ee7d2c8904"
+
+[[projects]]
+  branch = "master"
+  name = "golang.org/x/sync"
+  packages = ["errgroup"]
+  revision = "fd80eb99c8f653c847d294a001bdf2a3a6f768f5"
+
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "6c664b4e7ef95e3c205dfe2258ebaec3838f5b8bb19a44f5f89903269ce2fa67"
+  inputs-digest = "2dc77453219033778ae799950665d7817387bb2cfcf00ef14f4e40f31ffeb7d8"
   solver-name = "gps-cdcl"
   solver-version = 1

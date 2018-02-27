@@ -43,11 +43,11 @@ import (
 )
 
 var schema = NewSchema()
-var sampleIndex = mustNewIndex(schema, "sample-index", "")
-var sampleFrame = mustNewFrame(sampleIndex, "sample-frame", "")
+var sampleIndex = mustNewIndex(schema, "sample-index")
+var sampleFrame = mustNewFrame(sampleIndex, "sample-frame")
+var projectIndex = mustNewIndex(schema, "project-index")
+var collabFrame = mustNewFrame(projectIndex, "collaboration")
 var sampleField = sampleFrame.Field("sample-field")
-var projectIndex = mustNewIndex(schema, "project-index", "user")
-var collabFrame = mustNewFrame(projectIndex, "collaboration", "project")
 var b1 = sampleFrame.Bitmap(10)
 var b2 = sampleFrame.Bitmap(20)
 var b3 = sampleFrame.Bitmap(42)
@@ -55,22 +55,22 @@ var b4 = collabFrame.Bitmap(2)
 
 func TestSchemaDiff(t *testing.T) {
 	schema1 := NewSchema()
-	index11, _ := schema1.Index("diff-index1", nil)
-	index11.Frame("frame1-1", nil)
-	index11.Frame("frame1-2", nil)
-	index12, _ := schema1.Index("diff-index2", nil)
-	index12.Frame("frame2-1", nil)
+	index11, _ := schema1.Index("diff-index1")
+	index11.Frame("frame1-1")
+	index11.Frame("frame1-2")
+	index12, _ := schema1.Index("diff-index2")
+	index12.Frame("frame2-1")
 
 	schema2 := NewSchema()
-	index21, _ := schema2.Index("diff-index1", nil)
-	index21.Frame("another-frame", nil)
+	index21, _ := schema2.Index("diff-index1")
+	index21.Frame("another-frame")
 
 	targetDiff12 := NewSchema()
-	targetIndex1, _ := targetDiff12.Index("diff-index1", nil)
-	targetIndex1.Frame("frame1-1", nil)
-	targetIndex1.Frame("frame1-2", nil)
-	targetIndex2, _ := targetDiff12.Index("diff-index2", nil)
-	targetIndex2.Frame("frame2-1", nil)
+	targetIndex1, _ := targetDiff12.Index("diff-index1")
+	targetIndex1.Frame("frame1-1")
+	targetIndex1.Frame("frame1-2")
+	targetIndex2, _ := targetDiff12.Index("diff-index2")
+	targetIndex2.Frame("frame2-1")
 
 	diff12 := schema1.diff(schema2)
 	if !reflect.DeepEqual(targetDiff12, diff12) {
@@ -80,8 +80,8 @@ func TestSchemaDiff(t *testing.T) {
 
 func TestSchemaIndexes(t *testing.T) {
 	schema1 := NewSchema()
-	index11, _ := schema1.Index("diff-index1", nil)
-	index12, _ := schema1.Index("diff-index2", nil)
+	index11, _ := schema1.Index("diff-index1")
+	index12, _ := schema1.Index("diff-index2")
 	indexes := schema1.Indexes()
 	target := map[string]*Index{
 		"diff-index1": index11,
@@ -94,7 +94,7 @@ func TestSchemaIndexes(t *testing.T) {
 
 func TestSchemaToString(t *testing.T) {
 	schema1 := NewSchema()
-	index, _ := schema1.Index("test-index", nil)
+	index, _ := schema1.Index("test-index")
 	target := fmt.Sprintf(`map[string]*pilosa.Index{"test-index":(*pilosa.Index)(%p)}`, index)
 	if target != schema1.String() {
 		t.Fatalf("%s != %s", target, schema1.String())
@@ -120,32 +120,18 @@ func TestNewIndex(t *testing.T) {
 }
 
 func TestNewIndexWithInvalidName(t *testing.T) {
-	_, err := schema.Index("$FOO", nil)
+	_, err := schema.Index("$FOO")
 	if err == nil {
 		t.Fatal(err)
 	}
 }
 
-func TestNewIndexWithInvalidOptions(t *testing.T) {
-	_, err := schema.Index("foo-invalid-opts", &IndexOptions{}, &IndexOptions{})
-	if err != ErrInvalidIndexOption {
-		t.Fatalf("%v != %v", ErrInvalidQueryOption, err)
-	}
-}
-
 func TestIndexCopy(t *testing.T) {
-	indexOptions := &IndexOptions{
-		ColumnLabel: "columnlabel",
-		TimeQuantum: TimeQuantumMonthDay,
-	}
-	index, err := schema.Index("my-index-4copy", indexOptions)
+	index, err := schema.Index("my-index-4copy")
 	if err != nil {
 		t.Fatal(err)
 	}
-	options := &FrameOptions{
-		RowLabel: "rowlabel",
-	}
-	_, err = index.Frame("my-frame-4copy", options)
+	_, err = index.Frame("my-frame-4copy", TimeQuantumDayHour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,9 +143,9 @@ func TestIndexCopy(t *testing.T) {
 
 func TestIndexFrames(t *testing.T) {
 	schema1 := NewSchema()
-	index11, _ := schema1.Index("diff-index1", nil)
-	frame11, _ := index11.Frame("frame1-1", nil)
-	frame12, _ := index11.Frame("frame1-2", nil)
+	index11, _ := schema1.Index("diff-index1")
+	frame11, _ := index11.Frame("frame1-1")
+	frame12, _ := index11.Frame("frame1-2")
 	frames := index11.Frames()
 	target := map[string]*Frame{
 		"frame1-1": frame11,
@@ -172,19 +158,19 @@ func TestIndexFrames(t *testing.T) {
 
 func TestIndexToString(t *testing.T) {
 	schema1 := NewSchema()
-	index, _ := schema1.Index("test-index", nil)
-	target := fmt.Sprintf(`&pilosa.Index{name:"test-index", options:(*pilosa.IndexOptions)(%p), frames:map[string]*pilosa.Frame{}}`, index.options)
+	index, _ := schema1.Index("test-index")
+	target := fmt.Sprintf(`&pilosa.Index{name:"test-index", frames:map[string]*pilosa.Frame{}}`)
 	if target != index.String() {
 		t.Fatalf("%s != %s", target, index.String())
 	}
 }
 
 func TestFrame(t *testing.T) {
-	frame1, err := sampleIndex.Frame("nonexistent-frame", nil)
+	frame1, err := sampleIndex.Frame("nonexistent-frame")
 	if err != nil {
 		t.Fatal(err)
 	}
-	frame2, err := sampleIndex.Frame("nonexistent-frame", nil)
+	frame2, err := sampleIndex.Frame("nonexistent-frame")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +184,6 @@ func TestFrame(t *testing.T) {
 
 func TestFrameCopy(t *testing.T) {
 	options := &FrameOptions{
-		RowLabel:       "rowlabel",
 		TimeQuantum:    TimeQuantumMonthDayHour,
 		CacheType:      CacheTypeRanked,
 		CacheSize:      123456,
@@ -215,11 +200,11 @@ func TestFrameCopy(t *testing.T) {
 }
 
 func TestNewFrameWithInvalidName(t *testing.T) {
-	index, err := NewIndex("foo", nil)
+	index, err := NewIndex("foo")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = index.Frame("$$INVALIDFRAME$$", nil)
+	_, err = index.Frame("$$INVALIDFRAME$$")
 	if err == nil {
 		t.Fatal("Creating frames with invalid row labels should fail")
 	}
@@ -227,8 +212,8 @@ func TestNewFrameWithInvalidName(t *testing.T) {
 
 func TestFrameToString(t *testing.T) {
 	schema1 := NewSchema()
-	index, _ := schema1.Index("test-index", nil)
-	frame, _ := index.Frame("test-frame", nil)
+	index, _ := schema1.Index("test-index")
+	frame, _ := index.Frame("test-frame")
 	target := fmt.Sprintf(`&pilosa.Frame{name:"test-frame", index:(*pilosa.Index)(%p), options:(*pilosa.FrameOptions)(%p), fields:map[string]*pilosa.RangeField{}}`,
 		frame.index, frame.options)
 	if target != frame.String() {
@@ -238,8 +223,8 @@ func TestFrameToString(t *testing.T) {
 
 func TestFrameFields(t *testing.T) {
 	schema1 := NewSchema()
-	index, _ := schema1.Index("test-index", nil)
-	frame, _ := index.Frame("test-frame", nil)
+	index, _ := schema1.Index("test-index")
+	frame, _ := index.Frame("test-frame")
 	field := frame.Field("some-field")
 	target := map[string]*RangeField{"some-field": field}
 	if !reflect.DeepEqual(target, frame.Fields()) {
@@ -253,7 +238,7 @@ func TestBitmap(t *testing.T) {
 		"Bitmap(rowID=5, frame='sample-frame')",
 		sampleFrame.Bitmap(5))
 	comparePQL(t,
-		"Bitmap(project=10, frame='collaboration')",
+		"Bitmap(rowID=10, frame='collaboration')",
 		collabFrame.Bitmap(10))
 }
 
@@ -261,14 +246,10 @@ func TestBitmapK(t *testing.T) {
 	comparePQL(t,
 		"Bitmap(rowID='myrow', frame='sample-frame')",
 		sampleFrame.BitmapK("myrow"))
-	comparePQL(t,
-		"Bitmap(project='myrow2', frame='collaboration')",
-		collabFrame.BitmapK("myrow2"))
 }
 
 func TestInverseBitmap(t *testing.T) {
 	options := &FrameOptions{
-		RowLabel:       "row_label",
 		InverseEnabled: true,
 	}
 	f1, err := projectIndex.Frame("f1-inversable", options)
@@ -276,13 +257,12 @@ func TestInverseBitmap(t *testing.T) {
 		t.Fatal(err)
 	}
 	comparePQL(t,
-		"Bitmap(user=5, frame='f1-inversable')",
+		"Bitmap(columnID=5, frame='f1-inversable')",
 		f1.InverseBitmap(5))
 }
 
 func TestInverseBitmapK(t *testing.T) {
 	options := &FrameOptions{
-		RowLabel:       "row_label",
 		InverseEnabled: true,
 	}
 	f1, err := projectIndex.Frame("f1-inversable", options)
@@ -290,7 +270,7 @@ func TestInverseBitmapK(t *testing.T) {
 		t.Fatal(err)
 	}
 	comparePQL(t,
-		"Bitmap(user='myrow', frame='f1-inversable')",
+		"Bitmap(columnID='myrow', frame='f1-inversable')",
 		f1.InverseBitmapK("myrow"))
 }
 
@@ -299,7 +279,7 @@ func TestSetBit(t *testing.T) {
 		"SetBit(rowID=5, frame='sample-frame', columnID=10)",
 		sampleFrame.SetBit(5, 10))
 	comparePQL(t,
-		"SetBit(project=10, frame='collaboration', user=20)",
+		"SetBit(rowID=10, frame='collaboration', columnID=20)",
 		collabFrame.SetBit(10, 20))
 }
 
@@ -307,22 +287,19 @@ func TestSetBitK(t *testing.T) {
 	comparePQL(t,
 		"SetBit(rowID='myrow', frame='sample-frame', columnID='mycol')",
 		sampleFrame.SetBitK("myrow", "mycol"))
-	comparePQL(t,
-		"SetBit(project='myrow2', frame='collaboration', user='mycol2')",
-		collabFrame.SetBitK("myrow2", "mycol2"))
 }
 
 func TestSetBitTimestamp(t *testing.T) {
 	timestamp := time.Date(2017, time.April, 24, 12, 14, 0, 0, time.UTC)
 	comparePQL(t,
-		"SetBit(project=10, frame='collaboration', user=20, timestamp='2017-04-24T12:14')",
+		"SetBit(rowID=10, frame='collaboration', columnID=20, timestamp='2017-04-24T12:14')",
 		collabFrame.SetBitTimestamp(10, 20, timestamp))
 }
 
 func TestSetBitTimestampK(t *testing.T) {
 	timestamp := time.Date(2017, time.April, 24, 12, 14, 0, 0, time.UTC)
 	comparePQL(t,
-		"SetBit(project='myrow', frame='collaboration', user='mycol', timestamp='2017-04-24T12:14')",
+		"SetBit(rowID='myrow', frame='collaboration', columnID='mycol', timestamp='2017-04-24T12:14')",
 		collabFrame.SetBitTimestampK("myrow", "mycol", timestamp))
 }
 
@@ -330,23 +307,17 @@ func TestClearBit(t *testing.T) {
 	comparePQL(t,
 		"ClearBit(rowID=5, frame='sample-frame', columnID=10)",
 		sampleFrame.ClearBit(5, 10))
-	comparePQL(t,
-		"ClearBit(project=10, frame='collaboration', user=20)",
-		collabFrame.ClearBit(10, 20))
 }
 
 func TestClearBitK(t *testing.T) {
 	comparePQL(t,
 		"ClearBit(rowID='myrow', frame='sample-frame', columnID='mycol')",
 		sampleFrame.ClearBitK("myrow", "mycol"))
-	comparePQL(t,
-		"ClearBit(project='myrow2', frame='collaboration', user='mycol2')",
-		collabFrame.ClearBitK("myrow2", "mycol2"))
 }
 
 func TestSetFieldValue(t *testing.T) {
 	comparePQL(t,
-		"SetFieldValue(frame='collaboration', user=50, foo=15)",
+		"SetFieldValue(frame='collaboration', columnID=50, foo=15)",
 		collabFrame.SetIntFieldValue(50, "foo", 15))
 }
 
@@ -364,7 +335,7 @@ func TestUnion(t *testing.T) {
 		"Union(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'), Bitmap(rowID=42, frame='sample-frame'))",
 		sampleIndex.Union(b1, b2, b3))
 	comparePQL(t,
-		"Union(Bitmap(rowID=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))",
+		"Union(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=2, frame='collaboration'))",
 		sampleIndex.Union(b1, b4))
 	comparePQL(t,
 		"Union(Bitmap(rowID=10, frame='sample-frame'))",
@@ -382,7 +353,7 @@ func TestIntersect(t *testing.T) {
 		"Intersect(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'), Bitmap(rowID=42, frame='sample-frame'))",
 		sampleIndex.Intersect(b1, b2, b3))
 	comparePQL(t,
-		"Intersect(Bitmap(rowID=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))",
+		"Intersect(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=2, frame='collaboration'))",
 		sampleIndex.Intersect(b1, b4))
 	comparePQL(t,
 		"Intersect(Bitmap(rowID=10, frame='sample-frame'))",
@@ -397,7 +368,7 @@ func TestDifference(t *testing.T) {
 		"Difference(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'), Bitmap(rowID=42, frame='sample-frame'))",
 		sampleIndex.Difference(b1, b2, b3))
 	comparePQL(t,
-		"Difference(Bitmap(rowID=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))",
+		"Difference(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=2, frame='collaboration'))",
 		sampleIndex.Difference(b1, b4))
 	comparePQL(t,
 		"Difference(Bitmap(rowID=10, frame='sample-frame'))",
@@ -412,7 +383,7 @@ func TestXor(t *testing.T) {
 		"Xor(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'), Bitmap(rowID=42, frame='sample-frame'))",
 		sampleIndex.Xor(b1, b2, b3))
 	comparePQL(t,
-		"Xor(Bitmap(rowID=10, frame='sample-frame'), Bitmap(project=2, frame='collaboration'))",
+		"Xor(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=2, frame='collaboration'))",
 		sampleIndex.Xor(b1, b4))
 }
 
@@ -424,16 +395,16 @@ func TestTopN(t *testing.T) {
 		"TopN(frame='sample-frame', n=27, inverse=true)",
 		sampleFrame.InverseTopN(27))
 	comparePQL(t,
-		"TopN(Bitmap(project=3, frame='collaboration'), frame='sample-frame', n=10, inverse=false)",
+		"TopN(Bitmap(rowID=3, frame='collaboration'), frame='sample-frame', n=10, inverse=false)",
 		sampleFrame.BitmapTopN(10, collabFrame.Bitmap(3)))
 	comparePQL(t,
-		"TopN(Bitmap(project=3, frame='collaboration'), frame='sample-frame', n=10, inverse=true)",
+		"TopN(Bitmap(rowID=3, frame='collaboration'), frame='sample-frame', n=10, inverse=true)",
 		sampleFrame.InverseBitmapTopN(10, collabFrame.Bitmap(3)))
 	comparePQL(t,
-		"TopN(Bitmap(project=7, frame='collaboration'), frame='sample-frame', n=12, inverse=false, field='category', filters=[80,81])",
+		"TopN(Bitmap(rowID=7, frame='collaboration'), frame='sample-frame', n=12, inverse=false, field='category', filters=[80,81])",
 		sampleFrame.FilterFieldTopN(12, collabFrame.Bitmap(7), "category", 80, 81))
 	comparePQL(t,
-		"TopN(Bitmap(project=7, frame='collaboration'), frame='sample-frame', n=12, inverse=true, field='category', filters=[80,81])",
+		"TopN(Bitmap(rowID=7, frame='collaboration'), frame='sample-frame', n=12, inverse=true, field='category', filters=[80,81])",
 		sampleFrame.InverseFilterFieldTopN(12, collabFrame.Bitmap(7), "category", 80, 81))
 	comparePQL(t,
 		"TopN(frame='sample-frame', n=12, inverse=true, field='category', filters=[80,81])",
@@ -565,7 +536,7 @@ func TestSetColumnAttrsTest(t *testing.T) {
 		"happy": true,
 	}
 	comparePQL(t,
-		"SetColumnAttrs(user=5, happy=true, quote=\"\\\"Don't worry, be happy\\\"\")",
+		"SetColumnAttrs(columnID=5, happy=true, quote=\"\\\"Don't worry, be happy\\\"\")",
 		projectIndex.SetColumnAttrs(5, attrs))
 }
 
@@ -586,7 +557,7 @@ func TestSetRowAttrsTest(t *testing.T) {
 	}
 
 	comparePQL(t,
-		"SetRowAttrs(project=5, frame='collaboration', active=true, quote=\"\\\"Don't worry, be happy\\\"\")",
+		"SetRowAttrs(rowID=5, frame='collaboration', active=true, quote=\"\\\"Don't worry, be happy\\\"\")",
 		collabFrame.SetRowAttrs(5, attrs))
 }
 
@@ -607,7 +578,7 @@ func TestSetRowAttrsKTest(t *testing.T) {
 	}
 
 	comparePQL(t,
-		"SetRowAttrs(project='foo', frame='collaboration', active=true, quote=\"\\\"Don't worry, be happy\\\"\")",
+		"SetRowAttrs(rowID='foo', frame='collaboration', active=true, quote=\"\\\"Don't worry, be happy\\\"\")",
 		collabFrame.SetRowAttrsK("foo", attrs))
 }
 
@@ -624,7 +595,7 @@ func TestSetRowAttrsKInvalidAttr(t *testing.T) {
 func TestSum(t *testing.T) {
 	b := collabFrame.Bitmap(42)
 	comparePQL(t,
-		"Sum(Bitmap(project=42, frame='collaboration'), frame='sample-frame', field='foo')",
+		"Sum(Bitmap(rowID=42, frame='collaboration'), frame='sample-frame', field='foo')",
 		sampleFrame.Sum(b, "foo"))
 }
 
@@ -651,17 +622,17 @@ func TestBatchQueryWithError(t *testing.T) {
 
 func TestCount(t *testing.T) {
 	q := projectIndex.Count(collabFrame.Bitmap(42))
-	comparePQL(t, "Count(Bitmap(project=42, frame='collaboration'))", q)
+	comparePQL(t, "Count(Bitmap(rowID=42, frame='collaboration'))", q)
 }
 
 func TestRange(t *testing.T) {
 	start := time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2000, time.February, 2, 3, 4, 0, 0, time.UTC)
 	comparePQL(t,
-		"Range(project=10, frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
+		"Range(rowID=10, frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
 		collabFrame.Range(10, start, end))
 	comparePQL(t,
-		"Range(user=10, frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
+		"Range(columnID=10, frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
 		collabFrame.InverseRange(10, start, end))
 }
 
@@ -669,30 +640,11 @@ func TestRangeK(t *testing.T) {
 	start := time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2000, time.February, 2, 3, 4, 0, 0, time.UTC)
 	comparePQL(t,
-		"Range(project='foo', frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
+		"Range(rowID='foo', frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
 		collabFrame.RangeK("foo", start, end))
 	comparePQL(t,
-		"Range(user='foo', frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
+		"Range(columnID='foo', frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
 		collabFrame.InverseRangeK("foo", start, end))
-}
-
-func TestInvalidColumnLabelFails(t *testing.T) {
-	options := &IndexOptions{
-		ColumnLabel: "$$INVALID$$",
-	}
-	_, err := NewIndex("foo", options)
-	if err == nil {
-		t.Fatalf("Setting invalid column label should fail")
-	}
-
-}
-
-func TestInvalidRowLabelFails(t *testing.T) {
-	options := &FrameOptions{RowLabel: "$INVALID$"}
-	_, err := sampleIndex.Frame("foo", options)
-	if err == nil {
-		t.Fatalf("Creating frames with invalid row label should fail")
-	}
 }
 
 func TestFrameOptionsToString(t *testing.T) {
@@ -708,7 +660,7 @@ func TestFrameOptionsToString(t *testing.T) {
 		t.Fatal(err)
 	}
 	jsonString := frame.options.String()
-	targetString := `{"options": {"cacheSize":1000,"cacheType":"ranked","fields":[{"max":100,"min":10,"name":"foo","type":"int"},{"max":1,"min":-1,"name":"bar","type":"int"}],"inverseEnabled":true,"rangeEnabled":true,"rowLabel":"rowID","timeQuantum":"DH"}}`
+	targetString := `{"options": {"cacheSize":1000,"cacheType":"ranked","fields":[{"max":100,"min":10,"name":"foo","type":"int"},{"max":1,"min":-1,"name":"bar","type":"int"}],"inverseEnabled":true,"rangeEnabled":true,"timeQuantum":"DH"}}`
 	if sortedString(targetString) != sortedString(jsonString) {
 		t.Fatalf("`%s` != `%s`", targetString, jsonString)
 	}
@@ -747,8 +699,8 @@ func TestAddInvalidField(t *testing.T) {
 
 func TestCreateIntFieldWithInvalidName(t *testing.T) {
 	client := DefaultClient()
-	index, _ := NewIndex("foo", nil)
-	frame, _ := index.Frame("foo", nil)
+	index, _ := NewIndex("foo")
+	frame, _ := index.Frame("foo")
 	err := client.CreateIntField(frame, "??invalid$$", 10, 20)
 	if err == nil {
 		t.Fatalf("Should have failed")
@@ -773,36 +725,21 @@ func comparePQL(t *testing.T, target string, q PQLQuery) {
 	}
 }
 
-func mustNewIndex(schema *Schema, name string, columnLabel string) (index *Index) {
-	var options *IndexOptions
-	if columnLabel != "" {
-		options = &IndexOptions{ColumnLabel: columnLabel}
-	} else {
-		options = &IndexOptions{}
-	}
-	index, err := schema.Index(name, options)
+func mustNewIndex(schema *Schema, name string) (index *Index) {
+	index, err := schema.Index(name)
 	if err != nil {
 		panic(err)
 	}
 	return
 }
 
-func mustNewFrame(index *Index, name string, rowLabel string) (frame *Frame) {
+func mustNewFrame(index *Index, name string) *Frame {
 	var err error
-	var options *FrameOptions
-	if rowLabel != "" {
-		options = &FrameOptions{RowLabel: rowLabel}
-		if err != nil {
-			panic(err)
-		}
-		frame, err = index.Frame(name, options)
-	} else {
-		frame, err = index.Frame(name, nil)
-	}
+	frame, err := index.Frame(name)
 	if err != nil {
 		panic(err)
 	}
-	return
+	return frame
 }
 
 func sortedString(s string) string {

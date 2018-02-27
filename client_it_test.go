@@ -834,7 +834,7 @@ func TestFetchFragmentNodes(t *testing.T) {
 
 func TestFetchStatus(t *testing.T) {
 	client := getClient()
-	status, err := client.status()
+	status, err := client.Status()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1172,7 +1172,7 @@ func TestStatusFails(t *testing.T) {
 	server := getMockServer(404, nil, 0)
 	defer server.Close()
 	client, _ := NewClient(server.URL, SkipVersionCheck())
-	_, err := client.status()
+	_, err := client.Status()
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -1182,7 +1182,7 @@ func TestStatusUnmarshalFails(t *testing.T) {
 	server := getMockServer(200, []byte("foo"), 3)
 	defer server.Close()
 	client, _ := NewClient(server.URL, SkipVersionCheck())
-	_, err := client.status()
+	_, err := client.Status()
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}

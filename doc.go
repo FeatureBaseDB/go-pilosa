@@ -52,13 +52,13 @@ Usage:
 	}
 
 	// Create an Index instance
-	index, err := schema.Index("repository", nil)
+	index, err := schema.Index("repository")
 	if err != nil {
 		panic(err)
 	}
 
 	// Create a Frame instance
-	stargazer, err := index.Frame("stargazer", nil)
+	stargazer, err := index.Frame("stargazer")
 	if err != nil {
 		panic(err)
 	}
@@ -70,7 +70,7 @@ Usage:
 	}
 
 	// Execute a query
-	response, err := client.Query(stargazer.Bitmap(5), nil)
+	response, err := client.Query(stargazer.Bitmap(5))
 	if err != nil {
 		panic(err)
 	}

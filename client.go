@@ -74,14 +74,18 @@ func DefaultClient() *Client {
 }
 
 // NewClientWithURI creates a client with the given server address.
+// **DEPRECATED** Use `NewClient(uri)` instead.
 func NewClientWithURI(uri *URI) *Client {
+	log.Println("**DEPRECATED** Use `NewClient(uri)` instead.")
 	return NewClientWithCluster(NewClusterWithHost(uri), nil)
 }
 
 // NewClientFromAddresses creates a client for a cluster specified by `hosts`. Each
 // string in `hosts` is the string representation of a URI. E.G
 // node0.pilosa.com:10101
+// **DEPRECATED** Use `NewClient([]string{address1, address2, ...}, option1, option2, ...)` instead.
 func NewClientFromAddresses(addresses []string, options *ClientOptions) (*Client, error) {
+	log.Println("**DEPRECATED** Use `NewClient([]string{address1, address2, ...}, option1, option2, ...)` instead.")
 	uris := make([]*URI, len(addresses))
 	for i, address := range addresses {
 		uri, err := NewURIFromAddress(address)
@@ -97,7 +101,9 @@ func NewClientFromAddresses(addresses []string, options *ClientOptions) (*Client
 
 // NewClientWithCluster creates a client with the given cluster and options.
 // Pass nil for default options.
+// **DEPRECATED** Use `NewClient(cluster, option1, option2, ...)` instead.
 func NewClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
+	log.Println("**DEPRECATED** Use `NewClient([]string{address1, address2, ...}, option1, option2, ...)` instead.")
 	if options == nil {
 		options = &ClientOptions{}
 	}
@@ -922,7 +928,7 @@ func checkServerVersion(version string) error {
 		return fmt.Errorf("Invalid Pilosa server version: %s or minimum server version: %s.", version, pilosaMinVersion)
 	}
 	if !minVersion(serverVersion) {
-		return fmt.Errorf("Pilosa server's version is %s, does not meet the minimum required for this version of the client: %s.", version, pilosaMinVersion)
+		return fmt.Errorf("Pilosa server's version is %s, legacy mode is activated.", version)
 	}
 	return nil
 }

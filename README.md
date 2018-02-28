@@ -16,7 +16,6 @@ Go client for Pilosa high performance distributed bitmap index.
 * **v0.8.1** (2017-02-28)
     * Compatible with Pilosa 0.8.x and 0.9.x.
     * Checks the server version for Pilosa server compatibility. Passing `SkipVersionCheck()` to `NewClient` disables that.
-    * Supports string row and column IDs. This feature requires Pilosa Enterprise.  
     * Added `Equals`, `NotEquals` and `NotNull` field operations.
     * **Deprecation** `TimeQuantum` for `IndexOptions`. Use `TimeQuantum` of individual `FrameOptions` instead.
     * **Deprecation** `IndexOptions` struct is deprecated and will be removed in the future.

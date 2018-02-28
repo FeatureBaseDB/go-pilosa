@@ -1,7 +1,6 @@
 # Go Client for Pilosa
 
-<a href="https://github.com/pilosa"><img src="https://img.shields.io/badge/pilosa-v0.8.0-blue.svg"></a>
-<a href="https://github.com/pilosa"><img src="https://img.shields.io/badge/pilosa-v0.9.0-blue.svg"></a>
+<a href="https://github.com/pilosa"><img src="https://img.shields.io/badge/pilosa-master-blue.svg"></a>
 <a href="https://godoc.org/github.com/pilosa/go-pilosa"><img src="https://godoc.org/github.com/pilosa/go-pilosa?status.svg" alt="GoDoc"></a>
 <a href="https://travis-ci.com/pilosa/go-pilosa"><img src="https://api.travis-ci.com/pilosa/go-pilosa.svg?token=vqssvEWV3KAhu8oVFx9s&branch=master"></a>
 <a href="https://goreportcard.com/report/github.com/pilosa/go-pilosa"><img src="https://goreportcard.com/badge/github.com/pilosa/go-pilosa?updated=1"></a>
@@ -13,8 +12,8 @@ Go client for Pilosa high performance distributed bitmap index.
 
 ## Change Log
 
-* **v0.8.1** (2017-02-28)
-    * Compatible with Pilosa 0.8.x and 0.9.x.
+* **Next**
+    * Compatible with Pilosa master, **not compatible with Pilosa 0.8.x releases**.
     * Checks the server version for Pilosa server compatibility. Passing `SkipVersionCheck()` to `NewClient` disables that.
     * Added `Equals`, `NotEquals` and `NotNull` field operations.
     * **Deprecation** `TimeQuantum` for `IndexOptions`. Use `TimeQuantum` of individual `FrameOptions` instead.

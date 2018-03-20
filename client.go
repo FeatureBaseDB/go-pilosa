@@ -64,8 +64,9 @@ type Client struct {
 	versionChecked bool
 	// User-Agent header cache. Not used until cluster-resize support branch is merged
 	// and user agent is saved here in NewClient
-	userAgent  string
-	legacyMode bool
+	userAgent         string
+	legacyMode        bool
+	fragmentNodeCache map[string][]fragmentNode
 }
 
 // DefaultClient creates a client with the default address and options.
@@ -105,10 +106,11 @@ func NewClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 		options = &ClientOptions{}
 	}
 	return &Client{
-		cluster:        cluster,
-		client:         newHTTPClient(options.withDefaults()),
-		versionChecked: options.SkipVersionCheck,
-		legacyMode:     options.LegacyMode,
+		cluster:           cluster,
+		client:            newHTTPClient(options.withDefaults()),
+		versionChecked:    options.SkipVersionCheck,
+		legacyMode:        options.LegacyMode,
+		fragmentNodeCache: map[string][]fragmentNode{},
 	}
 }
 
@@ -592,6 +594,10 @@ func (c *Client) importValuesK(indexName string, frameName string, fieldName str
 }
 
 func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentNode, error) {
+	key := fmt.Sprintf("%s-%d", indexName, slice)
+	if nodes, ok := c.fragmentNodeCache[key]; ok {
+		return nodes, nil
+	}
 	path := fmt.Sprintf("/fragment/nodes?slice=%d&index=%s", slice, indexName)
 	_, body, err := c.httpRequest("GET", path, []byte{}, nil)
 	if err != nil {
@@ -623,6 +629,7 @@ func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentN
 			fragmentNodes = append(fragmentNodes, nodeURI.URI)
 		}
 	}
+	c.fragmentNodeCache[key] = fragmentNodes
 	return fragmentNodes, nil
 }
 

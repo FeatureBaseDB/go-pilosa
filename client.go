@@ -42,8 +42,10 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/blang/semver"
@@ -64,9 +66,13 @@ type Client struct {
 	versionChecked bool
 	// User-Agent header cache. Not used until cluster-resize support branch is merged
 	// and user agent is saved here in NewClient
-	userAgent         string
-	legacyMode        bool
-	fragmentNodeCache map[string][]fragmentNode
+	userAgent              string
+	legacyMode             bool
+	importThreadCount      int
+	sliceWidth             uint64
+	fragmentNodeCache      map[string][]fragmentNode
+	fragmentNodeCacheMutex *sync.RWMutex
+	importManager          *bitImportManager
 }
 
 // DefaultClient creates a client with the default address and options.
@@ -105,12 +111,16 @@ func NewClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 	if options == nil {
 		options = &ClientOptions{}
 	}
+	options = options.withDefaults()
 	return &Client{
-		cluster:           cluster,
-		client:            newHTTPClient(options.withDefaults()),
-		versionChecked:    options.SkipVersionCheck,
-		legacyMode:        options.LegacyMode,
-		fragmentNodeCache: map[string][]fragmentNode{},
+		cluster:                cluster,
+		client:                 newHTTPClient(options),
+		versionChecked:         options.SkipVersionCheck,
+		legacyMode:             options.LegacyMode,
+		fragmentNodeCache:      map[string][]fragmentNode{},
+		importThreadCount:      options.importThreadCount,
+		sliceWidth:             options.sliceWidth,
+		fragmentNodeCacheMutex: &sync.RWMutex{},
 	}
 }
 
@@ -372,44 +382,14 @@ func (c *Client) Schema() (*Schema, error) {
 
 // ImportFrame imports bits from the given CSV iterator.
 func (c *Client) ImportFrame(frame *Frame, bitIterator BitIterator, batchSize uint) error {
-	linesLeft := true
-	bitGroup := map[uint64][]Bit{}
-	var currentBatchSize uint
-	indexName := frame.index.name
-	frameName := frame.name
+	return c.ImportFrameWithStatus(frame, bitIterator, batchSize, nil)
+}
 
-	for linesLeft {
-		bit, err := bitIterator.NextBit()
-		if err == io.EOF {
-			linesLeft = false
-		} else if err != nil {
-			return err
-		} else {
-			slice := bit.ColumnID / sliceWidth
-			if sliceArray, ok := bitGroup[slice]; ok {
-				bitGroup[slice] = append(sliceArray, bit)
-			} else {
-				bitGroup[slice] = []Bit{bit}
-			}
-		}
-
-		currentBatchSize++
-		// if the batch is full or there's no line left, start importing bits
-		if currentBatchSize >= batchSize || !linesLeft {
-			for slice, bits := range bitGroup {
-				if len(bits) > 0 {
-					err := c.importBits(indexName, frameName, slice, bits)
-					if err != nil {
-						return err
-					}
-				}
-			}
-			bitGroup = map[uint64][]Bit{}
-			currentBatchSize = 0
-		}
+func (c *Client) ImportFrameWithStatus(frame *Frame, bitIterator BitIterator, batchSize uint, statusChan chan<- ImportStatusUpdate) error {
+	if c.importManager == nil {
+		c.importManager = newBitImportManager(c)
 	}
-
-	return nil
+	return c.importManager.Run(frame, bitIterator, int(batchSize), statusChan)
 }
 
 // ImportFrameK imports bits from the given iterator.
@@ -595,7 +575,10 @@ func (c *Client) importValuesK(indexName string, frameName string, fieldName str
 
 func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentNode, error) {
 	key := fmt.Sprintf("%s-%d", indexName, slice)
-	if nodes, ok := c.fragmentNodeCache[key]; ok {
+	c.fragmentNodeCacheMutex.RLock()
+	nodes, ok := c.fragmentNodeCache[key]
+	c.fragmentNodeCacheMutex.RUnlock()
+	if ok {
 		return nodes, nil
 	}
 	path := fmt.Sprintf("/fragment/nodes?slice=%d&index=%s", slice, indexName)
@@ -629,7 +612,9 @@ func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentN
 			fragmentNodes = append(fragmentNodes, nodeURI.URI)
 		}
 	}
+	c.fragmentNodeCacheMutex.Lock()
 	c.fragmentNodeCache[key] = fragmentNodes
+	c.fragmentNodeCacheMutex.Unlock()
 	return fragmentNodes, nil
 }
 
@@ -1074,13 +1059,15 @@ func valsToImportValueRequestK(indexName string, frameName string, fieldName str
 
 // ClientOptions control the properties of client connection to the server.
 type ClientOptions struct {
-	SocketTimeout    time.Duration
-	ConnectTimeout   time.Duration
-	PoolSizePerRoute int
-	TotalPoolSize    int
-	TLSConfig        *tls.Config
-	SkipVersionCheck bool
-	LegacyMode       bool
+	SocketTimeout     time.Duration
+	ConnectTimeout    time.Duration
+	PoolSizePerRoute  int
+	TotalPoolSize     int
+	TLSConfig         *tls.Config
+	SkipVersionCheck  bool
+	LegacyMode        bool
+	importThreadCount int
+	sliceWidth        uint64
 }
 
 func (co *ClientOptions) addOptions(options ...ClientOption) error {
@@ -1136,6 +1123,7 @@ func TLSConfig(config *tls.Config) ClientOption {
 	}
 }
 
+// SkipVersionCheck disables version checking.
 func SkipVersionCheck() ClientOption {
 	return func(options *ClientOptions) error {
 		options.SkipVersionCheck = true
@@ -1143,10 +1131,29 @@ func SkipVersionCheck() ClientOption {
 	}
 }
 
+// LegacyMode enables or disables compatibility for  0.8.8 < Pilosa server version < 0.9.
 func LegacyMode(enable bool) ClientOption {
 	return func(options *ClientOptions) error {
 		options.LegacyMode = enable
 		options.SkipVersionCheck = true
+		return nil
+	}
+}
+
+// ImportThreadCount sets the number of threads to use while importing bits.
+func ImportThreadCount(threadCount int) ClientOption {
+	return func(options *ClientOptions) error {
+		options.importThreadCount = threadCount
+		return nil
+	}
+}
+
+// SliceWidth sets the slice width.
+// This option should not be used without through knowledge of the Pilosa server.
+// **EXPERIMENTAL**
+func SliceWidth(sliceWidth uint64) ClientOption {
+	return func(options *ClientOptions) error {
+		options.sliceWidth = sliceWidth
 		return nil
 	}
 }
@@ -1174,6 +1181,12 @@ func (co *ClientOptions) withDefaults() (updated *ClientOptions) {
 	}
 	if updated.TLSConfig == nil {
 		updated.TLSConfig = &tls.Config{}
+	}
+	if updated.importThreadCount <= 0 {
+		updated.importThreadCount = runtime.NumCPU()
+	}
+	if updated.sliceWidth == 0 {
+		updated.sliceWidth = 1048576
 	}
 	return
 }

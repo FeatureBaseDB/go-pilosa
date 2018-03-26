@@ -82,17 +82,32 @@ func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan Bit, e
 		return nil
 	}
 
+	largestSlice := func() uint64 {
+		largest := 0
+		resultSlice := uint64(0)
+		for slice, bits := range batchForSlice {
+			if len(bits) > largest {
+				largest = len(bits)
+				resultSlice = slice
+			}
+		}
+		return resultSlice
+	}
+
 	var err error
+	tic := time.Now()
 
 	for bit := range bitChan {
 		slice := bit.ColumnID / sliceWidth
 		batchForSlice[slice] = append(batchForSlice[slice], bit)
-		if len(batchForSlice[slice]) >= batchSize {
+		if time.Since(tic) >= 100*time.Millisecond {
+			slice := largestSlice()
 			err = importBits(slice, batchForSlice[slice])
 			if err != nil {
 				break
 			}
 			batchForSlice[slice] = nil
+			tic = time.Now()
 		}
 	}
 

@@ -2,6 +2,7 @@ package pilosa
 
 import (
 	"io"
+	"sort"
 	"time"
 )
 
@@ -66,6 +67,7 @@ func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan Bit, e
 
 	importBits := func(slice uint64, bits []Bit) error {
 		tic := time.Now()
+		sort.Sort(bitsForSort(bits))
 		err := client.importBits(indexName, frameName, slice, bits)
 		if err != nil {
 			return err
@@ -96,17 +98,32 @@ func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan Bit, e
 
 	var err error
 	tic := time.Now()
+	var strategy ImportWorkerStrategy = TimeoutImport
+	bitCount := 0
+	tt := 100 * time.Millisecond
 
 	for bit := range bitChan {
+		bitCount += 1
 		slice := bit.ColumnID / sliceWidth
 		batchForSlice[slice] = append(batchForSlice[slice], bit)
-		if time.Since(tic) >= 100*time.Millisecond {
+		if strategy == BatchImport && bitCount >= batchSize {
+			for slice, bits := range batchForSlice {
+				err = importBits(slice, bits)
+				if err != nil {
+					break
+				}
+				batchForSlice[slice] = nil
+			}
+			bitCount = 0
+			tic = time.Now()
+		} else if strategy == TimeoutImport && time.Since(tic) >= tt {
 			slice := largestSlice()
 			err = importBits(slice, batchForSlice[slice])
 			if err != nil {
 				break
 			}
 			batchForSlice[slice] = nil
+			bitCount = 0
 			tic = time.Now()
 		}
 	}
@@ -135,3 +152,11 @@ type ImportStatusUpdate struct {
 	ImportedCount int
 	Time          time.Duration
 }
+
+type ImportWorkerStrategy int
+
+const (
+	DefaultImport ImportWorkerStrategy = iota
+	BatchImport
+	TimeoutImport
+)

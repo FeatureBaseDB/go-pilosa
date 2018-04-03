@@ -507,7 +507,6 @@ func (c *Client) ImportValueFrameK(frame *Frame, field string, valueIterator Val
 }
 
 func (c *Client) importBits(indexName string, frameName string, slice uint64, bits []Bit) error {
-	sort.Sort(bitsForSort(bits))
 	nodes, err := c.fetchFragmentNodes(indexName, slice)
 	if err != nil {
 		return errors.Wrap(err, "fetching fragment nodes")

@@ -133,6 +133,14 @@ func TestNewClientWithInvalidAddr(t *testing.T) {
 	}
 }
 
+func TestDeprecatedClientOptions(t *testing.T) {
+	// The code below is only for coverage
+	_, err := NewClient("https://does.not.exist:12345", SkipVersionCheck(), LegacyMode(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func ClientOptionErr(int) ClientOption {
 	return func(*ClientOptions) error {
 		return errors.New("Some error")
@@ -213,7 +221,6 @@ func TestQueryOptionsError(t *testing.T) {
 	if err == nil {
 		t.Fatalf("should have failed")
 	}
-
 }
 
 func QueryOptionErr(int) QueryOption {

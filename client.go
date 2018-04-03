@@ -816,7 +816,6 @@ type ClientOptions struct {
 	PoolSizePerRoute int
 	TotalPoolSize    int
 	TLSConfig        *tls.Config
-	SkipVersionCheck bool
 }
 
 func (co *ClientOptions) addOptions(options ...ClientOption) error {
@@ -963,6 +962,22 @@ func ExcludeAttrs(enable bool) QueryOption {
 func ExcludeBits(enable bool) QueryOption {
 	return func(options *QueryOptions) error {
 		options.ExcludeBits = enable
+		return nil
+	}
+}
+
+// SkipVersionCheck disables version checking
+// *DEPRECATED*
+func SkipVersionCheck() ClientOption {
+	return func(options *ClientOptions) error {
+		return nil
+	}
+}
+
+// LegacyMode enables legacy mode
+// *DEPRECATED*
+func LegacyMode(enable bool) ClientOption {
+	return func(options *ClientOptions) error {
 		return nil
 	}
 }

@@ -12,7 +12,7 @@ before_install:
   - go get -u github.com/golang/dep/cmd/dep
   - dep ensure
 script:
-  - ./pilosa-master-linux-amd64/pilosa server --metric.diagnostics=false -b https://:20101 -d https_data --tls.skip-verify --tls.certificate test.pilosa.local.crt --tls.key test.pilosa.local.key --cluster.type static &
+  - ./pilosa-master-linux-amd64/pilosa server --metric.diagnostics=false -b https://:20101 -d https_data --tls.skip-verify --tls.certificate test.pilosa.local.crt --tls.key test.pilosa.local.key --cluster.disabled static &
   - PILOSA_BIND="https://:20101" make test-all
   - pkill pilosa
   - ./pilosa-master-linux-amd64/pilosa server --metric.diagnostics=false -d http_data &

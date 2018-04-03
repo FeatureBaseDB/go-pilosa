@@ -35,6 +35,7 @@ package pilosa
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"reflect"
 	"testing"
 
@@ -235,4 +236,85 @@ func TestMarshalResults(t *testing.T) {
 		}
 	}
 
+}
+
+func TestUnknownQueryResultType(t *testing.T) {
+	result := &pbuf.QueryResult{
+		Type: 999,
+	}
+	_, err := newQueryResultFromInternal(result)
+	if err != ErrUnknownType {
+		t.Fatalf("Should have failed with ErrUnknownType")
+	}
+}
+
+func TestTopNResult(t *testing.T) {
+	result := TopNResult{
+		CountResultItem{ID: 100, Count: 10},
+	}
+	expectResult(t, result, QueryResultTypePairs, BitmapResult{}, []CountResultItem{{100, "", 10}}, 0, 0, false)
+}
+
+func TestBitmapResult(t *testing.T) {
+	result := BitmapResult{
+		Bits: []uint64{1, 2, 3},
+	}
+	targetBmp := BitmapResult{
+		Bits: []uint64{1, 2, 3},
+	}
+	expectResult(t, result, QueryResultTypeBitmap, targetBmp, nil, 0, 0, false)
+}
+
+func TestBitmapResultNilBits(t *testing.T) {
+	result := BitmapResult{
+		Bits: nil,
+	}
+	_, err := result.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSumCountResult(t *testing.T) {
+	result := SumCountResult{
+		SumValue:   100,
+		CountValue: 50,
+	}
+	expectResult(t, result, QueryResultTypeSumCount, BitmapResult{}, nil, 100, 50, false)
+}
+
+func TestIntResult(t *testing.T) {
+	result := IntResult(11)
+	expectResult(t, result, QueryResultTypeUint64, BitmapResult{}, nil, 0, 11, false)
+}
+
+func TestBoolResult(t *testing.T) {
+	result := BoolResult(true)
+	expectResult(t, result, QueryResultTypeBool, BitmapResult{}, nil, 0, 0, true)
+}
+
+func TestNilResult(t *testing.T) {
+	result := NilResult{}
+	expectResult(t, result, QueryResultTypeNil, BitmapResult{}, nil, 0, 0, false)
+}
+
+func expectResult(t *testing.T, r QueryResult, resultType uint32, bmp BitmapResult, countItems []CountResultItem, sum int64, count int64, changed bool) {
+	if resultType != r.Type() {
+		log.Fatalf("Result type: %d != %d", resultType, r.Type())
+	}
+	if !reflect.DeepEqual(bmp, r.Bitmap()) {
+		log.Fatalf("Bitmap: %v != %v", bmp, r.Bitmap())
+	}
+	if !reflect.DeepEqual(countItems, r.CountItems()) {
+		log.Fatalf("Count items: %v != %v", countItems, r.CountItems())
+	}
+	if count != r.Count() {
+		log.Fatalf("Count: %d != %d", count, r.Count())
+	}
+	if sum != r.Sum() {
+		log.Fatalf("Sum: %d != %d", sum, r.Sum())
+	}
+	if changed != r.Changed() {
+		log.Fatalf("Changed: %v != %v", changed, r.Changed())
+	}
 }

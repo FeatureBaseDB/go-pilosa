@@ -14,7 +14,6 @@ Go client for Pilosa high performance distributed bitmap index.
 
 * **Next**
     * Compatible with Pilosa master, **not compatible with Pilosa 0.8.x releases**.
-    * Checks the server version for Pilosa server compatibility. Passing `SkipVersionCheck()` to `NewClient` disables that.
     * Added `Equals`, `NotEquals` and `NotNull` field operations.
     * **Deprecation** `TimeQuantum` for `IndexOptions`. Use `TimeQuantum` of individual `FrameOptions` instead.
     * **Deprecation** `IndexOptions` struct is deprecated and will be removed in the future.

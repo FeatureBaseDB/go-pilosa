@@ -235,16 +235,16 @@ func TestFrameFields(t *testing.T) {
 
 func TestBitmap(t *testing.T) {
 	comparePQL(t,
-		"Bitmap(rowID=5, frame='sample-frame')",
+		"Bitmap(row=5, frame='sample-frame')",
 		sampleFrame.Bitmap(5))
 	comparePQL(t,
-		"Bitmap(rowID=10, frame='collaboration')",
+		"Bitmap(row=10, frame='collaboration')",
 		collabFrame.Bitmap(10))
 }
 
 func TestBitmapK(t *testing.T) {
 	comparePQL(t,
-		"Bitmap(rowID='myrow', frame='sample-frame')",
+		"Bitmap(row='myrow', frame='sample-frame')",
 		sampleFrame.BitmapK("myrow"))
 }
 
@@ -257,7 +257,7 @@ func TestInverseBitmap(t *testing.T) {
 		t.Fatal(err)
 	}
 	comparePQL(t,
-		"Bitmap(columnID=5, frame='f1-inversable')",
+		"Bitmap(col=5, frame='f1-inversable')",
 		f1.InverseBitmap(5))
 }
 
@@ -270,75 +270,75 @@ func TestInverseBitmapK(t *testing.T) {
 		t.Fatal(err)
 	}
 	comparePQL(t,
-		"Bitmap(columnID='myrow', frame='f1-inversable')",
+		"Bitmap(col='myrow', frame='f1-inversable')",
 		f1.InverseBitmapK("myrow"))
 }
 
 func TestSetBit(t *testing.T) {
 	comparePQL(t,
-		"SetBit(rowID=5, frame='sample-frame', columnID=10)",
+		"SetBit(row=5, frame='sample-frame', col=10)",
 		sampleFrame.SetBit(5, 10))
 	comparePQL(t,
-		"SetBit(rowID=10, frame='collaboration', columnID=20)",
+		"SetBit(row=10, frame='collaboration', col=20)",
 		collabFrame.SetBit(10, 20))
 }
 
 func TestSetBitK(t *testing.T) {
 	comparePQL(t,
-		"SetBit(rowID='myrow', frame='sample-frame', columnID='mycol')",
+		"SetBit(row='myrow', frame='sample-frame', col='mycol')",
 		sampleFrame.SetBitK("myrow", "mycol"))
 }
 
 func TestSetBitTimestamp(t *testing.T) {
 	timestamp := time.Date(2017, time.April, 24, 12, 14, 0, 0, time.UTC)
 	comparePQL(t,
-		"SetBit(rowID=10, frame='collaboration', columnID=20, timestamp='2017-04-24T12:14')",
+		"SetBit(row=10, frame='collaboration', col=20, timestamp='2017-04-24T12:14')",
 		collabFrame.SetBitTimestamp(10, 20, timestamp))
 }
 
 func TestSetBitTimestampK(t *testing.T) {
 	timestamp := time.Date(2017, time.April, 24, 12, 14, 0, 0, time.UTC)
 	comparePQL(t,
-		"SetBit(rowID='myrow', frame='collaboration', columnID='mycol', timestamp='2017-04-24T12:14')",
+		"SetBit(row='myrow', frame='collaboration', col='mycol', timestamp='2017-04-24T12:14')",
 		collabFrame.SetBitTimestampK("myrow", "mycol", timestamp))
 }
 
 func TestClearBit(t *testing.T) {
 	comparePQL(t,
-		"ClearBit(rowID=5, frame='sample-frame', columnID=10)",
+		"ClearBit(row=5, frame='sample-frame', col=10)",
 		sampleFrame.ClearBit(5, 10))
 }
 
 func TestClearBitK(t *testing.T) {
 	comparePQL(t,
-		"ClearBit(rowID='myrow', frame='sample-frame', columnID='mycol')",
+		"ClearBit(row='myrow', frame='sample-frame', col='mycol')",
 		sampleFrame.ClearBitK("myrow", "mycol"))
 }
 
 func TestSetFieldValue(t *testing.T) {
 	comparePQL(t,
-		"SetFieldValue(frame='collaboration', columnID=50, foo=15)",
+		"SetFieldValue(frame='collaboration', col=50, foo=15)",
 		collabFrame.SetIntFieldValue(50, "foo", 15))
 }
 
 func TestSetValueK(t *testing.T) {
 	comparePQL(t,
-		"SetFieldValue(frame='sample-frame', columnID='mycol', sample-field=22)",
+		"SetFieldValue(frame='sample-frame', col='mycol', sample-field=22)",
 		sampleField.SetIntValueK("mycol", 22))
 }
 
 func TestUnion(t *testing.T) {
 	comparePQL(t,
-		"Union(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'))",
+		"Union(Bitmap(row=10, frame='sample-frame'), Bitmap(row=20, frame='sample-frame'))",
 		sampleIndex.Union(b1, b2))
 	comparePQL(t,
-		"Union(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'), Bitmap(rowID=42, frame='sample-frame'))",
+		"Union(Bitmap(row=10, frame='sample-frame'), Bitmap(row=20, frame='sample-frame'), Bitmap(row=42, frame='sample-frame'))",
 		sampleIndex.Union(b1, b2, b3))
 	comparePQL(t,
-		"Union(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=2, frame='collaboration'))",
+		"Union(Bitmap(row=10, frame='sample-frame'), Bitmap(row=2, frame='collaboration'))",
 		sampleIndex.Union(b1, b4))
 	comparePQL(t,
-		"Union(Bitmap(rowID=10, frame='sample-frame'))",
+		"Union(Bitmap(row=10, frame='sample-frame'))",
 		sampleIndex.Union(b1))
 	comparePQL(t,
 		"Union()",
@@ -347,43 +347,43 @@ func TestUnion(t *testing.T) {
 
 func TestIntersect(t *testing.T) {
 	comparePQL(t,
-		"Intersect(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'))",
+		"Intersect(Bitmap(row=10, frame='sample-frame'), Bitmap(row=20, frame='sample-frame'))",
 		sampleIndex.Intersect(b1, b2))
 	comparePQL(t,
-		"Intersect(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'), Bitmap(rowID=42, frame='sample-frame'))",
+		"Intersect(Bitmap(row=10, frame='sample-frame'), Bitmap(row=20, frame='sample-frame'), Bitmap(row=42, frame='sample-frame'))",
 		sampleIndex.Intersect(b1, b2, b3))
 	comparePQL(t,
-		"Intersect(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=2, frame='collaboration'))",
+		"Intersect(Bitmap(row=10, frame='sample-frame'), Bitmap(row=2, frame='collaboration'))",
 		sampleIndex.Intersect(b1, b4))
 	comparePQL(t,
-		"Intersect(Bitmap(rowID=10, frame='sample-frame'))",
+		"Intersect(Bitmap(row=10, frame='sample-frame'))",
 		sampleIndex.Intersect(b1))
 }
 
 func TestDifference(t *testing.T) {
 	comparePQL(t,
-		"Difference(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'))",
+		"Difference(Bitmap(row=10, frame='sample-frame'), Bitmap(row=20, frame='sample-frame'))",
 		sampleIndex.Difference(b1, b2))
 	comparePQL(t,
-		"Difference(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'), Bitmap(rowID=42, frame='sample-frame'))",
+		"Difference(Bitmap(row=10, frame='sample-frame'), Bitmap(row=20, frame='sample-frame'), Bitmap(row=42, frame='sample-frame'))",
 		sampleIndex.Difference(b1, b2, b3))
 	comparePQL(t,
-		"Difference(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=2, frame='collaboration'))",
+		"Difference(Bitmap(row=10, frame='sample-frame'), Bitmap(row=2, frame='collaboration'))",
 		sampleIndex.Difference(b1, b4))
 	comparePQL(t,
-		"Difference(Bitmap(rowID=10, frame='sample-frame'))",
+		"Difference(Bitmap(row=10, frame='sample-frame'))",
 		sampleIndex.Difference(b1))
 }
 
 func TestXor(t *testing.T) {
 	comparePQL(t,
-		"Xor(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'))",
+		"Xor(Bitmap(row=10, frame='sample-frame'), Bitmap(row=20, frame='sample-frame'))",
 		sampleIndex.Xor(b1, b2))
 	comparePQL(t,
-		"Xor(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=20, frame='sample-frame'), Bitmap(rowID=42, frame='sample-frame'))",
+		"Xor(Bitmap(row=10, frame='sample-frame'), Bitmap(row=20, frame='sample-frame'), Bitmap(row=42, frame='sample-frame'))",
 		sampleIndex.Xor(b1, b2, b3))
 	comparePQL(t,
-		"Xor(Bitmap(rowID=10, frame='sample-frame'), Bitmap(rowID=2, frame='collaboration'))",
+		"Xor(Bitmap(row=10, frame='sample-frame'), Bitmap(row=2, frame='collaboration'))",
 		sampleIndex.Xor(b1, b4))
 }
 
@@ -395,16 +395,16 @@ func TestTopN(t *testing.T) {
 		"TopN(frame='sample-frame', n=27, inverse=true)",
 		sampleFrame.InverseTopN(27))
 	comparePQL(t,
-		"TopN(Bitmap(rowID=3, frame='collaboration'), frame='sample-frame', n=10, inverse=false)",
+		"TopN(Bitmap(row=3, frame='collaboration'), frame='sample-frame', n=10, inverse=false)",
 		sampleFrame.BitmapTopN(10, collabFrame.Bitmap(3)))
 	comparePQL(t,
-		"TopN(Bitmap(rowID=3, frame='collaboration'), frame='sample-frame', n=10, inverse=true)",
+		"TopN(Bitmap(row=3, frame='collaboration'), frame='sample-frame', n=10, inverse=true)",
 		sampleFrame.InverseBitmapTopN(10, collabFrame.Bitmap(3)))
 	comparePQL(t,
-		"TopN(Bitmap(rowID=7, frame='collaboration'), frame='sample-frame', n=12, inverse=false, field='category', filters=[80,81])",
+		"TopN(Bitmap(row=7, frame='collaboration'), frame='sample-frame', n=12, inverse=false, field='category', filters=[80,81])",
 		sampleFrame.FilterFieldTopN(12, collabFrame.Bitmap(7), "category", 80, 81))
 	comparePQL(t,
-		"TopN(Bitmap(rowID=7, frame='collaboration'), frame='sample-frame', n=12, inverse=true, field='category', filters=[80,81])",
+		"TopN(Bitmap(row=7, frame='collaboration'), frame='sample-frame', n=12, inverse=true, field='category', filters=[80,81])",
 		sampleFrame.InverseFilterFieldTopN(12, collabFrame.Bitmap(7), "category", 80, 81))
 	comparePQL(t,
 		"TopN(frame='sample-frame', n=12, inverse=true, field='category', filters=[80,81])",
@@ -461,7 +461,7 @@ func TestFieldBetween(t *testing.T) {
 
 func TestFieldSum(t *testing.T) {
 	comparePQL(t,
-		"Sum(Bitmap(rowID=10, frame='sample-frame'), frame='sample-frame', field='foo')",
+		"Sum(Bitmap(row=10, frame='sample-frame'), frame='sample-frame', field='foo')",
 		sampleFrame.Field("foo").Sum(sampleFrame.Bitmap(10)))
 	comparePQL(t,
 		"Sum(frame='sample-frame', field='foo')",
@@ -470,7 +470,7 @@ func TestFieldSum(t *testing.T) {
 
 func TestFieldBSetIntValue(t *testing.T) {
 	comparePQL(t,
-		"SetFieldValue(frame='sample-frame', columnID=10, foo=20)",
+		"SetFieldValue(frame='sample-frame', col=10, foo=20)",
 		sampleFrame.Field("foo").SetIntValue(10, 20))
 }
 
@@ -536,7 +536,7 @@ func TestSetColumnAttrsTest(t *testing.T) {
 		"happy": true,
 	}
 	comparePQL(t,
-		"SetColumnAttrs(columnID=5, happy=true, quote=\"\\\"Don't worry, be happy\\\"\")",
+		"SetColumnAttrs(col=5, happy=true, quote=\"\\\"Don't worry, be happy\\\"\")",
 		projectIndex.SetColumnAttrs(5, attrs))
 }
 
@@ -557,7 +557,7 @@ func TestSetRowAttrsTest(t *testing.T) {
 	}
 
 	comparePQL(t,
-		"SetRowAttrs(rowID=5, frame='collaboration', active=true, quote=\"\\\"Don't worry, be happy\\\"\")",
+		"SetRowAttrs(row=5, frame='collaboration', active=true, quote=\"\\\"Don't worry, be happy\\\"\")",
 		collabFrame.SetRowAttrs(5, attrs))
 }
 
@@ -578,7 +578,7 @@ func TestSetRowAttrsKTest(t *testing.T) {
 	}
 
 	comparePQL(t,
-		"SetRowAttrs(rowID='foo', frame='collaboration', active=true, quote=\"\\\"Don't worry, be happy\\\"\")",
+		"SetRowAttrs(row='foo', frame='collaboration', active=true, quote=\"\\\"Don't worry, be happy\\\"\")",
 		collabFrame.SetRowAttrsK("foo", attrs))
 }
 
@@ -595,7 +595,7 @@ func TestSetRowAttrsKInvalidAttr(t *testing.T) {
 func TestSum(t *testing.T) {
 	b := collabFrame.Bitmap(42)
 	comparePQL(t,
-		"Sum(Bitmap(rowID=42, frame='collaboration'), frame='sample-frame', field='foo')",
+		"Sum(Bitmap(row=42, frame='collaboration'), frame='sample-frame', field='foo')",
 		sampleFrame.Sum(b, "foo"))
 }
 
@@ -609,7 +609,7 @@ func TestBatchQuery(t *testing.T) {
 	if q.Error() != nil {
 		t.Fatalf("Error should be nil")
 	}
-	comparePQL(t, "Bitmap(rowID=44, frame='sample-frame')Bitmap(rowID=10101, frame='sample-frame')", q)
+	comparePQL(t, "Bitmap(row=44, frame='sample-frame')Bitmap(row=10101, frame='sample-frame')", q)
 }
 
 func TestBatchQueryWithError(t *testing.T) {
@@ -622,17 +622,17 @@ func TestBatchQueryWithError(t *testing.T) {
 
 func TestCount(t *testing.T) {
 	q := projectIndex.Count(collabFrame.Bitmap(42))
-	comparePQL(t, "Count(Bitmap(rowID=42, frame='collaboration'))", q)
+	comparePQL(t, "Count(Bitmap(row=42, frame='collaboration'))", q)
 }
 
 func TestRange(t *testing.T) {
 	start := time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2000, time.February, 2, 3, 4, 0, 0, time.UTC)
 	comparePQL(t,
-		"Range(rowID=10, frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
+		"Range(row=10, frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
 		collabFrame.Range(10, start, end))
 	comparePQL(t,
-		"Range(columnID=10, frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
+		"Range(col=10, frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
 		collabFrame.InverseRange(10, start, end))
 }
 
@@ -640,10 +640,10 @@ func TestRangeK(t *testing.T) {
 	start := time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2000, time.February, 2, 3, 4, 0, 0, time.UTC)
 	comparePQL(t,
-		"Range(rowID='foo', frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
+		"Range(row='foo', frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
 		collabFrame.RangeK("foo", start, end))
 	comparePQL(t,
-		"Range(columnID='foo', frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
+		"Range(col='foo', frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
 		collabFrame.InverseRangeK("foo", start, end))
 }
 

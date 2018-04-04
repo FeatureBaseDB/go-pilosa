@@ -48,7 +48,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/blang/semver"
 	"github.com/golang/protobuf/proto"
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
 	"github.com/pkg/errors"
@@ -61,13 +60,11 @@ const pilosaMinVersion = ">=0.9.0"
 
 // Client is the HTTP client for Pilosa server.
 type Client struct {
-	cluster        *Cluster
-	client         *http.Client
-	versionChecked bool
+	cluster *Cluster
+	client  *http.Client
 	// User-Agent header cache. Not used until cluster-resize support branch is merged
 	// and user agent is saved here in NewClient
 	userAgent              string
-	legacyMode             bool
 	importThreadCount      int
 	sliceWidth             uint64
 	fragmentNodeCache      map[string][]fragmentNode
@@ -114,9 +111,7 @@ func NewClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 	options = options.withDefaults()
 	return &Client{
 		cluster:                cluster,
-		client:                 newHTTPClient(options),
-		versionChecked:         options.SkipVersionCheck,
-		legacyMode:             options.LegacyMode,
+		client:                 newHTTPClient(options.withDefaults()),
 		fragmentNodeCache:      map[string][]fragmentNode{},
 		importThreadCount:      options.importThreadCount,
 		sliceWidth:             options.sliceWidth,
@@ -332,12 +327,7 @@ func (c *Client) syncSchema(schema *Schema, serverSchema *Schema) error {
 // Schema returns the indexes and frames on the server.
 func (c *Client) Schema() (*Schema, error) {
 	var indexes []StatusIndex
-	var err error
-	if c.legacyMode {
-		indexes, err = c.readSchemaLegacy()
-	} else {
-		indexes, err = c.readSchema()
-	}
+	indexes, err := c.readSchema()
 	if err != nil {
 		return nil, err
 	}
@@ -392,41 +382,6 @@ func (c *Client) ImportFrameWithStatus(frame *Frame, bitIterator BitIterator, ba
 	return c.importManager.Run(frame, bitIterator, int(batchSize), statusChan)
 }
 
-// ImportFrameK imports bits from the given iterator.
-func (c *Client) ImportFrameK(frame *Frame, bitIterator BitIterator, batchSize uint) error {
-	linesLeft := true
-	bits := []Bit{}
-	var currentBatchSize uint
-	indexName := frame.index.name
-	frameName := frame.name
-
-	for linesLeft {
-		bit, err := bitIterator.NextBit()
-		if err == io.EOF {
-			linesLeft = false
-		} else if err != nil {
-			return err
-		} else {
-			bits = append(bits, bit)
-			currentBatchSize++
-		}
-
-		// if the batch is full or there's no line left, start importing bits
-		if currentBatchSize >= batchSize || !linesLeft {
-			if len(bits) > 0 {
-				err := c.importBitsK(indexName, frameName, bits)
-				if err != nil {
-					return err
-				}
-			}
-			bits = []Bit{}
-			currentBatchSize = 0
-		}
-	}
-
-	return nil
-}
-
 // ImportValueFrame imports field values from the given iterator.
 func (c *Client) ImportValueFrame(frame *Frame, field string, valueIterator ValueIterator, batchSize uint) error {
 	linesLeft := true
@@ -470,42 +425,6 @@ func (c *Client) ImportValueFrame(frame *Frame, field string, valueIterator Valu
 	return nil
 }
 
-// ImportValueFrameK imports field values from the given iterator.
-func (c *Client) ImportValueFrameK(frame *Frame, field string, valueIterator ValueIterator, batchSize uint) error {
-	linesLeft := true
-	vals := []FieldValue{}
-	var currentBatchSize uint
-	indexName := frame.index.name
-	frameName := frame.name
-	fieldName := field
-
-	for linesLeft {
-		val, err := valueIterator.NextValue()
-		if err == io.EOF {
-			linesLeft = false
-		} else if err != nil {
-			return err
-		} else {
-			vals = append(vals, val)
-			currentBatchSize++
-		}
-
-		// if the batch is full or there's no line left, start importing values
-		if currentBatchSize >= batchSize || !linesLeft {
-			if len(vals) > 0 {
-				err := c.importValuesK(indexName, frameName, fieldName, vals)
-				if err != nil {
-					return err
-				}
-			}
-			vals = []FieldValue{}
-			currentBatchSize = 0
-		}
-	}
-
-	return nil
-}
-
 func (c *Client) importBits(indexName string, frameName string, slice uint64, bits []Bit) error {
 	nodes, err := c.fetchFragmentNodes(indexName, slice)
 	if err != nil {
@@ -531,16 +450,6 @@ func (c *Client) importBits(indexName string, frameName string, slice uint64, bi
 	return errors.Wrap(err, "importing to nodes")
 }
 
-func (c *Client) importBitsK(indexName string, frameName string, bits []Bit) error {
-	uri := c.cluster.Host()
-	err := c.importNode(uri, bitsToImportRequestK(indexName, frameName, bits))
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (c *Client) importValues(indexName string, frameName string, slice uint64, fieldName string, vals []FieldValue) error {
 	sort.Sort(valsForSort(vals))
 	nodes, err := c.fetchFragmentNodes(indexName, slice)
@@ -562,16 +471,6 @@ func (c *Client) importValues(indexName string, frameName string, slice uint64, 
 	return nil
 }
 
-func (c *Client) importValuesK(indexName string, frameName string, fieldName string, vals []FieldValue) error {
-	uri := c.cluster.Host()
-	err := c.importValueNodeK(uri, valsToImportValueRequestK(indexName, frameName, fieldName, vals))
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentNode, error) {
 	key := fmt.Sprintf("%s-%d", indexName, slice)
 	c.fragmentNodeCacheMutex.RLock()
@@ -586,30 +485,13 @@ func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentN
 		return nil, err
 	}
 	fragmentNodes := []fragmentNode{}
-	if c.legacyMode {
-		err = json.Unmarshal(body, &fragmentNodes)
-		if err != nil {
-			return nil, errors.Wrap(err, "unmarshaling fragment nodes")
-		}
-		// normalize legacy host
-		for i, node := range fragmentNodes {
-			uri, err := NewURIFromAddress(node.Host)
-			if err != nil {
-				return nil, errors.Wrap(err, "creating a URI")
-			}
-			node.Host = uri.Host()
-			node.Port = uri.Port()
-			fragmentNodes[i] = node
-		}
-	} else {
-		var fragmentNodeURIs []fragmentNodeRoot
-		err = json.Unmarshal(body, &fragmentNodeURIs)
-		if err != nil {
-			return nil, errors.Wrap(err, "unmarshaling fragment node URIs")
-		}
-		for _, nodeURI := range fragmentNodeURIs {
-			fragmentNodes = append(fragmentNodes, nodeURI.URI)
-		}
+	var fragmentNodeURIs []fragmentNodeRoot
+	err = json.Unmarshal(body, &fragmentNodeURIs)
+	if err != nil {
+		return nil, errors.Wrap(err, "unmarshaling fragment node URIs")
+	}
+	for _, nodeURI := range fragmentNodeURIs {
+		fragmentNodes = append(fragmentNodes, nodeURI.URI)
 	}
 	c.fragmentNodeCacheMutex.Lock()
 	c.fragmentNodeCache[key] = fragmentNodes
@@ -640,17 +522,6 @@ func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest) err
 	return nil
 }
 
-func (c *Client) importValueNodeK(uri *URI, request *pbuf.ImportValueRequest) error {
-	data, _ := proto.Marshal(request)
-	// request.Marshal never returns an error
-	_, err := c.doRequest(uri, "POST", "/import-value", defaultProtobufHeaders(), bytes.NewReader(data))
-	if err != nil {
-		return errors.Wrap(err, "doing /import-value request")
-	}
-
-	return nil
-}
-
 // ExportFrame exports bits for a frame.
 func (c *Client) ExportFrame(frame *Frame, view string) (BitIterator, error) {
 	var slicesMax map[string]uint64
@@ -660,19 +531,9 @@ func (c *Client) ExportFrame(frame *Frame, view string) (BitIterator, error) {
 	if err != nil {
 		return nil, err
 	}
-	if c.legacyMode {
-		slicesMax = map[string]uint64{}
-		if len(status.Nodes) > 0 {
-			node := status.Nodes[0]
-			for _, index := range node.Indexes {
-				slicesMax[index.Name] = index.Slices[len(index.Slices)-1]
-			}
-		}
-	} else {
-		slicesMax, err = c.slicesMax()
-		if err != nil {
-			return nil, err
-		}
+	slicesMax, err = c.slicesMax()
+	if err != nil {
+		return nil, err
 	}
 	status.indexMaxSlice = slicesMax
 	sliceURIs, err := c.statusToNodeSlicesForIndex(status, frame.index.Name())
@@ -703,20 +564,12 @@ func (c *Client) Status() (Status, error) {
 	if err != nil {
 		return Status{}, errors.Wrap(err, "requesting /status")
 	}
-	if c.legacyMode {
-		status, err := decodeLegacyStatus(data)
-		if err != nil {
-			return Status{}, errors.Wrap(err, "unmarshaling /status data")
-		}
-		return status, nil
-	} else {
-		status := Status{}
-		err = json.Unmarshal(data, &status)
-		if err != nil {
-			return Status{}, errors.Wrap(err, "unmarshaling /status data")
-		}
-		return status, nil
+	status := Status{}
+	err = json.Unmarshal(data, &status)
+	if err != nil {
+		return Status{}, errors.Wrap(err, "unmarshaling /status data")
 	}
+	return status, nil
 }
 
 func (c *Client) readSchema() ([]StatusIndex, error) {
@@ -730,21 +583,6 @@ func (c *Client) readSchema() ([]StatusIndex, error) {
 		return nil, errors.Wrap(err, "unmarshaling /schema data")
 	}
 	return schemaInfo.Indexes, nil
-}
-
-func (c *Client) readSchemaLegacy() ([]StatusIndex, error) {
-	_, data, err := c.httpRequest("GET", "/status", nil, nil)
-	if err != nil {
-		return nil, errors.Wrap(err, "requesting /status")
-	}
-	status, err := decodeLegacyStatus(data)
-	if err != nil {
-		return nil, errors.Wrap(err, "unmarshaling /status data")
-	}
-	if len(status.Nodes) > 0 {
-		return status.Nodes[0].Indexes, nil
-	}
-	return nil, nil
 }
 
 func (c *Client) slicesMax() (map[string]uint64, error) {
@@ -828,20 +666,6 @@ func anyError(resp *http.Response, err error) error {
 
 // doRequest creates and performs an http request.
 func (c *Client) doRequest(host *URI, method, path string, headers map[string]string, reader io.Reader) (*http.Response, error) {
-	if !c.versionChecked {
-		// check the server version on the first request
-		c.versionChecked = true
-		ver, err := c.ServerVersion()
-		if err != nil {
-			log.Println("Pilosa server version is not available:", err)
-		} else {
-			err = checkServerVersion(ver)
-			if err != nil {
-				c.legacyMode = true
-				log.Println(err)
-			}
-		}
-	}
 	req, err := makeRequest(host, method, path, headers, reader)
 	if err != nil {
 		return nil, errors.Wrap(err, "building request")
@@ -874,51 +698,6 @@ func (c *Client) statusToNodeSlicesForIndex(status Status, indexName string) (ma
 		return nil, ErrNoSlice
 	}
 	return result, nil
-}
-
-func (c *Client) fetchServerVersion() (string, error) {
-	_, data, err := c.httpRequest("GET", "/version", nil, nil)
-	if err != nil {
-		return "", errors.Wrap(err, "requesting /version")
-	}
-	versionInfo := versionInfo{}
-	err = json.Unmarshal(data, &versionInfo)
-	if err != nil {
-		return "", errors.Wrap(err, "unmarshaling /version data")
-	}
-	return versionInfo.Version, nil
-}
-
-func (c *Client) ServerVersion() (string, error) {
-	_, data, err := c.httpRequest("GET", "/version", nil, nil)
-	if err != nil {
-		return "", errors.Wrap(err, "requesting /version")
-	}
-	versionInfo := versionInfo{}
-	err = json.Unmarshal(data, &versionInfo)
-	if err != nil {
-		return "", errors.Wrap(err, "unmarshaling /version data")
-	}
-	return versionInfo.Version, nil
-}
-
-func checkServerVersion(version string) error {
-	if version == "" {
-		return errors.New("Pilosa server version is not available.")
-	}
-	if strings.HasPrefix(version, "v") {
-		version = version[1:]
-	}
-	serverVersion, err1 := semver.Make(version)
-	minVersion, err2 := semver.ParseRange(pilosaMinVersion)
-	// check err of serverVersion and minVersion together, otherwise it's not possible to write a test for coverage
-	if err1 != nil || err2 != nil {
-		return fmt.Errorf("Invalid Pilosa server version: %s or minimum server version: %s.", version, pilosaMinVersion)
-	}
-	if !minVersion(serverVersion) {
-		return fmt.Errorf("Pilosa server's version is %s, does not meet the minimum required for this version of the client: %s.", version, pilosaMinVersion)
-	}
-	return nil
 }
 
 func (c *Client) augmentHeaders(headers map[string]string) map[string]string {
@@ -1005,24 +784,6 @@ func bitsToImportRequest(indexName string, frameName string, slice uint64, bits 
 	}
 }
 
-func bitsToImportRequestK(indexName string, frameName string, bits []Bit) *pbuf.ImportRequest {
-	rowKeys := make([]string, 0, len(bits))
-	columnKeys := make([]string, 0, len(bits))
-	timestamps := make([]int64, 0, len(bits))
-	for _, bit := range bits {
-		rowKeys = append(rowKeys, bit.RowKey)
-		columnKeys = append(columnKeys, bit.ColumnKey)
-		timestamps = append(timestamps, bit.Timestamp)
-	}
-	return &pbuf.ImportRequest{
-		Index:      indexName,
-		Frame:      frameName,
-		RowKeys:    rowKeys,
-		ColumnKeys: columnKeys,
-		Timestamps: timestamps,
-	}
-}
-
 func valsToImportRequest(indexName string, frameName string, slice uint64, fieldName string, vals []FieldValue) *pbuf.ImportValueRequest {
 	columnIDs := make([]uint64, 0, len(vals))
 	values := make([]int64, 0, len(vals))
@@ -1040,22 +801,6 @@ func valsToImportRequest(indexName string, frameName string, slice uint64, field
 	}
 }
 
-func valsToImportValueRequestK(indexName string, frameName string, fieldName string, vals []FieldValue) *pbuf.ImportValueRequest {
-	columnKeys := make([]string, 0, len(vals))
-	values := make([]int64, 0, len(vals))
-	for _, val := range vals {
-		columnKeys = append(columnKeys, val.ColumnKey)
-		values = append(values, val.Value)
-	}
-	return &pbuf.ImportValueRequest{
-		Index:      indexName,
-		Frame:      frameName,
-		Field:      fieldName,
-		ColumnKeys: columnKeys,
-		Values:     values,
-	}
-}
-
 // ClientOptions control the properties of client connection to the server.
 type ClientOptions struct {
 	SocketTimeout     time.Duration
@@ -1063,8 +808,6 @@ type ClientOptions struct {
 	PoolSizePerRoute  int
 	TotalPoolSize     int
 	TLSConfig         *tls.Config
-	SkipVersionCheck  bool
-	LegacyMode        bool
 	importThreadCount int
 	sliceWidth        uint64
 }
@@ -1118,23 +861,6 @@ func TotalPoolSize(size int) ClientOption {
 func TLSConfig(config *tls.Config) ClientOption {
 	return func(options *ClientOptions) error {
 		options.TLSConfig = config
-		return nil
-	}
-}
-
-// SkipVersionCheck disables version checking.
-func SkipVersionCheck() ClientOption {
-	return func(options *ClientOptions) error {
-		options.SkipVersionCheck = true
-		return nil
-	}
-}
-
-// LegacyMode enables or disables compatibility for  0.8.8 < Pilosa server version < 0.9.
-func LegacyMode(enable bool) ClientOption {
-	return func(options *ClientOptions) error {
-		options.LegacyMode = enable
-		options.SkipVersionCheck = true
 		return nil
 	}
 }
@@ -1262,6 +988,24 @@ func ExcludeBits(enable bool) QueryOption {
 	}
 }
 
+// SkipVersionCheck disables version checking
+// *DEPRECATED*
+func SkipVersionCheck() ClientOption {
+	return func(options *ClientOptions) error {
+		log.Println("The SkipVersionCheck client option is deprecated and will be removed - it has no effect and should be removed from your code")
+		return nil
+	}
+}
+
+// LegacyMode enables legacy mode
+// *DEPRECATED*
+func LegacyMode(enable bool) ClientOption {
+	return func(options *ClientOptions) error {
+		log.Println("The LegacyMode client option is deprecated and will be removed - it has no effect and should be removed from your code")
+		return nil
+	}
+}
+
 type fragmentNodeRoot struct {
 	URI fragmentNode `json:"uri"`
 }
@@ -1306,8 +1050,6 @@ type StatusFrame struct {
 
 // StatusOptions contains options for a frame or an index.
 type StatusOptions struct {
-	ColumnLabel    string        `json:"columnLabel"`
-	RowLabel       string        `json:"rowLabel"`
 	CacheType      string        `json:"cacheType"`
 	CacheSize      uint          `json:"cacheSize"`
 	InverseEnabled bool          `json:"inverseEnabled"`
@@ -1380,94 +1122,4 @@ func (r *exportReader) Read(p []byte) (n int, err error) {
 		r.currentSlice++
 	}
 	return
-}
-
-type ClientDiagnosticsInfo struct {
-	Client   string `json:"client,omitempty"`
-	Runtime  string `json:"runtime,omitempty"`
-	Platform string `json:"platform,omitempty"`
-}
-
-type statusRoot struct {
-	Status *StatusLegacy `json:"status"`
-}
-
-// Status contains the status information from a Pilosa server.
-type StatusLegacy struct {
-	Nodes         []StatusNodeLegacy `json:"Nodes"`
-	indexMaxSlice map[string]uint64
-}
-
-// StatusNode contains node information.
-type StatusNodeLegacy struct {
-	Scheme  string              `json:"Scheme"`
-	Host    string              `json:"Host"`
-	Indexes []StatusIndexLegacy `json:"Indexes"`
-}
-
-// StatusIndex contains index information.
-type StatusIndexLegacy struct {
-	Name   string              `json:"Name"`
-	Frames []StatusFrameLegacy `json:"Frames"`
-	Slices []uint64            `json:"Slices"`
-}
-
-// StatusFrame contains frame information.
-type StatusFrameLegacy struct {
-	Name    string              `json:"Name"`
-	Options StatusOptionsLegacy `json:"Meta"`
-}
-
-// StatusOptions contains options for a frame or an index.
-type StatusOptionsLegacy struct {
-	ColumnLabel    string        `json:"ColumnLabel"`
-	RowLabel       string        `json:"RowLabel"`
-	CacheType      string        `json:"CacheType"`
-	CacheSize      uint          `json:"CacheSize"`
-	InverseEnabled bool          `json:"InverseEnabled"`
-	RangeEnabled   bool          `json:"RangeEnabled"`
-	Fields         []StatusField `json:"Fields"`
-	TimeQuantum    string        `json:"TimeQuantum"`
-}
-
-func decodeLegacyStatus(data []byte) (Status, error) {
-	statusRoot := &statusRoot{}
-	err := json.Unmarshal(data, statusRoot)
-	if err != nil {
-		return Status{}, err
-	}
-	nodes := []StatusNode{}
-	for _, legacyNode := range statusRoot.Status.Nodes {
-		resultIndexes := []StatusIndex{}
-		for _, legacyIndex := range legacyNode.Indexes {
-			frames := []StatusFrame{}
-			for _, legacyFrame := range legacyIndex.Frames {
-				frames = append(frames, StatusFrame{
-					Name:    legacyFrame.Name,
-					Options: StatusOptions(legacyFrame.Options),
-				})
-			}
-			index := StatusIndex{
-				Name:   legacyIndex.Name,
-				Frames: frames,
-				Slices: legacyIndex.Slices,
-			}
-			resultIndexes = append(resultIndexes, index)
-		}
-		uri, err := NewURIFromAddress(legacyNode.Host)
-		if err != nil {
-			return Status{}, errors.Wrap(err, "creating a URI")
-		}
-		nodes = append(nodes, StatusNode{
-			Scheme:  legacyNode.Scheme,
-			Host:    uri.Host(),
-			Port:    int(uri.Port()),
-			Indexes: resultIndexes,
-		})
-	}
-	result := Status{
-		Nodes:         nodes,
-		indexMaxSlice: statusRoot.Status.indexMaxSlice,
-	}
-	return result, nil
 }

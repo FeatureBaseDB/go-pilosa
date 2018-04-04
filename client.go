@@ -1029,8 +1029,6 @@ type StatusFrame struct {
 
 // StatusOptions contains options for a frame or an index.
 type StatusOptions struct {
-	ColumnLabel    string        `json:"columnLabel"`
-	RowLabel       string        `json:"rowLabel"`
 	CacheType      string        `json:"cacheType"`
 	CacheSize      uint          `json:"cacheSize"`
 	InverseEnabled bool          `json:"inverseEnabled"`

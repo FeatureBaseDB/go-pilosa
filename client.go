@@ -39,6 +39,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
 	"sort"
@@ -970,6 +971,7 @@ func ExcludeBits(enable bool) QueryOption {
 // *DEPRECATED*
 func SkipVersionCheck() ClientOption {
 	return func(options *ClientOptions) error {
+		log.Println("The SkipVersionCheck client option is deprecated and will be removed - it has no effect and should be removed from your code")
 		return nil
 	}
 }
@@ -978,6 +980,7 @@ func SkipVersionCheck() ClientOption {
 // *DEPRECATED*
 func LegacyMode(enable bool) ClientOption {
 	return func(options *ClientOptions) error {
+		log.Println("The LegacyMode client option is deprecated and will be removed - it has no effect and should be removed from your code")
 		return nil
 	}
 }

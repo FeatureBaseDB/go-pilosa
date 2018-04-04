@@ -29,13 +29,13 @@ func (bim bitImportManager) Run(frame *Frame, iterator BitIterator, batchSize in
 	}
 
 	var bit Bit
-	var err error
+	var bitIteratorError error
 
 	for {
-		bit, err = iterator.NextBit()
-		if err != nil {
-			if err == io.EOF {
-				err = nil
+		bit, bitIteratorError = iterator.NextBit()
+		if bitIteratorError != nil {
+			if bitIteratorError == io.EOF {
+				bitIteratorError = nil
 			}
 			break
 		}
@@ -48,16 +48,27 @@ func (bim bitImportManager) Run(frame *Frame, iterator BitIterator, batchSize in
 	}
 
 	// wait for workers to stop
+	var workerErr error
 	for _, q := range errChans {
-		err = <-q
-		if err != nil {
+		workerErr = <-q
+		if workerErr != nil {
 			break
 		}
 	}
 
-	close(statusChan)
+	if statusChan != nil {
+		close(statusChan)
+	}
 
-	return err
+	if bitIteratorError != nil {
+		return bitIteratorError
+	}
+
+	if workerErr != nil {
+		return workerErr
+	}
+
+	return nil
 }
 
 func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan Bit, errChan chan<- error, statusChan chan<- ImportStatusUpdate, batchSize int, sliceWidth uint64) {

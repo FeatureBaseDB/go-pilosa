@@ -42,7 +42,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -113,8 +112,6 @@ func NewClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 		cluster:                cluster,
 		client:                 newHTTPClient(options.withDefaults()),
 		fragmentNodeCache:      map[string][]fragmentNode{},
-		importThreadCount:      options.importThreadCount,
-		sliceWidth:             options.sliceWidth,
 		fragmentNodeCacheMutex: &sync.RWMutex{},
 	}
 }
@@ -371,15 +368,21 @@ func (c *Client) Schema() (*Schema, error) {
 }
 
 // ImportFrame imports bits from the given CSV iterator.
-func (c *Client) ImportFrame(frame *Frame, bitIterator BitIterator, batchSize uint) error {
-	return c.ImportFrameWithStatus(frame, bitIterator, batchSize, nil)
+func (c *Client) ImportFrame(frame *Frame, bitIterator BitIterator, options ...ImportOption) error {
+	return c.ImportFrameWithStatus(frame, bitIterator, nil, options...)
 }
 
-func (c *Client) ImportFrameWithStatus(frame *Frame, bitIterator BitIterator, batchSize uint, statusChan chan<- ImportStatusUpdate) error {
+func (c *Client) ImportFrameWithStatus(frame *Frame, bitIterator BitIterator, statusChan chan<- ImportStatusUpdate, options ...ImportOption) error {
 	if c.importManager == nil {
 		c.importManager = newBitImportManager(c)
 	}
-	return c.importManager.Run(frame, bitIterator, int(batchSize), statusChan)
+	importOptions := &ImportOptions{}
+	for _, option := range options {
+		if err := option(importOptions); err != nil {
+			return err
+		}
+	}
+	return c.importManager.Run(frame, bitIterator, importOptions.withDefaults(), statusChan)
 }
 
 // ImportValueFrame imports field values from the given iterator.
@@ -803,13 +806,11 @@ func valsToImportRequest(indexName string, frameName string, slice uint64, field
 
 // ClientOptions control the properties of client connection to the server.
 type ClientOptions struct {
-	SocketTimeout     time.Duration
-	ConnectTimeout    time.Duration
-	PoolSizePerRoute  int
-	TotalPoolSize     int
-	TLSConfig         *tls.Config
-	importThreadCount int
-	sliceWidth        uint64
+	SocketTimeout    time.Duration
+	ConnectTimeout   time.Duration
+	PoolSizePerRoute int
+	TotalPoolSize    int
+	TLSConfig        *tls.Config
 }
 
 func (co *ClientOptions) addOptions(options ...ClientOption) error {
@@ -865,24 +866,6 @@ func TLSConfig(config *tls.Config) ClientOption {
 	}
 }
 
-// ImportThreadCount sets the number of threads to use while importing bits.
-func ImportThreadCount(threadCount int) ClientOption {
-	return func(options *ClientOptions) error {
-		options.importThreadCount = threadCount
-		return nil
-	}
-}
-
-// SliceWidth sets the slice width.
-// This option should not be used without through knowledge of the Pilosa server.
-// **EXPERIMENTAL**
-func SliceWidth(sliceWidth uint64) ClientOption {
-	return func(options *ClientOptions) error {
-		options.sliceWidth = sliceWidth
-		return nil
-	}
-}
-
 type versionInfo struct {
 	Version string `json:"version"`
 }
@@ -906,12 +889,6 @@ func (co *ClientOptions) withDefaults() (updated *ClientOptions) {
 	}
 	if updated.TLSConfig == nil {
 		updated.TLSConfig = &tls.Config{}
-	}
-	if updated.importThreadCount <= 0 {
-		updated.importThreadCount = runtime.NumCPU()
-	}
-	if updated.sliceWidth == 0 {
-		updated.sliceWidth = 1048576
 	}
 	return
 }
@@ -1002,6 +979,53 @@ func SkipVersionCheck() ClientOption {
 func LegacyMode(enable bool) ClientOption {
 	return func(options *ClientOptions) error {
 		log.Println("The LegacyMode client option is deprecated and will be removed - it has no effect and should be removed from your code")
+		return nil
+	}
+}
+
+type ImportOptions struct {
+	ThreadCount int
+	sliceWidth  uint64
+	Timeout     time.Duration
+	BatchSize   int
+}
+
+func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
+	updated = *opt
+	updated.sliceWidth = sliceWidth
+
+	if updated.ThreadCount <= 0 {
+		updated.ThreadCount = 1
+	}
+	if updated.Timeout <= 0 {
+		updated.Timeout = 100 * time.Millisecond
+	}
+	if updated.BatchSize <= 0 {
+		updated.BatchSize = 100000
+	}
+	return
+}
+
+// ImportOption is used when running imports.
+type ImportOption func(options *ImportOptions) error
+
+func ThreadCount(count int) ImportOption {
+	return func(options *ImportOptions) error {
+		options.ThreadCount = count
+		return nil
+	}
+}
+
+func Timeout(timeout time.Duration) ImportOption {
+	return func(options *ImportOptions) error {
+		options.Timeout = timeout
+		return nil
+	}
+}
+
+func BatchSize(batchSize int) ImportOption {
+	return func(options *ImportOptions) error {
+		options.BatchSize = batchSize
 		return nil
 	}
 }

@@ -660,7 +660,7 @@ func TestCSVImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportFrame(frame, iterator, 10)
+	err = client.ImportFrame(frame, iterator, BatchSize(10))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1002,7 +1002,7 @@ func TestImportBitIteratorError(t *testing.T) {
 		t.Fatal(err)
 	}
 	iterator := NewCSVBitIterator(&BrokenReader{})
-	err = client.ImportFrame(frame, iterator, 100)
+	err = client.ImportFrame(frame, iterator)
 	if err == nil {
 		t.Fatalf("import frame should fail with broken reader")
 	}
@@ -1051,7 +1051,7 @@ func TestImportFrameFailsIfImportBitsFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportFrame(frame, iterator, 10)
+	err = client.ImportFrame(frame, iterator)
 	if err == nil {
 		t.Fatalf("ImportFrame should fail if importBits fails")
 	}

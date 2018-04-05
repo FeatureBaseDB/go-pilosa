@@ -16,16 +16,16 @@ func newBitImportManager(client *Client) *bitImportManager {
 	}
 }
 
-func (bim bitImportManager) Run(frame *Frame, iterator BitIterator, batchSize int, statusChan chan<- ImportStatusUpdate) error {
-	sliceWidth := bim.client.sliceWidth
-	threadCount := uint64(bim.client.importThreadCount)
+func (bim bitImportManager) Run(frame *Frame, iterator BitIterator, options ImportOptions, statusChan chan<- ImportStatusUpdate) error {
+	sliceWidth := options.sliceWidth
+	threadCount := uint64(options.ThreadCount)
 	bitChans := make([]chan Bit, threadCount)
 	errChans := make([]chan error, threadCount)
 
 	for i := range bitChans {
-		bitChans[i] = make(chan Bit, batchSize)
+		bitChans[i] = make(chan Bit, options.BatchSize)
 		errChans[i] = make(chan error)
-		go bitImportWorker(i, bim.client, frame, bitChans[i], errChans[i], statusChan, batchSize, sliceWidth)
+		go bitImportWorker(i, bim.client, frame, bitChans[i], errChans[i], statusChan, options)
 	}
 
 	var bit Bit
@@ -71,7 +71,7 @@ func (bim bitImportManager) Run(frame *Frame, iterator BitIterator, batchSize in
 	return nil
 }
 
-func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan Bit, errChan chan<- error, statusChan chan<- ImportStatusUpdate, batchSize int, sliceWidth uint64) {
+func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan Bit, errChan chan<- error, statusChan chan<- ImportStatusUpdate, options ImportOptions) {
 	batchForSlice := map[uint64][]Bit{}
 	frameName := frame.Name()
 	indexName := frame.index.Name()
@@ -111,7 +111,8 @@ func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan Bit, e
 	tic := time.Now()
 	var strategy ImportWorkerStrategy = TimeoutImport
 	bitCount := 0
-	tt := 100 * time.Millisecond
+	timeout := options.Timeout
+	batchSize := options.BatchSize
 
 	for bit := range bitChan {
 		bitCount += 1
@@ -127,7 +128,7 @@ func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan Bit, e
 			}
 			bitCount = 0
 			tic = time.Now()
-		} else if strategy == TimeoutImport && time.Since(tic) >= tt {
+		} else if strategy == TimeoutImport && time.Since(tic) >= timeout {
 			slice := largestSlice()
 			err = importBits(slice, batchForSlice[slice])
 			if err != nil {

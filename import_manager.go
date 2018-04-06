@@ -22,6 +22,10 @@ func (bim bitImportManager) Run(frame *Frame, iterator BitIterator, options Impo
 	bitChans := make([]chan Bit, threadCount)
 	errChans := make([]chan error, threadCount)
 
+	if options.importBitsFunction == nil {
+		options.importBitsFunction = bim.client.importBits
+	}
+
 	for i := range bitChans {
 		bitChans[i] = make(chan Bit, options.BatchSize)
 		errChans[i] = make(chan error)
@@ -75,11 +79,12 @@ func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan Bit, e
 	batchForSlice := map[uint64][]Bit{}
 	frameName := frame.Name()
 	indexName := frame.index.Name()
+	importFun := options.importBitsFunction
 
 	importBits := func(slice uint64, bits []Bit) error {
 		tic := time.Now()
 		sort.Sort(bitsForSort(bits))
-		err := client.importBits(indexName, frameName, slice, bits)
+		err := importFun(indexName, frameName, slice, bits)
 		if err != nil {
 			return err
 		}
@@ -109,7 +114,7 @@ func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan Bit, e
 
 	var err error
 	tic := time.Now()
-	var strategy ImportWorkerStrategy = TimeoutImport
+	strategy := options.ImportStrategy
 	bitCount := 0
 	timeout := options.Timeout
 	batchSize := options.BatchSize
@@ -164,11 +169,3 @@ type ImportStatusUpdate struct {
 	ImportedCount int
 	Time          time.Duration
 }
-
-type ImportWorkerStrategy int
-
-const (
-	DefaultImport ImportWorkerStrategy = iota
-	BatchImport
-	TimeoutImport
-)

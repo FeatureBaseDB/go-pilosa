@@ -983,11 +983,21 @@ func LegacyMode(enable bool) ClientOption {
 	}
 }
 
+type ImportWorkerStrategy int
+
+const (
+	DefaultImport ImportWorkerStrategy = iota
+	BatchImport
+	TimeoutImport
+)
+
 type ImportOptions struct {
-	ThreadCount int
-	sliceWidth  uint64
-	Timeout     time.Duration
-	BatchSize   int
+	ThreadCount        int
+	sliceWidth         uint64
+	Timeout            time.Duration
+	BatchSize          int
+	ImportStrategy     ImportWorkerStrategy
+	importBitsFunction func(indexName string, frameName string, slice uint64, bits []Bit) error
 }
 
 func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
@@ -1002,6 +1012,9 @@ func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
 	}
 	if updated.BatchSize <= 0 {
 		updated.BatchSize = 100000
+	}
+	if updated.ImportStrategy == DefaultImport {
+		updated.ImportStrategy = TimeoutImport
 	}
 	return
 }
@@ -1026,6 +1039,20 @@ func Timeout(timeout time.Duration) ImportOption {
 func BatchSize(batchSize int) ImportOption {
 	return func(options *ImportOptions) error {
 		options.BatchSize = batchSize
+		return nil
+	}
+}
+
+func ImportStrategy(strategy ImportWorkerStrategy) ImportOption {
+	return func(options *ImportOptions) error {
+		options.ImportStrategy = strategy
+		return nil
+	}
+}
+
+func importBitsFunction(fun func(indexName string, frameName string, slice uint64, bits []Bit) error) ImportOption {
+	return func(options *ImportOptions) error {
+		options.importBitsFunction = fun
 		return nil
 	}
 }

@@ -401,10 +401,7 @@ func TestMaxHostsFail(t *testing.T) {
 
 func TestQueryInverseBitmap(t *testing.T) {
 	client := getClient()
-	options := &FrameOptions{
-		InverseEnabled: true,
-	}
-	f1, err := index.Frame("f1-inversable", options)
+	f1, err := index.Frame("f1-inversable", InverseEnabled(true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -416,14 +413,15 @@ func TestQueryInverseBitmap(t *testing.T) {
 		index.BatchQuery(
 			f1.SetBit(1000, 5000),
 			f1.SetBit(1000, 6000),
-			f1.SetBit(3000, 5000)), nil)
+			f1.SetBit(3000, 5000)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	response, err := client.Query(
 		index.BatchQuery(
 			f1.Bitmap(1000),
-			f1.InverseBitmap(5000)), nil)
+			f1.InverseBitmap(5000),
+		))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -660,7 +658,7 @@ func TestCSVImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportFrame(frame, iterator, BatchSize(10))
+	err = client.ImportFrame(frame, iterator, BatchSize(10), ThreadCount(1), Timeout(400*time.Millisecond))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -683,6 +681,128 @@ func TestCSVImport(t *testing.T) {
 		if target[i] != br.Bits[0] {
 			t.Fatalf("%d != %d", target[i], br.Bits[0])
 		}
+	}
+}
+
+type BitGenerator struct {
+	maxRowID    uint64
+	maxColumnID uint64
+	rowIndex    uint64
+	colIndex    uint64
+}
+
+func (gen *BitGenerator) NextBit() (Bit, error) {
+	bit := Bit{RowID: gen.rowIndex, ColumnID: gen.colIndex}
+	if gen.colIndex >= gen.maxColumnID {
+		gen.colIndex = 0
+		gen.rowIndex += 1
+	}
+	if gen.rowIndex >= gen.maxRowID {
+		return Bit{}, io.EOF
+	}
+	gen.colIndex += 1
+	return bit, nil
+}
+
+func TestImportWithTimeout(t *testing.T) {
+	client := getClient()
+	iterator := &BitGenerator{maxRowID: 10, maxColumnID: 1000}
+	frame, err := index.Frame("importframe-timeout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statusChan := make(chan ImportStatusUpdate, 10)
+	err = client.ImportFrameWithStatus(frame, iterator, statusChan, ThreadCount(1), ImportStrategy(TimeoutImport), Timeout(10*time.Millisecond))
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestImportWithBatchSize(t *testing.T) {
+	client := getClient()
+	iterator := &BitGenerator{maxRowID: 10, maxColumnID: 1000}
+	frame, err := index.Frame("importframe-batchsize")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statusChan := make(chan ImportStatusUpdate, 10)
+	err = client.ImportFrameWithStatus(frame, iterator, statusChan, ThreadCount(1), ImportStrategy(BatchImport), BatchSize(1000))
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func failingImportBits(indexName string, frameName string, slice uint64, bits []Bit) error {
+	if len(bits) > 0 {
+		return errors.New("some error")
+	}
+	return nil
+}
+
+func TestImportWithTimeoutFails(t *testing.T) {
+	client := getClient()
+	iterator := &BitGenerator{maxRowID: 10, maxColumnID: 1000}
+	frame, err := index.Frame("importframe-timeout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statusChan := make(chan ImportStatusUpdate, 10)
+	err = client.ImportFrameWithStatus(frame, iterator, statusChan, ThreadCount(1), ImportStrategy(TimeoutImport), Timeout(1*time.Millisecond), importBitsFunction(failingImportBits))
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
+func TestImportWithBatchSizeFails(t *testing.T) {
+	client := getClient()
+	iterator := &BitGenerator{maxRowID: 10, maxColumnID: 1000}
+	frame, err := index.Frame("importframe-batchsize")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statusChan := make(chan ImportStatusUpdate, 10)
+	err = client.ImportFrameWithStatus(frame, iterator, statusChan, ThreadCount(1), ImportStrategy(BatchImport), BatchSize(1000), importBitsFunction(failingImportBits))
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
+func ErrorImportOption(err error) ImportOption {
+	return func(options *ImportOptions) error {
+		return err
+	}
+}
+func TestErrorReturningImportOption(t *testing.T) {
+	text := `10,7
+		10,5
+		2,3
+		7,1`
+	iterator := NewCSVBitIterator(strings.NewReader(text))
+	frame, err := index.Frame("importframe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := getClient()
+	optionErr := errors.New("ERR")
+	err = client.ImportFrame(frame, iterator, ErrorImportOption(optionErr))
+	if err != optionErr {
+		t.Fatal("ImportFrame should fail if an import option fails")
 	}
 }
 
@@ -824,6 +944,14 @@ func TestExportReaderReadBodyFailure(t *testing.T) {
 func TestFetchFragmentNodes(t *testing.T) {
 	client := getClient()
 	nodes, err := client.fetchFragmentNodes(index.Name(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes) != 1 {
+		t.Fatalf("1 node should be returned")
+	}
+	// running the same for coverage
+	nodes, err = client.fetchFragmentNodes(index.Name(), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1253,12 +1381,7 @@ func TestStatusToNodeSlicesForIndex(t *testing.T) {
 	if len(sliceMap) != 1 {
 		t.Fatalf("len(sliceMap) %d != %d", 1, len(sliceMap))
 	}
-	if uri, ok := sliceMap[0]; ok {
-		target, _ := NewURIFromAddress(getPilosaBindAddress())
-		if !uri.Equals(target) {
-			t.Fatalf("slice map should have the correct URI")
-		}
-	} else {
+	if _, ok := sliceMap[0]; !ok {
 		t.Fatalf("slice map should have the correct slice")
 	}
 }

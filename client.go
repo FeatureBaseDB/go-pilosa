@@ -368,11 +368,11 @@ func (c *Client) Schema() (*Schema, error) {
 }
 
 // ImportFrame imports bits from the given CSV iterator.
-func (c *Client) ImportFrame(frame *Frame, bitIterator BitIterator, options ...ImportOption) error {
+func (c *Client) ImportFrame(frame *Frame, bitIterator RowIterator, options ...ImportOption) error {
 	return c.ImportFrameWithStatus(frame, bitIterator, nil, options...)
 }
 
-func (c *Client) ImportFrameWithStatus(frame *Frame, bitIterator BitIterator, statusChan chan<- ImportStatusUpdate, options ...ImportOption) error {
+func (c *Client) ImportFrameWithStatus(frame *Frame, bitIterator RowIterator, statusChan chan<- ImportStatusUpdate, options ...ImportOption) error {
 	if c.importManager == nil {
 		c.importManager = newBitImportManager(c)
 	}
@@ -428,7 +428,7 @@ func (c *Client) ImportValueFrame(frame *Frame, field string, valueIterator Valu
 	return nil
 }
 
-func (c *Client) importBits(indexName string, frameName string, slice uint64, bits []Bit) error {
+func (c *Client) importBits(indexName string, frameName string, slice uint64, bits []RowContainer) error {
 	nodes, err := c.fetchFragmentNodes(indexName, slice)
 	if err != nil {
 		return errors.Wrap(err, "fetching fragment nodes")
@@ -526,7 +526,7 @@ func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest) err
 }
 
 // ExportFrame exports bits for a frame.
-func (c *Client) ExportFrame(frame *Frame, view string) (BitIterator, error) {
+func (c *Client) ExportFrame(frame *Frame, view string) (RowIterator, error) {
 	var slicesMax map[string]uint64
 	var err error
 
@@ -768,14 +768,14 @@ func makeRequestData(query string, options *QueryOptions) ([]byte, error) {
 	return r, nil
 }
 
-func bitsToImportRequest(indexName string, frameName string, slice uint64, bits []Bit) *pbuf.ImportRequest {
+func bitsToImportRequest(indexName string, frameName string, slice uint64, bits []RowContainer) *pbuf.ImportRequest {
 	rowIDs := make([]uint64, 0, len(bits))
 	columnIDs := make([]uint64, 0, len(bits))
 	timestamps := make([]int64, 0, len(bits))
 	for _, bit := range bits {
-		rowIDs = append(rowIDs, bit.RowID)
-		columnIDs = append(columnIDs, bit.ColumnID)
-		timestamps = append(timestamps, bit.Timestamp)
+		rowIDs = append(rowIDs, bit.Uint64Field(0))
+		columnIDs = append(columnIDs, bit.Uint64Field(1))
+		timestamps = append(timestamps, bit.Int64Field(2))
 	}
 	return &pbuf.ImportRequest{
 		Index:      indexName,
@@ -997,7 +997,7 @@ type ImportOptions struct {
 	Timeout            time.Duration
 	BatchSize          int
 	ImportStrategy     ImportWorkerStrategy
-	importBitsFunction func(indexName string, frameName string, slice uint64, bits []Bit) error
+	importBitsFunction func(indexName string, frameName string, slice uint64, bits []RowContainer) error
 }
 
 func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
@@ -1050,7 +1050,7 @@ func ImportStrategy(strategy ImportWorkerStrategy) ImportOption {
 	}
 }
 
-func importBitsFunction(fun func(indexName string, frameName string, slice uint64, bits []Bit) error) ImportOption {
+func importBitsFunction(fun func(indexName string, frameName string, slice uint64, bits []RowContainer) error) ImportOption {
 	return func(options *ImportOptions) error {
 		options.importBitsFunction = fun
 		return nil

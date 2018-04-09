@@ -2,7 +2,6 @@ package pilosa
 
 import (
 	"io"
-	"sort"
 	"time"
 )
 
@@ -16,10 +15,10 @@ func newBitImportManager(client *Client) *bitImportManager {
 	}
 }
 
-func (bim bitImportManager) Run(frame *Frame, iterator BitIterator, options ImportOptions, statusChan chan<- ImportStatusUpdate) error {
+func (bim bitImportManager) Run(frame *Frame, iterator RowIterator, options ImportOptions, statusChan chan<- ImportStatusUpdate) error {
 	sliceWidth := options.sliceWidth
 	threadCount := uint64(options.ThreadCount)
-	bitChans := make([]chan Bit, threadCount)
+	bitChans := make([]chan RowContainer, threadCount)
 	errChans := make([]chan error, threadCount)
 
 	if options.importBitsFunction == nil {
@@ -27,23 +26,23 @@ func (bim bitImportManager) Run(frame *Frame, iterator BitIterator, options Impo
 	}
 
 	for i := range bitChans {
-		bitChans[i] = make(chan Bit, options.BatchSize)
+		bitChans[i] = make(chan RowContainer, options.BatchSize)
 		errChans[i] = make(chan error)
 		go bitImportWorker(i, bim.client, frame, bitChans[i], errChans[i], statusChan, options)
 	}
 
-	var bit Bit
+	var bit RowContainer
 	var bitIteratorError error
 
 	for {
-		bit, bitIteratorError = iterator.NextBit()
+		bit, bitIteratorError = iterator.NextRow()
 		if bitIteratorError != nil {
 			if bitIteratorError == io.EOF {
 				bitIteratorError = nil
 			}
 			break
 		}
-		slice := bit.ColumnID / sliceWidth
+		slice := bit.Uint64Field(1) / sliceWidth
 		bitChans[slice%threadCount] <- bit
 	}
 
@@ -75,15 +74,15 @@ func (bim bitImportManager) Run(frame *Frame, iterator BitIterator, options Impo
 	return nil
 }
 
-func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan Bit, errChan chan<- error, statusChan chan<- ImportStatusUpdate, options ImportOptions) {
-	batchForSlice := map[uint64][]Bit{}
+func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan RowContainer, errChan chan<- error, statusChan chan<- ImportStatusUpdate, options ImportOptions) {
+	batchForSlice := map[uint64][]RowContainer{}
 	frameName := frame.Name()
 	indexName := frame.index.Name()
 	importFun := options.importBitsFunction
 
-	importBits := func(slice uint64, bits []Bit) error {
+	importBits := func(slice uint64, bits []RowContainer) error {
 		tic := time.Now()
-		sort.Sort(bitsForSort(bits))
+		// sort.Sort(bitsForSort(bits))
 		err := importFun(indexName, frameName, slice, bits)
 		if err != nil {
 			return err
@@ -121,7 +120,7 @@ func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan Bit, e
 
 	for bit := range bitChan {
 		bitCount += 1
-		slice := bit.ColumnID / sliceWidth
+		slice := bit.Uint64Field(1) / sliceWidth
 		batchForSlice[slice] = append(batchForSlice[slice], bit)
 		if strategy == BatchImport && bitCount >= batchSize {
 			for slice, bits := range batchForSlice {

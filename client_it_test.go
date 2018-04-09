@@ -691,7 +691,7 @@ type BitGenerator struct {
 	colIndex    uint64
 }
 
-func (gen *BitGenerator) NextBit() (Bit, error) {
+func (gen *BitGenerator) NextRow() (RowContainer, error) {
 	bit := Bit{RowID: gen.rowIndex, ColumnID: gen.colIndex}
 	if gen.colIndex >= gen.maxColumnID {
 		gen.colIndex = 0
@@ -740,7 +740,7 @@ func TestImportWithBatchSize(t *testing.T) {
 	}
 }
 
-func failingImportBits(indexName string, frameName string, slice uint64, bits []Bit) error {
+func failingImportBits(indexName string, frameName string, slice uint64, bits []RowContainer) error {
 	if len(bits) > 0 {
 		return errors.New("some error")
 	}
@@ -858,18 +858,18 @@ func TestCSVExport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	targetBits := []Bit{
+	target := []Bit{
 		{RowID: 1, ColumnID: 1},
 		{RowID: 1, ColumnID: 10},
 		{RowID: 2, ColumnID: 1048577},
 	}
-	bits := []Bit{}
+	bits := []RowContainer{}
 	iterator, err := client.ExportFrame(frame, "standard")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for {
-		bit, err := iterator.NextBit()
+		bit, err := iterator.NextRow()
 		if err == io.EOF {
 			break
 		}
@@ -878,8 +878,13 @@ func TestCSVExport(t *testing.T) {
 		}
 		bits = append(bits, bit)
 	}
-	if !reflect.DeepEqual(targetBits, bits) {
-		t.Fatalf("ExportFrame should export the frame")
+	if len(bits) != len(target) {
+		t.Fatalf("There should be %d bits", len(target))
+	}
+	for i := range target {
+		if !reflect.DeepEqual(target[i], bits[i]) {
+			t.Fatalf("%v != %v", target, bits)
+		}
 	}
 }
 
@@ -1153,7 +1158,7 @@ func TestImportFailsOnImportBitsError(t *testing.T) {
 	server := getMockServer(500, []byte{}, 0)
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	err := client.importBits("foo", "bar", 0, []Bit{})
+	err := client.importBits("foo", "bar", 0, []RowContainer{})
 	if err == nil {
 		t.Fatalf("importBits should fail when fetch fragment nodes fails")
 	}
@@ -1206,7 +1211,7 @@ func TestImportBitsFailInvalidNodeAddress(t *testing.T) {
 	server := getMockServer(200, data, len(data))
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	err := client.importBits("foo", "bar", 0, []Bit{})
+	err := client.importBits("foo", "bar", 0, []RowContainer{})
 	if err == nil {
 		t.Fatalf("importBits should fail on invalid node host")
 	}

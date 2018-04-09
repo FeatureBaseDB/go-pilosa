@@ -41,6 +41,16 @@ import (
 	"time"
 )
 
+type RowContainer interface {
+	Int64Field(index int) int64
+	Uint64Field(index int) uint64
+	StringField(index int) string
+}
+
+type RowIterator interface {
+	NextRow() (RowContainer, error)
+}
+
 // Bit defines a single Pilosa bit.
 type Bit struct {
 	RowID     uint64
@@ -50,10 +60,67 @@ type Bit struct {
 	Timestamp int64
 }
 
+func (b Bit) Int64Field(index int) int64 {
+	switch index {
+	case 0:
+		return int64(b.RowID)
+	case 1:
+		return int64(b.ColumnID)
+	case 2:
+		return b.Timestamp
+	default:
+		return 0
+	}
+}
+
+func (b Bit) Uint64Field(index int) uint64 {
+	switch index {
+	case 0:
+		return b.RowID
+	case 1:
+		return b.ColumnID
+	case 2:
+		return uint64(b.Timestamp)
+	default:
+		return 0
+	}
+}
+
+func (b Bit) StringField(index int) string {
+	switch index {
+	case 0:
+		return b.RowKey
+	case 1:
+		return b.ColumnKey
+	default:
+		return ""
+	}
+}
+
+/*
+func (b bitsForSort) Len() int {
+	return len(b)
+}
+
+func (b bitsForSort) Swap(i, j int) {
+	b[i], b[j] = b[j], b[i]
+}
+
+func (b bitsForSort) Less(i, j int) bool {
+	bitCmp := b[i].RowID - b[j].RowID
+	if bitCmp == 0 {
+		return b[i].ColumnID < b[j].ColumnID
+	}
+	return bitCmp < 0
+}
+*/
+
+/*
 // BitIterator structs return bits one by one.
 type BitIterator interface {
 	NextBit() (Bit, error)
 }
+*/
 
 // CSVBitIterator reads bits from a Reader.
 // Each line should contain a single bit in the following form:
@@ -84,9 +151,9 @@ func NewCSVBitIteratorWithTimestampFormat(reader io.Reader, timestampFormat stri
 	}
 }
 
-// NextBit iterates on lines of a Reader.
+// NextValue iterates on lines of a Reader.
 // Returns io.EOF on end of iteration.
-func (c *CSVBitIterator) NextBit() (Bit, error) {
+func (c *CSVBitIterator) NextRow() (RowContainer, error) {
 	if ok := c.scanner.Scan(); ok {
 		c.line++
 		text := strings.TrimSpace(c.scanner.Text())
@@ -155,6 +222,37 @@ type FieldValue struct {
 	ColumnID  uint64
 	ColumnKey string
 	Value     int64
+}
+
+func (f FieldValue) Int64Field(index int) int64 {
+	switch index {
+	case 0:
+		return int64(f.ColumnID)
+	case 1:
+		return f.Value
+	default:
+		return 0
+	}
+}
+
+func (f FieldValue) Uint64Field(index int) uint64 {
+	switch index {
+	case 0:
+		return f.ColumnID
+	case 1:
+		return uint64(f.Value)
+	default:
+		return 0
+	}
+}
+
+func (f FieldValue) StringField(index int) string {
+	switch index {
+	case 0:
+		return f.ColumnKey
+	default:
+		return ""
+	}
 }
 
 // ValueIterator structs return field values one by one.

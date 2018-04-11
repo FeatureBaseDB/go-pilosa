@@ -42,7 +42,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -385,6 +384,7 @@ func (c *Client) ImportFrameWithStatus(frame *Frame, bitIterator RowIterator, st
 	return c.importManager.Run(frame, bitIterator, importOptions.withDefaults(), statusChan)
 }
 
+/*
 // ImportValueFrame imports field values from the given iterator.
 func (c *Client) ImportValueFrame(frame *Frame, field string, valueIterator ValueIterator, batchSize uint) error {
 	linesLeft := true
@@ -427,6 +427,7 @@ func (c *Client) ImportValueFrame(frame *Frame, field string, valueIterator Valu
 
 	return nil
 }
+*/
 
 func (c *Client) importBits(indexName string, frameName string, slice uint64, bits []RowContainer) error {
 	nodes, err := c.fetchFragmentNodes(indexName, slice)
@@ -453,6 +454,7 @@ func (c *Client) importBits(indexName string, frameName string, slice uint64, bi
 	return errors.Wrap(err, "importing to nodes")
 }
 
+/*
 func (c *Client) importValues(indexName string, frameName string, slice uint64, fieldName string, vals []FieldValue) error {
 	sort.Sort(valsForSort(vals))
 	nodes, err := c.fetchFragmentNodes(indexName, slice)
@@ -473,6 +475,7 @@ func (c *Client) importValues(indexName string, frameName string, slice uint64, 
 
 	return nil
 }
+*/
 
 func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentNode, error) {
 	key := fmt.Sprintf("%s-%d", indexName, slice)
@@ -525,6 +528,7 @@ func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest) err
 	return nil
 }
 
+/*
 // ExportFrame exports bits for a frame.
 func (c *Client) ExportFrame(frame *Frame, view string) (RowIterator, error) {
 	var slicesMax map[string]uint64
@@ -545,6 +549,7 @@ func (c *Client) ExportFrame(frame *Frame, view string) (RowIterator, error) {
 	}
 	return NewCSVBitIterator(newExportReader(c, sliceURIs, frame, view)), nil
 }
+*/
 
 // Views fetches and returns the views of a frame
 func (c *Client) Views(frame *Frame) ([]string, error) {

@@ -806,6 +806,7 @@ func TestErrorReturningImportOption(t *testing.T) {
 	}
 }
 
+/*
 func TestValueCSVImport(t *testing.T) {
 	client := getClient()
 	text := `10,7
@@ -945,6 +946,7 @@ func TestExportReaderReadBodyFailure(t *testing.T) {
 		t.Fatal("should have failed")
 	}
 }
+*/
 
 func TestFetchFragmentNodes(t *testing.T) {
 	client := getClient()
@@ -1141,6 +1143,7 @@ func TestImportBitIteratorError(t *testing.T) {
 	}
 }
 
+/*
 func TestImportValueIteratorError(t *testing.T) {
 	client := getClient()
 	frame, err := index.Frame("not-important", nil)
@@ -1153,6 +1156,7 @@ func TestImportValueIteratorError(t *testing.T) {
 		t.Fatalf("import value frame should fail with broken reader")
 	}
 }
+*/
 
 func TestImportFailsOnImportBitsError(t *testing.T) {
 	server := getMockServer(500, []byte{}, 0)
@@ -1164,6 +1168,7 @@ func TestImportFailsOnImportBitsError(t *testing.T) {
 	}
 }
 
+/*
 func TestValueImportFailsOnImportValueError(t *testing.T) {
 	server := getMockServer(500, []byte{}, 0)
 	defer server.Close()
@@ -1173,6 +1178,7 @@ func TestValueImportFailsOnImportValueError(t *testing.T) {
 		t.Fatalf("importValues should fail when fetch fragment nodes fails")
 	}
 }
+*/
 
 func TestImportFrameFailsIfImportBitsFails(t *testing.T) {
 	data := []byte(`[{"host":"non-existing-domain:9999","internalHost":"10101"}]`)
@@ -1190,6 +1196,7 @@ func TestImportFrameFailsIfImportBitsFails(t *testing.T) {
 	}
 }
 
+/*
 func TestImportValueFrameFailsIfImportValuesFails(t *testing.T) {
 	data := []byte(`[{"host":"non-existing-domain:9999","internalHost":"10101"}]`)
 	server := getMockServer(200, data, len(data))
@@ -1205,6 +1212,7 @@ func TestImportValueFrameFailsIfImportValuesFails(t *testing.T) {
 		t.Fatalf("ImportValueFrame should fail if importValues fails")
 	}
 }
+*/
 
 func TestImportBitsFailInvalidNodeAddress(t *testing.T) {
 	data := []byte(`[{"host":"10101:","internalHost":"doesn'tmatter"}]`)
@@ -1217,6 +1225,7 @@ func TestImportBitsFailInvalidNodeAddress(t *testing.T) {
 	}
 }
 
+/*
 func TestImportValuesFailInvalidNodeAddress(t *testing.T) {
 	data := []byte(`[{"host":"10101:","internalHost":"doesn'tmatter"}]`)
 	server := getMockServer(200, data, len(data))
@@ -1227,6 +1236,7 @@ func TestImportValuesFailInvalidNodeAddress(t *testing.T) {
 		t.Fatalf("importValues should fail on invalid node host")
 	}
 }
+*/
 
 func TestDecodingFragmentNodesFails(t *testing.T) {
 	server := getMockServer(200, []byte("notjson"), 7)
@@ -1456,6 +1466,7 @@ func TestSyncSchemaCantCreateFrame(t *testing.T) {
 	}
 }
 
+/*
 func TestExportFrameFailure(t *testing.T) {
 	paths := map[string]mockResponseItem{
 		"/status": {
@@ -1491,6 +1502,7 @@ func TestExportFrameFailure(t *testing.T) {
 		t.Fatal("should have failed")
 	}
 }
+*/
 
 func TestSlicesMaxDecodeFailure(t *testing.T) {
 	server := getMockServer(200, []byte(`{`), 0)

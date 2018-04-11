@@ -39,6 +39,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 type RowContainer interface {
@@ -55,8 +57,6 @@ type RowIterator interface {
 type Bit struct {
 	RowID     uint64
 	ColumnID  uint64
-	RowKey    string
-	ColumnKey string
 	Timestamp int64
 }
 
@@ -87,13 +87,48 @@ func (b Bit) Uint64Field(index int) uint64 {
 }
 
 func (b Bit) StringField(index int) string {
-	switch index {
-	case 0:
-		return b.RowKey
-	case 1:
-		return b.ColumnKey
-	default:
-		return ""
+	return ""
+}
+
+func BitCSVUnmarshaller() CSVRowUnmarshaller {
+	return BitCSVUnmarshallerWithTimestamp("")
+}
+
+func BitCSVUnmarshallerWithTimestamp(timestampFormat string) CSVRowUnmarshaller {
+	return func(text string) (RowContainer, error) {
+		parts := strings.Split(text, ",")
+		if len(parts) < 2 {
+			return nil, errors.New("Invalid CSV line")
+		}
+		rowID, err := strconv.ParseInt(parts[0], 10, 64)
+		if err != nil {
+			return nil, errors.New("Invalid row ID")
+		}
+		columnID, err := strconv.ParseInt(parts[1], 10, 64)
+		if err != nil {
+			return nil, errors.New("Invalid column ID")
+		}
+		timestamp := 0
+		if len(parts) == 3 {
+			if timestampFormat == "" {
+				timestamp, err = strconv.Atoi(parts[2])
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				t, err := time.Parse(timestampFormat, parts[2])
+				if err != nil {
+					return nil, err
+				}
+				timestamp = int(t.Unix())
+			}
+		}
+		bit := Bit{
+			RowID:     uint64(rowID),
+			ColumnID:  uint64(columnID),
+			Timestamp: int64(timestamp),
+		}
+		return &bit, nil
 	}
 }
 
@@ -122,80 +157,59 @@ type BitIterator interface {
 }
 */
 
-// CSVBitIterator reads bits from a Reader.
-// Each line should contain a single bit in the following form:
-// rowID,columnID[,timestamp]
-type CSVBitIterator struct {
-	reader          io.Reader
-	line            int
-	scanner         *bufio.Scanner
-	timestampFormat string
+type CSVRowUnmarshaller func(text string) (RowContainer, error)
+
+// CSVBitIterator reads rows from a Reader.
+// Each line should contain a single row in the following form:
+// field1,field2,...
+type CSVIterator struct {
+	reader       io.Reader
+	line         int
+	scanner      *bufio.Scanner
+	unmarshaller CSVRowUnmarshaller
 }
 
-// NewCSVBitIterator creates a CSVBitIterator from a Reader.
-func NewCSVBitIterator(reader io.Reader) *CSVBitIterator {
-	return &CSVBitIterator{
-		reader:  reader,
-		line:    0,
-		scanner: bufio.NewScanner(reader),
+// NewCSVIterator creates a CSVIterator from a Reader.
+func NewCSVIterator(reader io.Reader, unmarshaller CSVRowUnmarshaller) *CSVIterator {
+	return &CSVIterator{
+		reader:       reader,
+		line:         0,
+		scanner:      bufio.NewScanner(reader),
+		unmarshaller: unmarshaller,
 	}
 }
 
-// NewCSVBitIteratorWithTimestampFormat creates a CSVBitIterator from a Reader with a custom timestamp format.
-func NewCSVBitIteratorWithTimestampFormat(reader io.Reader, timestampFormat string) *CSVBitIterator {
-	return &CSVBitIterator{
-		reader:          reader,
-		line:            0,
-		scanner:         bufio.NewScanner(reader),
-		timestampFormat: timeFormat,
-	}
+func NewCSVBitIterator(reader io.Reader) *CSVIterator {
+	return NewCSVIterator(reader, BitCSVUnmarshaller())
 }
 
-// NextValue iterates on lines of a Reader.
+func NewCSVBitIteratorWithTimestampFormat(reader io.Reader, timestampFormat string) *CSVIterator {
+	return NewCSVIterator(reader, BitCSVUnmarshallerWithTimestamp(timestampFormat))
+}
+
+func NewCSVValueIterator(reader io.Reader) *CSVIterator {
+	return NewCSVIterator(reader, FieldValueCSVUnmarshaller)
+}
+
+// NextRow iterates on lines of a Reader.
 // Returns io.EOF on end of iteration.
-func (c *CSVBitIterator) NextRow() (RowContainer, error) {
+func (c *CSVIterator) NextRow() (RowContainer, error) {
 	if ok := c.scanner.Scan(); ok {
 		c.line++
 		text := strings.TrimSpace(c.scanner.Text())
-		parts := strings.Split(text, ",")
-		if len(parts) < 2 {
-			return Bit{}, fmt.Errorf("Invalid CSV line: %d", c.line)
-		}
-		rowID, err := strconv.Atoi(parts[0])
-		if err != nil {
-			return Bit{}, fmt.Errorf("Invalid row ID at line: %d", c.line)
-		}
-		columnID, err := strconv.Atoi(parts[1])
-		if err != nil {
-			return Bit{}, fmt.Errorf("Invalid column ID at line: %d", c.line)
-		}
-		timestamp := 0
-		if len(parts) == 3 {
-			if c.timestampFormat == "" {
-				timestamp, err = strconv.Atoi(parts[2])
-				if err != nil {
-					return Bit{}, fmt.Errorf("Invalid timestamp at line: %d", c.line)
-				}
-			} else {
-				t, err := time.Parse(c.timestampFormat, parts[2])
-				if err != nil {
-					return Bit{}, fmt.Errorf("Invalid timestamp at line: %d", c.line)
-				}
-				timestamp = int(t.Unix())
+		if text != "" {
+			rc, err := c.unmarshaller(text)
+			if err != nil {
+				return nil, fmt.Errorf("%s at line: %d", err.Error(), c.line)
 			}
+			return rc, nil
 		}
-		bit := Bit{
-			RowID:     uint64(rowID),
-			ColumnID:  uint64(columnID),
-			Timestamp: int64(timestamp),
-		}
-		return bit, nil
 	}
 	err := c.scanner.Err()
 	if err != nil {
-		return Bit{}, err
+		return nil, err
 	}
-	return Bit{}, io.EOF
+	return nil, io.EOF
 }
 
 /*
@@ -256,6 +270,28 @@ func (f FieldValue) StringField(index int) string {
 		return ""
 	}
 }
+
+func FieldValueCSVUnmarshaller(text string) (RowContainer, error) {
+	parts := strings.Split(text, ",")
+	if len(parts) < 2 {
+		return nil, errors.New("Invalid CSV")
+	}
+	columnID, err := strconv.ParseUint(parts[0], 10, 64)
+	if err != nil {
+		return nil, errors.New("Invalid column ID at line: %d")
+	}
+	value, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return nil, errors.New("Invalid value")
+	}
+	fieldValue := FieldValue{
+		ColumnID: uint64(columnID),
+		Value:    value,
+	}
+	return fieldValue, nil
+}
+
+/*
 
 // ValueIterator structs return field values one by one.
 type ValueIterator interface {
@@ -324,3 +360,4 @@ func (v valsForSort) Swap(i, j int) {
 func (v valsForSort) Less(i, j int) bool {
 	return v[i].ColumnID < v[j].ColumnID
 }
+*/

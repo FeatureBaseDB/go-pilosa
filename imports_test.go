@@ -197,3 +197,66 @@ type BrokenReader struct{}
 func (r BrokenReader) Read(p []byte) (n int, err error) {
 	return 0, errors.New("broken reader")
 }
+
+func TestBitInt64Field(t *testing.T) {
+	b := pilosa.Bit{RowID: 15, ColumnID: 55, Timestamp: 100101}
+	target := []int64{15, 55, 100101, 0}
+	checkInt64RowContainer(t, target, b)
+}
+
+func TestBitUint64Field(t *testing.T) {
+	b := pilosa.Bit{RowID: 15, ColumnID: 55, Timestamp: 100101}
+	target := []uint64{15, 55, 100101, 0}
+	checkUint64RowContainer(t, target, b)
+}
+
+func TestBitStringField(t *testing.T) {
+	b := pilosa.Bit{RowKey: "abc", ColumnKey: "def", Timestamp: 100101}
+	target := []string{"abc", "def", ""}
+	checkStringRowContainer(t, target, b)
+}
+
+func TestFieldValueInt64Field(t *testing.T) {
+	b := pilosa.FieldValue{ColumnID: 55, Value: 125}
+	target := []int64{55, 125, 0}
+	checkInt64RowContainer(t, target, b)
+}
+
+func TestFieldValueUint64Field(t *testing.T) {
+	b := pilosa.FieldValue{ColumnID: 55, Value: 125}
+	target := []uint64{55, 125, 0}
+	checkUint64RowContainer(t, target, b)
+}
+
+func TestFieldValueStringField(t *testing.T) {
+	b := pilosa.FieldValue{ColumnKey: "abc", Value: 125}
+	target := []string{"abc", ""}
+	checkStringRowContainer(t, target, b)
+}
+
+func checkInt64RowContainer(t *testing.T, target []int64, rc pilosa.RowContainer) {
+	for i := range target {
+		value := rc.Int64Field(i)
+		if target[i] != value {
+			t.Fatalf("%d != %d", target[i], value)
+		}
+	}
+}
+
+func checkUint64RowContainer(t *testing.T, target []uint64, rc pilosa.RowContainer) {
+	for i := range target {
+		value := rc.Uint64Field(i)
+		if target[i] != value {
+			t.Fatalf("%d != %d", target[i], value)
+		}
+	}
+}
+
+func checkStringRowContainer(t *testing.T, target []string, rc pilosa.RowContainer) {
+	for i := range target {
+		value := rc.StringField(i)
+		if target[i] != value {
+			t.Fatalf("%s != %s", target[i], value)
+		}
+	}
+}

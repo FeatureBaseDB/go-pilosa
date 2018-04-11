@@ -198,6 +198,7 @@ func (c *CSVBitIterator) NextRow() (RowContainer, error) {
 	return Bit{}, io.EOF
 }
 
+/*
 type bitsForSort []Bit
 
 func (b bitsForSort) Len() int {
@@ -215,6 +216,7 @@ func (b bitsForSort) Less(i, j int) bool {
 	}
 	return bitCmp < 0
 }
+*/
 
 // FieldValue represents the value for a column within a
 // range-encoded frame.

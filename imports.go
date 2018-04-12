@@ -47,6 +47,21 @@ type RowContainer interface {
 	Int64Field(index int) int64
 	Uint64Field(index int) uint64
 	StringField(index int) string
+	Less(other RowContainer) bool
+}
+
+type rowContainerSort []RowContainer
+
+func (rc rowContainerSort) Len() int {
+	return len(rc)
+}
+
+func (rc rowContainerSort) Swap(i, j int) {
+	rc[i], rc[j] = rc[j], rc[i]
+}
+
+func (rc rowContainerSort) Less(i, j int) bool {
+	return rc[i].Less(rc[j])
 }
 
 type RowIterator interface {
@@ -88,6 +103,18 @@ func (b Bit) Uint64Field(index int) uint64 {
 
 func (b Bit) StringField(index int) string {
 	return ""
+}
+
+func (b Bit) Less(other RowContainer) bool {
+	if ob, ok := other.(Bit); ok {
+		if b.RowID < ob.RowID {
+			return true
+		} else if b.RowID > ob.RowID {
+			return false
+		}
+		return b.ColumnID < ob.ColumnID
+	}
+	return false
 }
 
 func BitCSVUnmarshaller() CSVRowUnmarshaller {
@@ -269,6 +296,13 @@ func (f FieldValue) StringField(index int) string {
 	default:
 		return ""
 	}
+}
+
+func (v FieldValue) Less(other RowContainer) bool {
+	if ov, ok := other.(FieldValue); ok {
+		return v.ColumnID < ov.ColumnID
+	}
+	return false
 }
 
 func FieldValueCSVUnmarshaller(text string) (RowContainer, error) {

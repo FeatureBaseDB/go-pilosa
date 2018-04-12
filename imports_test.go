@@ -225,6 +225,25 @@ func TestBitStringField(t *testing.T) {
 	checkStringRowContainer(t, target, b)
 }
 
+func TestBitLess(t *testing.T) {
+	a := pilosa.Bit{RowID: 10, ColumnID: 200}
+	a2 := pilosa.Bit{RowID: 10, ColumnID: 1000}
+	b := pilosa.Bit{RowID: 200, ColumnID: 10}
+	c := pilosa.FieldValue{ColumnID: 1}
+	if !a.Less(a2) {
+		t.Fatalf("%v should be less than %v", a, a2)
+	}
+	if !a.Less(b) {
+		t.Fatalf("%v should be less than %v", a, b)
+	}
+	if b.Less(a) {
+		t.Fatalf("%v should not be less than %v", b, a)
+	}
+	if c.Less(a) {
+		t.Fatalf("%v should not be less than %v", c, a)
+	}
+}
+
 func TestFieldValueInt64Field(t *testing.T) {
 	b := pilosa.FieldValue{ColumnID: 55, Value: 125}
 	target := []int64{55, 125, 0}
@@ -241,6 +260,21 @@ func TestFieldValueStringField(t *testing.T) {
 	b := pilosa.FieldValue{ColumnKey: "abc", Value: 125}
 	target := []string{"abc", ""}
 	checkStringRowContainer(t, target, b)
+}
+
+func TestFieldValueLess(t *testing.T) {
+	a := pilosa.FieldValue{ColumnID: 55, Value: 125}
+	b := pilosa.FieldValue{ColumnID: 100, Value: 125}
+	c := pilosa.Bit{ColumnID: 1, RowID: 2}
+	if !a.Less(b) {
+		t.Fatalf("%v should be less than %v", a, b)
+	}
+	if b.Less(a) {
+		t.Fatalf("%v should not be less than %v", b, a)
+	}
+	if c.Less(a) {
+		t.Fatalf("%v should not be less than %v", c, a)
+	}
 }
 
 func checkInt64RowContainer(t *testing.T, target []int64, rc pilosa.RowContainer) {

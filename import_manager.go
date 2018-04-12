@@ -2,6 +2,7 @@ package pilosa
 
 import (
 	"io"
+	"sort"
 	"time"
 
 	"github.com/pkg/errors"
@@ -84,7 +85,7 @@ func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan RowCon
 
 	importBits := func(slice uint64, bits []RowContainer) error {
 		tic := time.Now()
-		// sort.Sort(bitsForSort(bits))
+		sort.Sort(rowContainerSort(bits))
 		err := importFun(indexName, frameName, slice, bits)
 		if err != nil {
 			return err

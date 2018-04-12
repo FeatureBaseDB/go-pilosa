@@ -3,6 +3,8 @@ package pilosa
 import (
 	"io"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 type bitImportManager struct {
@@ -22,7 +24,7 @@ func (bim bitImportManager) Run(frame *Frame, iterator RowIterator, options Impo
 	errChans := make([]chan error, threadCount)
 
 	if options.importBitsFunction == nil {
-		options.importBitsFunction = bim.client.importBits
+		return errors.New("importBits function is required")
 	}
 
 	for i := range bitChans {

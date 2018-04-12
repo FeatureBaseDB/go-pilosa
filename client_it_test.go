@@ -706,7 +706,7 @@ func (gen *BitGenerator) NextRow() (RowContainer, error) {
 
 func TestImportWithTimeout(t *testing.T) {
 	client := getClient()
-	iterator := &BitGenerator{maxRowID: 10, maxColumnID: 1000}
+	iterator := &BitGenerator{maxRowID: 100, maxColumnID: 1000}
 	frame, err := index.Frame("importframe-timeout")
 	if err != nil {
 		t.Fatal(err)
@@ -715,7 +715,7 @@ func TestImportWithTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	statusChan := make(chan ImportStatusUpdate, 10)
+	statusChan := make(chan ImportStatusUpdate, 5)
 	err = client.ImportFrameWithStatus(frame, iterator, statusChan, ThreadCount(1), ImportStrategy(TimeoutImport), Timeout(10*time.Millisecond))
 	if err != nil {
 		t.Fatal(err)
@@ -806,7 +806,6 @@ func TestErrorReturningImportOption(t *testing.T) {
 	}
 }
 
-/*
 func TestValueCSVImport(t *testing.T) {
 	client := getClient()
 	text := `10,7
@@ -830,7 +829,7 @@ func TestValueCSVImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportValueFrame(frame, "foo", iterator, 10)
+	err = client.ImportValueFrame(frame, "foo", iterator, BatchSize(10))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -946,7 +945,6 @@ func TestExportReaderReadBodyFailure(t *testing.T) {
 		t.Fatal("should have failed")
 	}
 }
-*/
 
 func TestFetchFragmentNodes(t *testing.T) {
 	client := getClient()
@@ -1143,7 +1141,6 @@ func TestImportBitIteratorError(t *testing.T) {
 	}
 }
 
-/*
 func TestImportValueIteratorError(t *testing.T) {
 	client := getClient()
 	frame, err := index.Frame("not-important", nil)
@@ -1151,12 +1148,11 @@ func TestImportValueIteratorError(t *testing.T) {
 		t.Fatal(err)
 	}
 	iterator := NewCSVValueIterator(&BrokenReader{})
-	err = client.ImportValueFrame(frame, "foo", iterator, 100)
+	err = client.ImportValueFrame(frame, "foo", iterator, BatchSize(100))
 	if err == nil {
 		t.Fatalf("import value frame should fail with broken reader")
 	}
 }
-*/
 
 func TestImportFailsOnImportBitsError(t *testing.T) {
 	server := getMockServer(500, []byte{}, 0)
@@ -1168,17 +1164,15 @@ func TestImportFailsOnImportBitsError(t *testing.T) {
 	}
 }
 
-/*
 func TestValueImportFailsOnImportValueError(t *testing.T) {
 	server := getMockServer(500, []byte{}, 0)
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	err := client.importValues("foo", "bar", 0, "foo", []FieldValue{})
+	err := client.importValues("foo", "bar", 0, "foo", nil)
 	if err == nil {
 		t.Fatalf("importValues should fail when fetch fragment nodes fails")
 	}
 }
-*/
 
 func TestImportFrameFailsIfImportBitsFails(t *testing.T) {
 	data := []byte(`[{"host":"non-existing-domain:9999","internalHost":"10101"}]`)
@@ -1196,7 +1190,6 @@ func TestImportFrameFailsIfImportBitsFails(t *testing.T) {
 	}
 }
 
-/*
 func TestImportValueFrameFailsIfImportValuesFails(t *testing.T) {
 	data := []byte(`[{"host":"non-existing-domain:9999","internalHost":"10101"}]`)
 	server := getMockServer(200, data, len(data))
@@ -1207,12 +1200,11 @@ func TestImportValueFrameFailsIfImportValuesFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportValueFrame(frame, "foo", iterator, 10)
+	err = client.ImportValueFrame(frame, "foo", iterator, BatchSize(10))
 	if err == nil {
 		t.Fatalf("ImportValueFrame should fail if importValues fails")
 	}
 }
-*/
 
 func TestImportBitsFailInvalidNodeAddress(t *testing.T) {
 	data := []byte(`[{"host":"10101:","internalHost":"doesn'tmatter"}]`)
@@ -1225,18 +1217,16 @@ func TestImportBitsFailInvalidNodeAddress(t *testing.T) {
 	}
 }
 
-/*
 func TestImportValuesFailInvalidNodeAddress(t *testing.T) {
 	data := []byte(`[{"host":"10101:","internalHost":"doesn'tmatter"}]`)
 	server := getMockServer(200, data, len(data))
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	err := client.importValues("foo", "bar", 0, "foo", []FieldValue{})
+	err := client.importValues("foo", "bar", 0, "foo", nil)
 	if err == nil {
 		t.Fatalf("importValues should fail on invalid node host")
 	}
 }
-*/
 
 func TestDecodingFragmentNodesFails(t *testing.T) {
 	server := getMockServer(200, []byte("notjson"), 7)
@@ -1466,7 +1456,6 @@ func TestSyncSchemaCantCreateFrame(t *testing.T) {
 	}
 }
 
-/*
 func TestExportFrameFailure(t *testing.T) {
 	paths := map[string]mockResponseItem{
 		"/status": {
@@ -1502,7 +1491,6 @@ func TestExportFrameFailure(t *testing.T) {
 		t.Fatal("should have failed")
 	}
 }
-*/
 
 func TestSlicesMaxDecodeFailure(t *testing.T) {
 	server := getMockServer(200, []byte(`{`), 0)
@@ -1584,6 +1572,14 @@ func TestClientRace(t *testing.T) {
 	}
 	for i := 0; i < 10; i++ {
 		go f()
+	}
+}
+
+func TestImportFrameWithoutImportFunFails(t *testing.T) {
+	client := Client{}
+	err := client.ImportFrame(nil, nil, importBitsFunction(nil))
+	if err == nil {
+		t.Fatalf("Should have failed")
 	}
 }
 

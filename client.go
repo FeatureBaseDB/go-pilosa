@@ -367,67 +367,39 @@ func (c *Client) Schema() (*Schema, error) {
 }
 
 // ImportFrame imports bits from the given CSV iterator.
-func (c *Client) ImportFrame(frame *Frame, bitIterator RowIterator, options ...ImportOption) error {
-	return c.ImportFrameWithStatus(frame, bitIterator, nil, options...)
+func (c *Client) ImportFrame(frame *Frame, iterator RowIterator, options ...ImportOption) error {
+	return c.ImportFrameWithStatus(frame, iterator, nil, options...)
 }
 
-func (c *Client) ImportFrameWithStatus(frame *Frame, bitIterator RowIterator, statusChan chan<- ImportStatusUpdate, options ...ImportOption) error {
+func (c *Client) ImportFrameWithStatus(frame *Frame, iterator RowIterator, statusChan chan<- ImportStatusUpdate, options ...ImportOption) error {
 	if c.importManager == nil {
 		c.importManager = newBitImportManager(c)
 	}
 	importOptions := &ImportOptions{}
+	importBitsFunction(c.importBits)(importOptions)
 	for _, option := range options {
 		if err := option(importOptions); err != nil {
 			return err
 		}
 	}
-	return c.importManager.Run(frame, bitIterator, importOptions.withDefaults(), statusChan)
+	return c.importManager.Run(frame, iterator, importOptions.withDefaults(), statusChan)
 }
 
-/*
-// ImportValueFrame imports field values from the given iterator.
-func (c *Client) ImportValueFrame(frame *Frame, field string, valueIterator ValueIterator, batchSize uint) error {
-	linesLeft := true
-	valGroup := map[uint64][]FieldValue{}
-	var currentBatchSize uint
-	indexName := frame.index.name
-	frameName := frame.name
-	fieldName := field
+func (c *Client) ImportValueFrame(frame *Frame, field string, iterator RowIterator, options ...ImportOption) error {
+	return c.ImportValueFrameWithStatus(frame, field, iterator, nil, options...)
+}
 
-	for linesLeft {
-		val, err := valueIterator.NextValue()
-		if err == io.EOF {
-			linesLeft = false
-		} else if err != nil {
-			return err
-		} else {
-			slice := val.ColumnID / sliceWidth
-			if sliceArray, ok := valGroup[slice]; ok {
-				valGroup[slice] = append(sliceArray, val)
-			} else {
-				valGroup[slice] = []FieldValue{val}
-			}
-		}
-
-		currentBatchSize++
-		// if the batch is full or there's no line left, start importing values
-		if currentBatchSize >= batchSize || !linesLeft {
-			for slice, vals := range valGroup {
-				if len(vals) > 0 {
-					err := c.importValues(indexName, frameName, slice, fieldName, vals)
-					if err != nil {
-						return err
-					}
-				}
-			}
-			valGroup = map[uint64][]FieldValue{}
-			currentBatchSize = 0
-		}
+func (c *Client) ImportValueFrameWithStatus(frame *Frame, field string, iterator RowIterator, statusChan chan<- ImportStatusUpdate, options ...ImportOption) error {
+	// c.importValues is the default importer for this function
+	ibf := func(indexName string, frameName string, slice uint64, rows []RowContainer) error {
+		return c.importValues(indexName, frameName, slice, field, rows)
 	}
-
-	return nil
+	newOptions := []ImportOption{importBitsFunction(ibf)}
+	for _, opt := range options {
+		newOptions = append(newOptions, opt)
+	}
+	return c.ImportFrameWithStatus(frame, iterator, statusChan, newOptions...)
 }
-*/
 
 func (c *Client) importBits(indexName string, frameName string, slice uint64, bits []RowContainer) error {
 	nodes, err := c.fetchFragmentNodes(indexName, slice)
@@ -454,9 +426,8 @@ func (c *Client) importBits(indexName string, frameName string, slice uint64, bi
 	return errors.Wrap(err, "importing to nodes")
 }
 
-/*
-func (c *Client) importValues(indexName string, frameName string, slice uint64, fieldName string, vals []FieldValue) error {
-	sort.Sort(valsForSort(vals))
+func (c *Client) importValues(indexName string, frameName string, slice uint64, fieldName string, vals []RowContainer) error {
+	// sort.Sort(valsForSort(vals))
 	nodes, err := c.fetchFragmentNodes(indexName, slice)
 	if err != nil {
 		return err
@@ -475,7 +446,6 @@ func (c *Client) importValues(indexName string, frameName string, slice uint64, 
 
 	return nil
 }
-*/
 
 func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentNode, error) {
 	key := fmt.Sprintf("%s-%d", indexName, slice)
@@ -528,7 +498,6 @@ func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest) err
 	return nil
 }
 
-/*
 // ExportFrame exports bits for a frame.
 func (c *Client) ExportFrame(frame *Frame, view string) (RowIterator, error) {
 	var slicesMax map[string]uint64
@@ -549,7 +518,6 @@ func (c *Client) ExportFrame(frame *Frame, view string) (RowIterator, error) {
 	}
 	return NewCSVBitIterator(newExportReader(c, sliceURIs, frame, view)), nil
 }
-*/
 
 // Views fetches and returns the views of a frame
 func (c *Client) Views(frame *Frame) ([]string, error) {
@@ -792,12 +760,12 @@ func bitsToImportRequest(indexName string, frameName string, slice uint64, bits 
 	}
 }
 
-func valsToImportRequest(indexName string, frameName string, slice uint64, fieldName string, vals []FieldValue) *pbuf.ImportValueRequest {
+func valsToImportRequest(indexName string, frameName string, slice uint64, fieldName string, vals []RowContainer) *pbuf.ImportValueRequest {
 	columnIDs := make([]uint64, 0, len(vals))
 	values := make([]int64, 0, len(vals))
 	for _, val := range vals {
-		columnIDs = append(columnIDs, val.ColumnID)
-		values = append(values, val.Value)
+		columnIDs = append(columnIDs, val.Uint64Field(0))
+		values = append(values, val.Int64Field(1))
 	}
 	return &pbuf.ImportValueRequest{
 		Index:     indexName,

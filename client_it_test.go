@@ -716,7 +716,7 @@ func TestImportWithTimeout(t *testing.T) {
 		t.Fatal(err)
 	}
 	statusChan := make(chan ImportStatusUpdate, 10)
-	err = client.ImportFrameWithStatus(frame, iterator, statusChan, ThreadCount(1), ImportStrategy(TimeoutImport), Timeout(50*time.Millisecond))
+	err = client.ImportFrameWithStatus(frame, iterator, statusChan, ThreadCount(1), ImportStrategy(TimeoutImport), ThreadCount(2), Timeout(100*time.Millisecond))
 	if err != nil {
 		t.Fatal(err)
 	}

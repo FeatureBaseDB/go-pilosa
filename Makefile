@@ -18,7 +18,7 @@ test:
 	go test
 
 test-all:
-	go test -race -tags=integration
+	go test -race -tags=integration -v
 
 release:
 	printf "package pilosa\nconst Version = \"$(VERSION)\"" > version.go

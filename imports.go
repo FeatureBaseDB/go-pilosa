@@ -128,7 +128,7 @@ func BitCSVUnmarshallerWithTimestamp(timestampFormat string) CSVRowUnmarshaller 
 			ColumnID:  uint64(columnID),
 			Timestamp: int64(timestamp),
 		}
-		return &bit, nil
+		return bit, nil
 	}
 }
 

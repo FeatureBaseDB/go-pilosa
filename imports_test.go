@@ -61,10 +61,10 @@ func TestCSVBitIterator(t *testing.T) {
 	if len(bits) != 3 {
 		t.Fatalf("There should be 3 bits")
 	}
-	target := []*pilosa.Bit{
-		&pilosa.Bit{RowID: 1, ColumnID: 10, Timestamp: 683793200},
-		&pilosa.Bit{RowID: 5, ColumnID: 20, Timestamp: 683793300},
-		&pilosa.Bit{RowID: 3, ColumnID: 41, Timestamp: 683793385},
+	target := []pilosa.Bit{
+		{RowID: 1, ColumnID: 10, Timestamp: 683793200},
+		{RowID: 5, ColumnID: 20, Timestamp: 683793300},
+		{RowID: 3, ColumnID: 41, Timestamp: 683793385},
 	}
 	for i := range target {
 		if !reflect.DeepEqual(target[i], bits[i]) {
@@ -90,10 +90,10 @@ func TestCSVBitIteratorWithTimestampFormat(t *testing.T) {
 		}
 		bits = append(bits, bit)
 	}
-	target := []*pilosa.Bit{
-		&pilosa.Bit{RowID: 1, ColumnID: 10, Timestamp: 683770173},
-		&pilosa.Bit{RowID: 5, ColumnID: 20, Timestamp: 683770175},
-		&pilosa.Bit{RowID: 3, ColumnID: 41, Timestamp: 683770176},
+	target := []pilosa.Bit{
+		{RowID: 1, ColumnID: 10, Timestamp: 683770173},
+		{RowID: 5, ColumnID: 20, Timestamp: 683770175},
+		{RowID: 3, ColumnID: 41, Timestamp: 683770176},
 	}
 	if len(bits) != len(target) {
 		t.Fatalf("There should be %d bits", len(target))

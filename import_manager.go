@@ -18,10 +18,10 @@ func newBitImportManager(client *Client) *bitImportManager {
 	}
 }
 
-func (bim bitImportManager) Run(frame *Frame, iterator RowIterator, options ImportOptions, statusChan chan<- ImportStatusUpdate) error {
+func (bim bitImportManager) Run(frame *Frame, iterator RecordIterator, options ImportOptions, statusChan chan<- ImportStatusUpdate) error {
 	sliceWidth := options.sliceWidth
 	threadCount := uint64(options.ThreadCount)
-	bitChans := make([]chan RowContainer, threadCount)
+	bitChans := make([]chan Record, threadCount)
 	errChans := make([]chan error, threadCount)
 
 	if options.importBitsFunction == nil {
@@ -29,16 +29,16 @@ func (bim bitImportManager) Run(frame *Frame, iterator RowIterator, options Impo
 	}
 
 	for i := range bitChans {
-		bitChans[i] = make(chan RowContainer, options.BatchSize)
+		bitChans[i] = make(chan Record, options.BatchSize)
 		errChans[i] = make(chan error)
 		go bitImportWorker(i, bim.client, frame, bitChans[i], errChans[i], statusChan, options)
 	}
 
-	var bit RowContainer
+	var bit Record
 	var bitIteratorError error
 
 	for {
-		bit, bitIteratorError = iterator.NextRow()
+		bit, bitIteratorError = iterator.NextRecord()
 		if bitIteratorError != nil {
 			if bitIteratorError == io.EOF {
 				bitIteratorError = nil
@@ -77,15 +77,15 @@ func (bim bitImportManager) Run(frame *Frame, iterator RowIterator, options Impo
 	return nil
 }
 
-func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan RowContainer, errChan chan<- error, statusChan chan<- ImportStatusUpdate, options ImportOptions) {
-	batchForSlice := map[uint64][]RowContainer{}
+func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan Record, errChan chan<- error, statusChan chan<- ImportStatusUpdate, options ImportOptions) {
+	batchForSlice := map[uint64][]Record{}
 	frameName := frame.Name()
 	indexName := frame.index.Name()
 	importFun := options.importBitsFunction
 
-	importBits := func(slice uint64, bits []RowContainer) error {
+	importBits := func(slice uint64, bits []Record) error {
 		tic := time.Now()
-		sort.Sort(rowContainerSort(bits))
+		sort.Sort(recordSort(bits))
 		err := importFun(indexName, frameName, slice, bits)
 		if err != nil {
 			return err

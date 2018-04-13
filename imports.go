@@ -43,29 +43,29 @@ import (
 	"github.com/pkg/errors"
 )
 
-type RowContainer interface {
+type Record interface {
 	Int64Field(index int) int64
 	Uint64Field(index int) uint64
 	StringField(index int) string
-	Less(other RowContainer) bool
+	Less(other Record) bool
 }
 
-type rowContainerSort []RowContainer
+type recordSort []Record
 
-func (rc rowContainerSort) Len() int {
+func (rc recordSort) Len() int {
 	return len(rc)
 }
 
-func (rc rowContainerSort) Swap(i, j int) {
+func (rc recordSort) Swap(i, j int) {
 	rc[i], rc[j] = rc[j], rc[i]
 }
 
-func (rc rowContainerSort) Less(i, j int) bool {
+func (rc recordSort) Less(i, j int) bool {
 	return rc[i].Less(rc[j])
 }
 
-type RowIterator interface {
-	NextRow() (RowContainer, error)
+type RecordIterator interface {
+	NextRecord() (Record, error)
 }
 
 // Bit defines a single Pilosa bit.
@@ -105,7 +105,7 @@ func (b Bit) StringField(index int) string {
 	return ""
 }
 
-func (b Bit) Less(other RowContainer) bool {
+func (b Bit) Less(other Record) bool {
 	if ob, ok := other.(Bit); ok {
 		if b.RowID == ob.RowID {
 			return b.ColumnID < ob.ColumnID
@@ -115,12 +115,12 @@ func (b Bit) Less(other RowContainer) bool {
 	return false
 }
 
-func BitCSVUnmarshaller() CSVRowUnmarshaller {
+func BitCSVUnmarshaller() CSVRecordUnmarshaller {
 	return BitCSVUnmarshallerWithTimestamp("")
 }
 
-func BitCSVUnmarshallerWithTimestamp(timestampFormat string) CSVRowUnmarshaller {
-	return func(text string) (RowContainer, error) {
+func BitCSVUnmarshallerWithTimestamp(timestampFormat string) CSVRecordUnmarshaller {
+	return func(text string) (Record, error) {
 		parts := strings.Split(text, ",")
 		if len(parts) < 2 {
 			return nil, errors.New("Invalid CSV line")
@@ -157,20 +157,20 @@ func BitCSVUnmarshallerWithTimestamp(timestampFormat string) CSVRowUnmarshaller 
 	}
 }
 
-type CSVRowUnmarshaller func(text string) (RowContainer, error)
+type CSVRecordUnmarshaller func(text string) (Record, error)
 
-// CSVBitIterator reads rows from a Reader.
-// Each line should contain a single row in the following form:
+// CSVBitIterator reads records from a Reader.
+// Each line should contain a single record in the following form:
 // field1,field2,...
 type CSVIterator struct {
 	reader       io.Reader
 	line         int
 	scanner      *bufio.Scanner
-	unmarshaller CSVRowUnmarshaller
+	unmarshaller CSVRecordUnmarshaller
 }
 
 // NewCSVIterator creates a CSVIterator from a Reader.
-func NewCSVIterator(reader io.Reader, unmarshaller CSVRowUnmarshaller) *CSVIterator {
+func NewCSVIterator(reader io.Reader, unmarshaller CSVRecordUnmarshaller) *CSVIterator {
 	return &CSVIterator{
 		reader:       reader,
 		line:         0,
@@ -191,9 +191,9 @@ func NewCSVValueIterator(reader io.Reader) *CSVIterator {
 	return NewCSVIterator(reader, FieldValueCSVUnmarshaller)
 }
 
-// NextRow iterates on lines of a Reader.
+// NextRecord iterates on lines of a Reader.
 // Returns io.EOF on end of iteration.
-func (c *CSVIterator) NextRow() (RowContainer, error) {
+func (c *CSVIterator) NextRecord() (Record, error) {
 	if ok := c.scanner.Scan(); ok {
 		c.line++
 		text := strings.TrimSpace(c.scanner.Text())
@@ -251,14 +251,14 @@ func (f FieldValue) StringField(index int) string {
 	}
 }
 
-func (v FieldValue) Less(other RowContainer) bool {
+func (v FieldValue) Less(other Record) bool {
 	if ov, ok := other.(FieldValue); ok {
 		return v.ColumnID < ov.ColumnID
 	}
 	return false
 }
 
-func FieldValueCSVUnmarshaller(text string) (RowContainer, error) {
+func FieldValueCSVUnmarshaller(text string) (Record, error) {
 	parts := strings.Split(text, ",")
 	if len(parts) < 2 {
 		return nil, errors.New("Invalid CSV")

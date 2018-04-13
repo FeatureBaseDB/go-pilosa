@@ -47,9 +47,9 @@ func TestCSVBitIterator(t *testing.T) {
 		5,20,683793300
 		3,41,683793385`)
 	iterator := pilosa.NewCSVBitIterator(reader)
-	bits := []pilosa.RowContainer{}
+	bits := []pilosa.Record{}
 	for {
-		bit, err := iterator.NextRow()
+		bit, err := iterator.NextRecord()
 		if err == io.EOF {
 			break
 		}
@@ -79,9 +79,9 @@ func TestCSVBitIteratorWithTimestampFormat(t *testing.T) {
 		5,20,1991-09-02T09:35
 		3,41,1991-09-02T09:36`)
 	iterator := pilosa.NewCSVBitIteratorWithTimestampFormat(reader, format)
-	bits := []pilosa.RowContainer{}
+	bits := []pilosa.Record{}
 	for {
-		bit, err := iterator.NextRow()
+		bit, err := iterator.NextRecord()
 		if err == io.EOF {
 			break
 		}
@@ -109,7 +109,7 @@ func TestCSVBitIteratorWithTimestampFormatFail(t *testing.T) {
 	format := "2014-07-16"
 	reader := strings.NewReader(`1,10,X`)
 	iterator := pilosa.NewCSVBitIteratorWithTimestampFormat(reader, format)
-	_, err := iterator.NextRow()
+	_, err := iterator.NextRecord()
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -121,9 +121,9 @@ func TestCSVValueIterator(t *testing.T) {
 		3,41
 	`)
 	iterator := pilosa.NewCSVValueIterator(reader)
-	values := []pilosa.RowContainer{}
+	values := []pilosa.Record{}
 	for {
-		value, err := iterator.NextRow()
+		value, err := iterator.NextRecord()
 		if err == io.EOF {
 			break
 		}
@@ -160,7 +160,7 @@ func TestCSVBitIteratorInvalidInput(t *testing.T) {
 	}
 	for _, text := range invalidInputs {
 		iterator := pilosa.NewCSVBitIterator(strings.NewReader(text))
-		_, err := iterator.NextRow()
+		_, err := iterator.NextRecord()
 		if err == nil {
 			t.Fatalf("CSVBitIterator input: %s should fail", text)
 		}
@@ -178,7 +178,7 @@ func TestCSVValueIteratorInvalidInput(t *testing.T) {
 	}
 	for _, text := range invalidInputs {
 		iterator := pilosa.NewCSVValueIterator(strings.NewReader(text))
-		_, err := iterator.NextRow()
+		_, err := iterator.NextRecord()
 		if err == nil {
 			t.Fatalf("CSVValueIterator input: %s should fail", text)
 		}
@@ -187,7 +187,7 @@ func TestCSVValueIteratorInvalidInput(t *testing.T) {
 
 func TestCSVBitIteratorError(t *testing.T) {
 	iterator := pilosa.NewCSVBitIterator(&BrokenReader{})
-	_, err := iterator.NextRow()
+	_, err := iterator.NextRecord()
 	if err == nil {
 		t.Fatal("CSVBitIterator should fail with error")
 	}
@@ -195,7 +195,7 @@ func TestCSVBitIteratorError(t *testing.T) {
 
 func TestCSVValueIteratorError(t *testing.T) {
 	iterator := pilosa.NewCSVValueIterator(&BrokenReader{})
-	_, err := iterator.NextRow()
+	_, err := iterator.NextRecord()
 	if err == nil {
 		t.Fatal("CSVValueIterator should fail with error")
 	}
@@ -210,19 +210,19 @@ func (r BrokenReader) Read(p []byte) (n int, err error) {
 func TestBitInt64Field(t *testing.T) {
 	b := pilosa.Bit{RowID: 15, ColumnID: 55, Timestamp: 100101}
 	target := []int64{15, 55, 100101, 0}
-	checkInt64RowContainer(t, target, b)
+	checkInt64Record(t, target, b)
 }
 
 func TestBitUint64Field(t *testing.T) {
 	b := pilosa.Bit{RowID: 15, ColumnID: 55, Timestamp: 100101}
 	target := []uint64{15, 55, 100101, 0}
-	checkUint64RowContainer(t, target, b)
+	checkUint64Record(t, target, b)
 }
 
 func TestBitStringField(t *testing.T) {
 	b := pilosa.Bit{}
 	target := []string{""}
-	checkStringRowContainer(t, target, b)
+	checkStringRecord(t, target, b)
 }
 
 func TestBitLess(t *testing.T) {
@@ -247,19 +247,19 @@ func TestBitLess(t *testing.T) {
 func TestFieldValueInt64Field(t *testing.T) {
 	b := pilosa.FieldValue{ColumnID: 55, Value: 125}
 	target := []int64{55, 125, 0}
-	checkInt64RowContainer(t, target, b)
+	checkInt64Record(t, target, b)
 }
 
 func TestFieldValueUint64Field(t *testing.T) {
 	b := pilosa.FieldValue{ColumnID: 55, Value: 125}
 	target := []uint64{55, 125, 0}
-	checkUint64RowContainer(t, target, b)
+	checkUint64Record(t, target, b)
 }
 
 func TestFieldValueStringField(t *testing.T) {
 	b := pilosa.FieldValue{ColumnKey: "abc", Value: 125}
 	target := []string{"abc", ""}
-	checkStringRowContainer(t, target, b)
+	checkStringRecord(t, target, b)
 }
 
 func TestFieldValueLess(t *testing.T) {
@@ -277,7 +277,7 @@ func TestFieldValueLess(t *testing.T) {
 	}
 }
 
-func checkInt64RowContainer(t *testing.T, target []int64, rc pilosa.RowContainer) {
+func checkInt64Record(t *testing.T, target []int64, rc pilosa.Record) {
 	for i := range target {
 		value := rc.Int64Field(i)
 		if target[i] != value {
@@ -286,7 +286,7 @@ func checkInt64RowContainer(t *testing.T, target []int64, rc pilosa.RowContainer
 	}
 }
 
-func checkUint64RowContainer(t *testing.T, target []uint64, rc pilosa.RowContainer) {
+func checkUint64Record(t *testing.T, target []uint64, rc pilosa.Record) {
 	for i := range target {
 		value := rc.Uint64Field(i)
 		if target[i] != value {
@@ -295,7 +295,7 @@ func checkUint64RowContainer(t *testing.T, target []uint64, rc pilosa.RowContain
 	}
 }
 
-func checkStringRowContainer(t *testing.T, target []string, rc pilosa.RowContainer) {
+func checkStringRecord(t *testing.T, target []string, rc pilosa.Record) {
 	for i := range target {
 		value := rc.StringField(i)
 		if target[i] != value {

@@ -691,7 +691,7 @@ type BitGenerator struct {
 	colIndex    uint64
 }
 
-func (gen *BitGenerator) NextRow() (RowContainer, error) {
+func (gen *BitGenerator) NextRecord() (Record, error) {
 	bit := Bit{RowID: gen.rowIndex, ColumnID: gen.colIndex}
 	if gen.colIndex >= gen.maxColumnID {
 		gen.colIndex = 0
@@ -740,7 +740,7 @@ func TestImportWithBatchSize(t *testing.T) {
 	}
 }
 
-func failingImportBits(indexName string, frameName string, slice uint64, bits []RowContainer) error {
+func failingImportBits(indexName string, frameName string, slice uint64, bits []Record) error {
 	if len(bits) > 0 {
 		return errors.New("some error")
 	}
@@ -863,13 +863,13 @@ func TestCSVExport(t *testing.T) {
 		{RowID: 1, ColumnID: 10},
 		{RowID: 2, ColumnID: 1048577},
 	}
-	bits := []RowContainer{}
+	bits := []Record{}
 	iterator, err := client.ExportFrame(frame, "standard")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for {
-		bit, err := iterator.NextRow()
+		bit, err := iterator.NextRecord()
 		if err == io.EOF {
 			break
 		}
@@ -1158,7 +1158,7 @@ func TestImportFailsOnImportBitsError(t *testing.T) {
 	server := getMockServer(500, []byte{}, 0)
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	err := client.importBits("foo", "bar", 0, []RowContainer{})
+	err := client.importBits("foo", "bar", 0, []Record{})
 	if err == nil {
 		t.Fatalf("importBits should fail when fetch fragment nodes fails")
 	}
@@ -1211,7 +1211,7 @@ func TestImportBitsFailInvalidNodeAddress(t *testing.T) {
 	server := getMockServer(200, data, len(data))
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	err := client.importBits("foo", "bar", 0, []RowContainer{})
+	err := client.importBits("foo", "bar", 0, []Record{})
 	if err == nil {
 		t.Fatalf("importBits should fail on invalid node host")
 	}

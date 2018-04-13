@@ -159,7 +159,7 @@ func BitCSVUnmarshallerWithTimestamp(timestampFormat string) CSVRecordUnmarshall
 
 type CSVRecordUnmarshaller func(text string) (Record, error)
 
-// CSVBitIterator reads records from a Reader.
+// CSVIterator reads records from a Reader.
 // Each line should contain a single record in the following form:
 // field1,field2,...
 type CSVIterator struct {

@@ -87,20 +87,20 @@ for _, result := range response.Results() {
 
 ### Data Model and Queries
 
-See: [Data Model and Queries](https://github.com/pilosa/go-pilosa/blob/master/docs/data-model-queries.md)
+See: [Data Model and Queries](docs/data-model-queries.md)
 
 ### Executing Queries
 
-See: [Server Interaction](https://github.com/pilosa/go-pilosa/blob/master/docs/server-interaction.md)
+See: [Server Interaction](docs/server-interaction.md)
 
 ### Importing and Exporting Data
 
-See: [Importing and Exporting Data](https://github.com/pilosa/go-pilosa/docs/imports-exports.md)
+See: [Importing and Exporting Data](docs/imports-exports.md)
 
 ## Contributing
 
-See: [CONTRIBUTING](https://github.com/pilosa/go-pilosa/blob/master/CONTRIBUTING.md)
+See: [CONTRIBUTING](CONTRIBUTING.md)
 
 ## License
 
-See: [LICENSE](https://github.com/pilosa/go-pilosa/blob/master/LICENSE)
+See: [LICENSE](LICENSE)

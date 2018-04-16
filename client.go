@@ -44,6 +44,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -62,7 +63,12 @@ type Client struct {
 	client  *http.Client
 	// User-Agent header cache. Not used until cluster-resize support branch is merged
 	// and user agent is saved here in NewClient
-	userAgent string
+	userAgent              string
+	importThreadCount      int
+	sliceWidth             uint64
+	fragmentNodeCache      map[string][]fragmentNode
+	fragmentNodeCacheMutex *sync.RWMutex
+	importManager          *bitImportManager
 }
 
 // DefaultClient creates a client with the default address and options.
@@ -101,9 +107,12 @@ func NewClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 	if options == nil {
 		options = &ClientOptions{}
 	}
+	options = options.withDefaults()
 	return &Client{
-		cluster: cluster,
-		client:  newHTTPClient(options.withDefaults()),
+		cluster:                cluster,
+		client:                 newHTTPClient(options.withDefaults()),
+		fragmentNodeCache:      map[string][]fragmentNode{},
+		fragmentNodeCacheMutex: &sync.RWMutex{},
 	}
 }
 
@@ -359,45 +368,21 @@ func (c *Client) Schema() (*Schema, error) {
 }
 
 // ImportFrame imports bits from the given CSV iterator.
-func (c *Client) ImportFrame(frame *Frame, bitIterator BitIterator, batchSize uint) error {
-	linesLeft := true
-	bitGroup := map[uint64][]Bit{}
-	var currentBatchSize uint
-	indexName := frame.index.name
-	frameName := frame.name
+func (c *Client) ImportFrame(frame *Frame, bitIterator BitIterator, options ...ImportOption) error {
+	return c.ImportFrameWithStatus(frame, bitIterator, nil, options...)
+}
 
-	for linesLeft {
-		bit, err := bitIterator.NextBit()
-		if err == io.EOF {
-			linesLeft = false
-		} else if err != nil {
+func (c *Client) ImportFrameWithStatus(frame *Frame, bitIterator BitIterator, statusChan chan<- ImportStatusUpdate, options ...ImportOption) error {
+	if c.importManager == nil {
+		c.importManager = newBitImportManager(c)
+	}
+	importOptions := &ImportOptions{}
+	for _, option := range options {
+		if err := option(importOptions); err != nil {
 			return err
-		} else {
-			slice := bit.ColumnID / sliceWidth
-			if sliceArray, ok := bitGroup[slice]; ok {
-				bitGroup[slice] = append(sliceArray, bit)
-			} else {
-				bitGroup[slice] = []Bit{bit}
-			}
-		}
-
-		currentBatchSize++
-		// if the batch is full or there's no line left, start importing bits
-		if currentBatchSize >= batchSize || !linesLeft {
-			for slice, bits := range bitGroup {
-				if len(bits) > 0 {
-					err := c.importBits(indexName, frameName, slice, bits)
-					if err != nil {
-						return err
-					}
-				}
-			}
-			bitGroup = map[uint64][]Bit{}
-			currentBatchSize = 0
 		}
 	}
-
-	return nil
+	return c.importManager.Run(frame, bitIterator, importOptions.withDefaults(), statusChan)
 }
 
 // ImportValueFrame imports field values from the given iterator.
@@ -444,7 +429,6 @@ func (c *Client) ImportValueFrame(frame *Frame, field string, valueIterator Valu
 }
 
 func (c *Client) importBits(indexName string, frameName string, slice uint64, bits []Bit) error {
-	sort.Sort(bitsForSort(bits))
 	nodes, err := c.fetchFragmentNodes(indexName, slice)
 	if err != nil {
 		return errors.Wrap(err, "fetching fragment nodes")
@@ -491,6 +475,13 @@ func (c *Client) importValues(indexName string, frameName string, slice uint64, 
 }
 
 func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentNode, error) {
+	key := fmt.Sprintf("%s-%d", indexName, slice)
+	c.fragmentNodeCacheMutex.RLock()
+	nodes, ok := c.fragmentNodeCache[key]
+	c.fragmentNodeCacheMutex.RUnlock()
+	if ok {
+		return nodes, nil
+	}
 	path := fmt.Sprintf("/fragment/nodes?slice=%d&index=%s", slice, indexName)
 	_, body, err := c.httpRequest("GET", path, []byte{}, nil)
 	if err != nil {
@@ -505,6 +496,9 @@ func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentN
 	for _, nodeURI := range fragmentNodeURIs {
 		fragmentNodes = append(fragmentNodes, nodeURI.URI)
 	}
+	c.fragmentNodeCacheMutex.Lock()
+	c.fragmentNodeCache[key] = fragmentNodes
+	c.fragmentNodeCacheMutex.Unlock()
 	return fragmentNodes, nil
 }
 
@@ -872,6 +866,10 @@ func TLSConfig(config *tls.Config) ClientOption {
 	}
 }
 
+type versionInfo struct {
+	Version string `json:"version"`
+}
+
 func (co *ClientOptions) withDefaults() (updated *ClientOptions) {
 	// copy options so the original is not updated
 	updated = &ClientOptions{}
@@ -981,6 +979,80 @@ func SkipVersionCheck() ClientOption {
 func LegacyMode(enable bool) ClientOption {
 	return func(options *ClientOptions) error {
 		log.Println("The LegacyMode client option is deprecated and will be removed - it has no effect and should be removed from your code")
+		return nil
+	}
+}
+
+type ImportWorkerStrategy int
+
+const (
+	DefaultImport ImportWorkerStrategy = iota
+	BatchImport
+	TimeoutImport
+)
+
+type ImportOptions struct {
+	ThreadCount        int
+	sliceWidth         uint64
+	Timeout            time.Duration
+	BatchSize          int
+	ImportStrategy     ImportWorkerStrategy
+	importBitsFunction func(indexName string, frameName string, slice uint64, bits []Bit) error
+}
+
+func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
+	updated = *opt
+	updated.sliceWidth = sliceWidth
+
+	if updated.ThreadCount <= 0 {
+		updated.ThreadCount = 1
+	}
+	if updated.Timeout <= 0 {
+		updated.Timeout = 100 * time.Millisecond
+	}
+	if updated.BatchSize <= 0 {
+		updated.BatchSize = 100000
+	}
+	if updated.ImportStrategy == DefaultImport {
+		updated.ImportStrategy = TimeoutImport
+	}
+	return
+}
+
+// ImportOption is used when running imports.
+type ImportOption func(options *ImportOptions) error
+
+func ThreadCount(count int) ImportOption {
+	return func(options *ImportOptions) error {
+		options.ThreadCount = count
+		return nil
+	}
+}
+
+func Timeout(timeout time.Duration) ImportOption {
+	return func(options *ImportOptions) error {
+		options.Timeout = timeout
+		return nil
+	}
+}
+
+func BatchSize(batchSize int) ImportOption {
+	return func(options *ImportOptions) error {
+		options.BatchSize = batchSize
+		return nil
+	}
+}
+
+func ImportStrategy(strategy ImportWorkerStrategy) ImportOption {
+	return func(options *ImportOptions) error {
+		options.ImportStrategy = strategy
+		return nil
+	}
+}
+
+func importBitsFunction(fun func(indexName string, frameName string, slice uint64, bits []Bit) error) ImportOption {
+	return func(options *ImportOptions) error {
+		options.importBitsFunction = fun
 		return nil
 	}
 }

@@ -12,7 +12,7 @@ Go client for Pilosa high performance distributed bitmap index.
 
 ## What's New?
 
-See: [CHANGELOG](https://github.com/pilosa/go-pilosa/blob/master/CHANGELOG.md)
+See: [CHANGELOG](CHANGELOG.md)
 
 ## Requirements
 

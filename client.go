@@ -427,7 +427,6 @@ func (c *Client) importBits(indexName string, frameName string, slice uint64, bi
 }
 
 func (c *Client) importValues(indexName string, frameName string, slice uint64, fieldName string, vals []Record) error {
-	// sort.Sort(valsForSort(vals))
 	nodes, err := c.fetchFragmentNodes(indexName, slice)
 	if err != nil {
 		return err

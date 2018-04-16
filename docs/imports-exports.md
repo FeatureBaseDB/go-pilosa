@@ -1,6 +1,8 @@
-# Importing How To
+# Importing and Exporting Data
 
-## Overview
+## Importing Data
+
+### Overview
 
 If you have large amounts of data, it is more efficient to import it into Pilosa instead of using multiple SetBit queries. This library supports importing anything which implements the `Record` interface, such as `Bit`s or `FieldValue`s into an existing frame.
 
@@ -8,7 +10,7 @@ Once you create the frame to import into, you need to create an instance of a st
 
 Finally you should call `client.ImportFrame`, `client.ImportFrameWithStatus`, `client.ImportValueFrame` or `client.ImportValueFrameWithStatus` with the necessary parameters to start the import process.
 
-## A Simple Example
+### A Simple Example
 
 Let's use the `CSVBitIterator` which reads `Bit` records from a `CSV` reader:
 ```go
@@ -30,7 +32,7 @@ if err != nil {
 
 It is possible to set import options, e.g., the number of goroutines and also track the status of the import. We are going to see how to accomplish those in the *Advanced Usage* section.
 
-## CSVIterator
+### CSVIterator
 
 The `CSVIterator` reads lines from an `io.Reader` and converts them to `Record`s using a `BitCSVUnmarshaller`.
 
@@ -48,7 +50,7 @@ type CSVRecordUnmarshaller func(text string) (Record, error)
 
 We have three predefined `CSVRecordUnmarshaller`s in this library: `BitCSVUnmarshaller`, `BitCSVUnmarshallerWithTimestamp` and `FieldValueCSVUnmarshaller` which are explained in the subsections below.
 
-### BitCSVUnmarshaller and CSVBitIterator
+#### BitCSVUnmarshaller and CSVBitIterator
 
 `CSVBitIterator` is a `CSVIterator` which uses the `BitCSVUnmarshaller` as the unmarshaller. `BitCSVUnmarshaller` unmarshals CSV rows with the default timestamp format.
 
@@ -67,7 +69,7 @@ Example:
 iterator := NewCSVBitIterator(strings.NewReader(text))
 ```
 
-### BitCSVUnmarshallerWithTimestamp and CSVBitIteratorWithTimestamp
+#### BitCSVUnmarshallerWithTimestamp and CSVBitIteratorWithTimestamp
 
 `CSVBitIterator` is a `CSVIterator` which uses the `BitCSVUnmarshallerWithTimestamp` as the unmarshaller. `BitCSVUnmarshallerWithTimestamp` unmarshals CSV using the given timestamp format.
 
@@ -77,7 +79,7 @@ format := "2006-01-02T04:05"
 iterator := pilosa.NewCSVBitIteratorWithTimestampFormat(reader, format)
 ```
 
-### FieldValueCSVUnmarshaller and CSVValueIterator
+#### FieldValueCSVUnmarshaller and CSVValueIterator
 
 `CSVFieldValueIterator` is a `BitCSVUnmarshaller` which can read CSV rows suitable to be imported into [BSI fields](https://www.pilosa.com/docs/latest/data-model/#bsi-range-encoding).
 
@@ -91,7 +93,7 @@ Example:
 iterator := NewCSVValueIterator(strings.NewReader(text))
 ```
 
-## RecordIterator
+### RecordIterator
 
 In case your data is not coming from a CSV data source (*highly likely!*) you need to write your own struct which implements the `RecordIterator` interface. The `RecordIterator` is defined as follows:
 ```go
@@ -134,9 +136,9 @@ func (gen *RandomBitGenerator) NextRecord() (Record, error) {
 }
 ```
 
-## Advanced Usage
+### Advanced Usage
 
-### Import Options
+#### Import Options
 
 You can change the import strategy, thread count and other options by passing them to `client.ImportFrame` or `client.ImportFrameWithStatus` functions. Here are the import options:
 * `ImportStrategy`: Changes the import strategy of the import goroutines to one of the following:
@@ -153,7 +155,7 @@ err := client.ImportFrame(frame, iterator,
 	Timeout(200 * time.Millisecond))
 ```
 
-## Tracking Import Status
+### Tracking Import Status
 
 You can pass a channel of type `ImportStatusUpdate` to `client.ImportFrameWithStatus` to get notified when an importer imports a slice of bits. The status channel is closed by the client when the import 
 ends.
@@ -195,5 +197,35 @@ for ok {
 		// do something while waiting for the next status update to arrive.
 		time.Sleep(1000 * time.Millisecond)
 	}
+}
+```
+
+## Exporting Data
+
+You can export a view of a frame from Pilosa using `client.ExportFrame` function which returns a `BitIterator`. Use the `NextBit` function of this iterator to receive all bits for the specified frame. When there are no more bits, `io.EOF` is returned.
+
+The `PilosaClient` struct has the `Views` function which returns all of the views for a particular frame. You can use this function to retrieve view names:
+```go
+views, err := client.Views(frame)
+```
+
+Here's sample code which retrieves bits of the `standard` view:
+
+```go
+iterator, err := client.ExportFrame(frame, "standard")
+if err != nil {
+    log.Fatal(err)
+}
+
+bits := []pilosa.Bit{}
+for {
+    bit, err := iterator.NextBit()
+    if err == io.EOF {
+        break
+    }
+    if err != nil {
+        log.Fatal(err)
+    }
+    bits = append(bits, bit)
 }
 ```

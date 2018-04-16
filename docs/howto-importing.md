@@ -158,6 +158,8 @@ err := client.ImportFrame(frame, iterator,
 You can pass a channel of type `ImportStatusUpdate` to `client.ImportFrameWithStatus` to get notified when an importer imports a slice of bits. The status channel is closed by the client when the import 
 ends.
 
+Note that if you use this feature, you have to consume from the status channel, otherwise import goroutines may get blocked.
+
 `ImportStatusUpdate` is defined as follows:
 ```go
 type ImportStatusUpdate struct {

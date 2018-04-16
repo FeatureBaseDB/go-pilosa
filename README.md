@@ -61,7 +61,7 @@ Go client for Pilosa high performance distributed bitmap index.
 
 ## Requirements
 
-* Go 1.8 and higher
+* Go 1.9 and higher
 
 ## Install
 
@@ -434,63 +434,7 @@ count := result.Count
 
 ### Importing Data
 
-If you have large amounts of data, it is more efficient to import it into Pilosa instead of using multiple SetBit queries. This library supports importing bits into an existing frame.
-
-Before starting the import, create an instance of a struct which implements `BitIterator` and pass it to the `client.ImportFrame` function. This library ships with the `CSVBitIterator` struct which supports importing bits in the CSV (comma separated values) format:
-```
-ROW_ID,COLUMN_ID
-```
-
-Optionally, a timestamp can be added. Note that Pilosa is not time zone aware:
-```
-ROW_ID,COLUMN_ID,TIMESTAMP
-```
-
-Note that each line corresponds to a single bit and ends with a new line (`\n` or `\r\n`), except the last line.
-
-Here's some sample code:
-```go
-text := `10,7
-    10,5
-    2,3
-    7,1`
-iterator := pilosa.NewCSVBitIterator(strings.NewReader(text))
-```
-
-After creating the iterator you can pass it to `client.ImportFrame` together with the frame and batch size. The following sample sends batches with size 10000 bits:
-```go
-err = client.ImportFrame(frame, iterator, 10000)
-if err != nil {
-    panic(err)
-}
-```
-
-You can define a custom `BitIterator` by including a function with the signature `NextBit() (Bit, error)` in your struct.
-```go
-type StaticBitIterator struct {
-    bits []pilosa.Bit
-    index int
-}
-
-func NewStaticBitIterator() *StaticBitIterator {
-    return &StaticBitIterator{
-        bits: []pilosa.Bit{
-            {RowID: 1, ColumnID: 1, Timestamp: 683793200},
-            {RowID: 5, ColumnID: 20, Timestamp: 683793300},
-            {RowID: 3, ColumnID: 41, Timestamp: 683793385},
-        },      
-    }       
-}
-
-func (it *StaticBitIterator) NextBit(pilosa.Bit, error) (pilosa.Bit, error) {
-    if it.index < len(it.bits) { 
-        return pilosa.Bit{}, io.EOF
-    }
-    index := it.index
-    it.index += 1
-    return it.bits[index], nil
-}
-```
+See: [How To Import](https://github.com/pilosa/go-pilosa/docs/howto-importing.md)
 
 ### Exporting Data
 

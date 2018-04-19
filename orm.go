@@ -36,6 +36,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -463,8 +464,10 @@ func (fo *FrameOptions) addOptions(options ...interface{}) error {
 type FrameOption func(options *FrameOptions) error
 
 // InverseEnabled enables inverse frame.
+// *DEPRECATED*
 func InverseEnabled(enabled bool) FrameOption {
 	return func(options *FrameOptions) error {
+		log.Println("The InverseEnabled frame option is deprecated and will be removed.")
 		options.InverseEnabled = enabled
 		return nil
 	}
@@ -479,8 +482,10 @@ func CacheSize(size uint) FrameOption {
 }
 
 // RangeEnabled enables range encoding for a frame.
+// *DEPRECATED*
 func RangeEnabled(enabled bool) FrameOption {
 	return func(options *FrameOptions) error {
+		log.Println("The RangeEnabled frame option is deprecated and will be removed.")
 		options.RangeEnabled = enabled
 		return nil
 	}

@@ -7,7 +7,7 @@
     * **Deprecation** `IndexOptions` struct is deprecated and will be removed in the future.
     * **Deprecation** Passing `IndexOptions` or `nil` to `schema.Index` function.
     * **Deprecation** `RangeEnabled` frame option. All frames have this option `true` on Pilosa 1.0.
-    * **Deprecation** `InverseEnabled` frame option. Inverse frames will be removed on Pilosa 1.0.
+    * **Deprecation** `InverseEnabled` frame option and `Frame.InverseBitmap`, `Frame.InverseTopN`, `Frame.InverseBitmapTopN`, `Frame.InverseFilterFieldTopN`, `Frame.InverseRange` functions. Inverse frames will be removed from Pilosa 1.0.
     
 * **v0.8.0** (2017-11-16)
     * IPv6 support.

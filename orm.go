@@ -367,7 +367,7 @@ type FrameInfo struct {
 }
 
 // FrameOptions contains options to customize Frame objects and frame queries.
-// *Deprecation*: `RowLabel` field is deprecated and will be removed in a future release.
+// *DEPRECATED* `RowLabel` field is deprecated and will be removed in a future release.
 type FrameOptions struct {
 	// If a Frame has a time quantum, then Views are generated for each of the defined time segments.
 	TimeQuantum TimeQuantum
@@ -554,6 +554,7 @@ func (f *Frame) BitmapK(rowKey string) *PQLBitmapQuery {
 // InverseBitmap creates a bitmap query using the column label.
 // Bitmap retrieves the indices of all the set bits in a row or column based on whether the row label or column label is given in the query.
 // It also retrieves any attributes set on that row or column.
+// *DEPRECATED*
 func (f *Frame) InverseBitmap(columnID uint64) *PQLBaseQuery {
 	return NewPQLBaseQuery(fmt.Sprintf("Bitmap(col=%d, frame='%s')",
 		columnID, f.name), f.index, nil)
@@ -619,6 +620,7 @@ func (f *Frame) TopN(n uint64) *PQLBitmapQuery {
 // InverseTopN creates a TopN query with the given item count.
 // Returns the id and count of the top n bitmaps (by count of bits) in the frame.
 // This variant sets inverse=true
+// *DEPRECATED*
 func (f *Frame) InverseTopN(n uint64) *PQLBitmapQuery {
 	return NewPQLBitmapQuery(fmt.Sprintf("TopN(frame='%s', n=%d, inverse=true)", f.name, n), f.index, nil)
 }
@@ -632,6 +634,7 @@ func (f *Frame) BitmapTopN(n uint64, bitmap *PQLBitmapQuery) *PQLBitmapQuery {
 
 // InverseBitmapTopN creates a TopN query with the given item count and bitmap.
 // This variant supports customizing the bitmap query and sets inverse=true.
+// *DEPRECATED*
 func (f *Frame) InverseBitmapTopN(n uint64, bitmap *PQLBitmapQuery) *PQLBitmapQuery {
 	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d, inverse=true)",
 		bitmap.serialize(), f.name, n), f.index, nil)
@@ -646,6 +649,7 @@ func (f *Frame) FilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, 
 // InverseFilterFieldTopN creates a TopN query with the given item count, bitmap, field and the filter for that field
 // The field and filters arguments work together to only return Bitmaps which have the attribute specified by field with one of the values specified in filters.
 // This variant sets inverse=true.
+// *DEPRECATED*
 func (f *Frame) InverseFilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, values ...interface{}) *PQLBitmapQuery {
 	return f.filterFieldTopN(n, bitmap, true, field, values...)
 }
@@ -686,6 +690,7 @@ func (f *Frame) RangeK(rowKey string, start time.Time, end time.Time) *PQLBitmap
 
 // InverseRange creates a Range query.
 // Similar to Bitmap, but only returns bits which were set with timestamps between the given start and end timestamps.
+// *DEPRECATED*
 func (f *Frame) InverseRange(columnID uint64, start time.Time, end time.Time) *PQLBitmapQuery {
 	return NewPQLBitmapQuery(fmt.Sprintf("Range(col=%d, frame='%s', start='%s', end='%s')",
 		columnID, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
@@ -693,6 +698,7 @@ func (f *Frame) InverseRange(columnID uint64, start time.Time, end time.Time) *P
 
 // InverseRangeK creates a Range query using a string column key. This will only
 // work against a Pilosa Enterprise server.
+// *DEPRECATED*
 func (f *Frame) InverseRangeK(columnKey string, start time.Time, end time.Time) *PQLBitmapQuery {
 	return NewPQLBitmapQuery(fmt.Sprintf("Range(col='%s', frame='%s', start='%s', end='%s')",
 		columnKey, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
@@ -723,13 +729,13 @@ func (f *Frame) SetRowAttrsK(rowKey string, attrs map[string]interface{}) *PQLBa
 
 // Sum creates a Sum query.
 // The corresponding frame should include the field in its options.
-// *Deprecated* Use `frame.Sum(bitmap)` instead.
+// *DEPRECATED* Use `frame.Sum(bitmap)` instead.
 func (f *Frame) Sum(bitmap *PQLBitmapQuery, field string) *PQLBaseQuery {
 	return f.Field(field).Sum(bitmap)
 }
 
 // SetIntFieldValue creates a SetFieldValue query.
-// *Deprecated* Use `frame.SetIntValue(columnID, value)` instead.
+// *DEPRECATED* Use `frame.SetIntValue(columnID, value)` instead.
 func (f *Frame) SetIntFieldValue(columnID uint64, field string, value int) *PQLBaseQuery {
 	return f.Field(field).SetIntValue(columnID, value)
 }

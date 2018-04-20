@@ -838,8 +838,8 @@ func TestValueCSVImport(t *testing.T) {
 		t.Fatal(err)
 	}
 	target := int64(8)
-	if target != response.Result().Sum() {
-		t.Fatalf("%d != %d", target, response.Result().Sum())
+	if target != response.Result().Value() {
+		t.Fatalf("%d != %d", target, response.Result().Value())
 	}
 }
 
@@ -1005,27 +1005,53 @@ func TestRangeFrame(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	foo := frame.Field("foo")
+
 	_, err = client.Query(index.BatchQuery(
 		frame.SetBit(1, 10),
 		frame.SetBit(1, 100),
-		frame.Field("foo").SetIntValue(10, 11),
-		frame.Field("foo").SetIntValue(100, 15),
+		foo.SetIntValue(10, 11),
+		foo.SetIntValue(100, 15),
 	), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp, err := client.Query(frame.Sum(frame.Bitmap(1), "foo"), nil)
+
+	resp, err := client.Query(foo.Sum(frame.Bitmap(1)), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Result().Sum() != 26 {
-		t.Fatalf("Sum 26 != %d", resp.Result().Sum())
+	if resp.Result().Value() != 26 {
+		t.Fatalf("Sum 26 != %d", resp.Result().Value())
 	}
 	if resp.Result().Count() != 2 {
 		t.Fatalf("Count 2 != %d", resp.Result().Count())
 	}
 
-	resp, err = client.Query(frame.Field("foo").LT(15), nil)
+	resp, err = client.Query(foo.Min(frame.Bitmap(1)), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Result().Value() != 11 {
+		t.Fatalf("Min 11 != %d", resp.Result().Value())
+	}
+	if resp.Result().Count() != 1 {
+		t.Fatalf("Count 2 != %d", resp.Result().Count())
+	}
+
+	resp, err = client.Query(foo.Max(frame.Bitmap(1)), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Result().Value() != 15 {
+		t.Fatalf("Max 15 != %d", resp.Result().Value())
+	}
+	if resp.Result().Count() != 1 {
+		t.Fatalf("Count 2 != %d", resp.Result().Count())
+	}
+
+	resp, err = client.Query(foo.LT(15), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1062,8 +1088,8 @@ func TestCreateIntField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Result().Sum() != 26 {
-		t.Fatalf("Sum 26 != %d", resp.Result().Sum())
+	if resp.Result().Value() != 26 {
+		t.Fatalf("Sum 26 != %d", resp.Result().Value())
 	}
 	if resp.Result().Count() != 2 {
 		t.Fatalf("Count 2 != %d", resp.Result().Count())

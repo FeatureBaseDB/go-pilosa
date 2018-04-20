@@ -45,7 +45,7 @@ const (
 	QueryResultTypeNil uint32 = iota
 	QueryResultTypeBitmap
 	QueryResultTypePairs
-	QueryResultTypeSumCount
+	QueryResultTypeValCount
 	QueryResultTypeUint64
 	QueryResultTypeBool
 )
@@ -121,7 +121,7 @@ type QueryResult interface {
 	Bitmap() BitmapResult
 	CountItems() []CountResultItem
 	Count() int64
-	Sum() int64
+	Value() int64
 	Changed() bool
 }
 
@@ -133,10 +133,10 @@ func newQueryResultFromInternal(result *pbuf.QueryResult) (QueryResult, error) {
 		return newBitmapResultFromInternal(result.Bitmap)
 	case QueryResultTypePairs:
 		return countItemsFromInternal(result.Pairs), nil
-	case QueryResultTypeSumCount:
-		return &SumCountResult{
-			SumValue:   result.SumCount.Sum,
-			CountValue: result.SumCount.Count,
+	case QueryResultTypeValCount:
+		return &ValCountResult{
+			Val: result.ValCount.Val,
+			Cnt: result.ValCount.Count,
 		}, nil
 	case QueryResultTypeUint64:
 		return IntResult(result.N), nil
@@ -174,7 +174,7 @@ func (TopNResult) Type() uint32                    { return QueryResultTypePairs
 func (TopNResult) Bitmap() BitmapResult            { return BitmapResult{} }
 func (t TopNResult) CountItems() []CountResultItem { return t }
 func (TopNResult) Count() int64                    { return 0 }
-func (TopNResult) Sum() int64                      { return 0 }
+func (TopNResult) Value() int64                    { return 0 }
 func (TopNResult) Changed() bool                   { return false }
 
 // BitmapResult represents a result from Bitmap, Union, Intersect, Difference and Range PQL calls.
@@ -201,7 +201,7 @@ func (BitmapResult) Type() uint32                  { return QueryResultTypeBitma
 func (b BitmapResult) Bitmap() BitmapResult        { return b }
 func (BitmapResult) CountItems() []CountResultItem { return nil }
 func (BitmapResult) Count() int64                  { return 0 }
-func (BitmapResult) Sum() int64                    { return 0 }
+func (BitmapResult) Value() int64                  { return 0 }
 func (BitmapResult) Changed() bool                 { return false }
 
 func (b BitmapResult) MarshalJSON() ([]byte, error) {
@@ -224,17 +224,17 @@ func (b BitmapResult) MarshalJSON() ([]byte, error) {
 	})
 }
 
-type SumCountResult struct {
-	SumValue   int64 `json:"sum"`
-	CountValue int64 `json:"count"`
+type ValCountResult struct {
+	Val int64 `json:"val"`
+	Cnt int64 `json:"count"`
 }
 
-func (SumCountResult) Type() uint32                  { return QueryResultTypeSumCount }
-func (SumCountResult) Bitmap() BitmapResult          { return BitmapResult{} }
-func (SumCountResult) CountItems() []CountResultItem { return nil }
-func (c SumCountResult) Count() int64                { return c.CountValue }
-func (c SumCountResult) Sum() int64                  { return c.SumValue }
-func (SumCountResult) Changed() bool                 { return false }
+func (ValCountResult) Type() uint32                  { return QueryResultTypeValCount }
+func (ValCountResult) Bitmap() BitmapResult          { return BitmapResult{} }
+func (ValCountResult) CountItems() []CountResultItem { return nil }
+func (c ValCountResult) Count() int64                { return c.Cnt }
+func (c ValCountResult) Value() int64                { return c.Val }
+func (ValCountResult) Changed() bool                 { return false }
 
 type IntResult int64
 
@@ -242,7 +242,7 @@ func (IntResult) Type() uint32                  { return QueryResultTypeUint64 }
 func (IntResult) Bitmap() BitmapResult          { return BitmapResult{} }
 func (IntResult) CountItems() []CountResultItem { return nil }
 func (i IntResult) Count() int64                { return int64(i) }
-func (IntResult) Sum() int64                    { return 0 }
+func (IntResult) Value() int64                  { return 0 }
 func (IntResult) Changed() bool                 { return false }
 
 type BoolResult bool
@@ -251,7 +251,7 @@ func (BoolResult) Type() uint32                  { return QueryResultTypeBool }
 func (BoolResult) Bitmap() BitmapResult          { return BitmapResult{} }
 func (BoolResult) CountItems() []CountResultItem { return nil }
 func (BoolResult) Count() int64                  { return 0 }
-func (BoolResult) Sum() int64                    { return 0 }
+func (BoolResult) Value() int64                  { return 0 }
 func (b BoolResult) Changed() bool               { return bool(b) }
 
 type NilResult struct{}
@@ -260,7 +260,7 @@ func (NilResult) Type() uint32                  { return QueryResultTypeNil }
 func (NilResult) Bitmap() BitmapResult          { return BitmapResult{} }
 func (NilResult) CountItems() []CountResultItem { return nil }
 func (NilResult) Count() int64                  { return 0 }
-func (NilResult) Sum() int64                    { return 0 }
+func (NilResult) Value() int64                  { return 0 }
 func (NilResult) Changed() bool                 { return false }
 
 const (

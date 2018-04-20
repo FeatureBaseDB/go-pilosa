@@ -137,4 +137,6 @@ Field:
 * `GTE(n int) *PQLBitmapQuery`
 * `Between(a int, b int) *PQLBitmapQuery`
 * `Sum(bitmap *PQLBitmapQuery) *PQLBaseQuery`
+* `Min(bitmap *PQLBitmapQuery) *PQLBaseQuery`
+* `Max(bitmap *PQLBitmapQuery) *PQLBaseQuery`
 * `SetIntValue(columnID uint64, value int) *PQLBaseQuery`

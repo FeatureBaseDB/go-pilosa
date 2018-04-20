@@ -3,6 +3,7 @@
 * **Next**
     * Compatible with Pilosa master, **not compatible with Pilosa 0.8.x releases**.
     * Added `Equals`, `NotEquals` and `NotNull` field operations.
+    * Added `Field.Min` and `Field.Max` functions.
     * **Deprecation** `TimeQuantum` for `IndexOptions`. Use `TimeQuantum` of individual `FrameOptions` instead.
     * **Deprecation** `IndexOptions` struct is deprecated and will be removed in the future.
     * **Deprecation** Passing `IndexOptions` or `nil` to `schema.Index` function.

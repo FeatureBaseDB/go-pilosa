@@ -276,11 +276,11 @@ func TestBitmapResultNilBits(t *testing.T) {
 }
 
 func TestSumCountResult(t *testing.T) {
-	result := SumCountResult{
-		SumValue:   100,
-		CountValue: 50,
+	result := ValCountResult{
+		Val: 100,
+		Cnt: 50,
 	}
-	expectResult(t, result, QueryResultTypeSumCount, BitmapResult{}, nil, 100, 50, false)
+	expectResult(t, result, QueryResultTypeValCount, BitmapResult{}, nil, 100, 50, false)
 }
 
 func TestIntResult(t *testing.T) {
@@ -311,8 +311,8 @@ func expectResult(t *testing.T, r QueryResult, resultType uint32, bmp BitmapResu
 	if count != r.Count() {
 		log.Fatalf("Count: %d != %d", count, r.Count())
 	}
-	if sum != r.Sum() {
-		log.Fatalf("Sum: %d != %d", sum, r.Sum())
+	if sum != r.Value() {
+		log.Fatalf("Sum: %d != %d", sum, r.Value())
 	}
 	if changed != r.Changed() {
 		log.Fatalf("Changed: %v != %v", changed, r.Changed())

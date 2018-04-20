@@ -729,7 +729,7 @@ func (f *Frame) SetRowAttrsK(rowKey string, attrs map[string]interface{}) *PQLBa
 
 // Sum creates a Sum query.
 // The corresponding frame should include the field in its options.
-// *DEPRECATED* Use `frame.Sum(bitmap)` instead.
+// *DEPRECATED* Use `field.Sum(bitmap)` instead.
 func (f *Frame) Sum(bitmap *PQLBitmapQuery, field string) *PQLBaseQuery {
 	return f.Field(field).Sum(bitmap)
 }
@@ -887,12 +887,17 @@ func (field *RangeField) Between(a int, b int) *PQLBitmapQuery {
 
 // Sum creates a sum query.
 func (field *RangeField) Sum(bitmap *PQLBitmapQuery) *PQLBaseQuery {
-	bitmapStr := ""
-	if bitmap != nil {
-		bitmapStr = fmt.Sprintf("%s, ", bitmap.serialize())
-	}
-	qry := fmt.Sprintf("Sum(%sframe='%s', field='%s')", bitmapStr, field.frame.name, field.name)
-	return NewPQLBaseQuery(qry, field.frame.index, field.err)
+	return field.valQuery("Sum", bitmap)
+}
+
+// Min creates a min query.
+func (field *RangeField) Min(bitmap *PQLBitmapQuery) *PQLBaseQuery {
+	return field.valQuery("Min", bitmap)
+}
+
+// Max creates a min query.
+func (field *RangeField) Max(bitmap *PQLBitmapQuery) *PQLBaseQuery {
+	return field.valQuery("Max", bitmap)
 }
 
 // SetIntValue creates a SetValue query.
@@ -915,6 +920,15 @@ func (field *RangeField) SetIntValueK(columnKey string, value int) *PQLBaseQuery
 func (field *RangeField) binaryOperation(op string, n int) *PQLBitmapQuery {
 	qry := fmt.Sprintf("Range(frame='%s', %s %s %d)", field.frame.name, field.name, op, n)
 	return NewPQLBitmapQuery(qry, field.frame.index, field.err)
+}
+
+func (field *RangeField) valQuery(op string, bitmap *PQLBitmapQuery) *PQLBaseQuery {
+	bitmapStr := ""
+	if bitmap != nil {
+		bitmapStr = fmt.Sprintf("%s, ", bitmap.serialize())
+	}
+	qry := fmt.Sprintf("%s(%sframe='%s', field='%s')", op, bitmapStr, field.frame.name, field.name)
+	return NewPQLBaseQuery(qry, field.frame.index, field.err)
 }
 
 func encodeMap(m map[string]interface{}) string {

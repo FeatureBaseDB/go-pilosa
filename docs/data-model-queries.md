@@ -83,7 +83,7 @@ fmt.Println(response.Result().Bitmap.Bits)
 
 // Query for the total number of animals in captivity
 response, _ = client.Query(captivity.Sum(nil))
-fmt.Println(response.Result().Sum)
+fmt.Println(response.Result().Value())
 ```
 
 It's possible to pass a bitmap query to `Sum`, so only columns where a row is set are filtered in:
@@ -94,7 +94,7 @@ client.Query(index.BatchQuery(
     frame.SetBit(42, 6)))
 // Query for the total number of animals in captivity where row 42 is set
 response, _ = client.Query(captivity.Sum(frame.Bitmap(42)))
-fmt.Println(response.Result().Sum)
+fmt.Println(response.Result().Value())
 ``` 
 
 See the *Field* functions further below for the list of functions that can be used with a `RangeField`.

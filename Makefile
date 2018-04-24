@@ -18,6 +18,9 @@ test:
 	go test
 
 test-all:
+	go test -tags=integration -v
+
+test-all-race:
 	go test -race -tags=integration -v
 
 release:

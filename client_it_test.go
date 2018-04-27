@@ -124,7 +124,7 @@ func TestClientReturnsResponse(t *testing.T) {
 
 func TestQueryWithSlices(t *testing.T) {
 	Reset()
-	const sliceWidth = 1048576
+	const sliceWidth = 8388608
 	client := getClient()
 	if _, err := client.Query(testFrame.SetBit(1, 100)); err != nil {
 		t.Fatal(err)

@@ -53,7 +53,7 @@ import (
 )
 
 const maxHosts = 10
-const sliceWidth = 1048576
+const sliceWidth = 8388608
 const pilosaMinVersion = ">=0.9.0"
 
 // Client is the HTTP client for Pilosa server.

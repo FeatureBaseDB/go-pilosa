@@ -686,6 +686,29 @@ func TestCSVImport(t *testing.T) {
 	}
 }
 
+func TestSliceImport(t *testing.T) {
+	client := getClient()
+	err := client.SliceImport(
+		"go-testindex",
+		"test-frame",
+		0,
+		[]uint64{0, 0, 0, 0, 1},
+		[]uint64{0, 2, 4, 8, 0})
+	if err != nil {
+		t.Fatalf("doing SliceImport: %v", err)
+	}
+
+	resp, err := client.Query(testFrame.Bitmap(0))
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+
+	if !reflect.DeepEqual(resp.Result().Bitmap().Bits, []uint64{0, 2, 4, 8}) {
+		t.Fatalf("wrong bits: %v", resp.Result().Bitmap().Bits)
+	}
+
+}
+
 func TestValueCSVImport(t *testing.T) {
 	client := getClient()
 	text := `10,7

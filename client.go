@@ -443,6 +443,43 @@ func (c *Client) ImportValueFrame(frame *Frame, field string, valueIterator Valu
 	return nil
 }
 
+// SliceImport is a lower level access to import functionality - it will import
+// the given rows and columns into the given index, frame, and slice. Calling
+// code is responsible for ensuring that the given columns actually belong to
+// the slice. The data will not be sorted prior to importing. This method will
+// look up which nodes have replicas of this slice and import to all of them
+// concurrently.
+func (c *Client) SliceImport(index string, frame string, slice uint64, rowIDs, colIDs []uint64) error {
+	if len(rowIDs) != len(colIDs) {
+		return errors.Errorf("must have same number - rows:%d, cols%d", len(rowIDs), len(colIDs))
+	}
+	nodes, err := c.fetchFragmentNodes(index, slice)
+	if err != nil {
+		return errors.Wrap(err, "fetching fragment nodes")
+	}
+
+	eg := errgroup.Group{}
+	for _, node := range nodes {
+		uri := &URI{
+			scheme: node.Scheme,
+			host:   node.Host,
+			port:   node.Port,
+		}
+		eg.Go(func() error {
+			return c.importNode(uri, &pbuf.ImportRequest{
+				Index:      index,
+				Frame:      frame,
+				Slice:      slice,
+				RowIDs:     rowIDs,
+				ColumnIDs:  colIDs,
+				Timestamps: make([]int64, len(rowIDs)),
+			})
+		})
+	}
+	err = eg.Wait()
+	return errors.Wrap(err, "importing to all replicas")
+}
+
 func (c *Client) importBits(indexName string, frameName string, slice uint64, bits []Bit) error {
 	sort.Sort(bitsForSort(bits))
 	nodes, err := c.fetchFragmentNodes(indexName, slice)

@@ -467,12 +467,11 @@ func (c *Client) SliceImport(index string, frame string, slice uint64, rowIDs, c
 		}
 		eg.Go(func() error {
 			return c.importNode(uri, &pbuf.ImportRequest{
-				Index:      index,
-				Frame:      frame,
-				Slice:      slice,
-				RowIDs:     rowIDs,
-				ColumnIDs:  colIDs,
-				Timestamps: make([]int64, len(rowIDs)),
+				Index:     index,
+				Frame:     frame,
+				Slice:     slice,
+				RowIDs:    rowIDs,
+				ColumnIDs: colIDs,
 			})
 		})
 	}

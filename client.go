@@ -414,10 +414,6 @@ func (c *Client) importBits(indexName string, frameName string, slice uint64, bi
 			host:   node.Host,
 			port:   node.Port,
 		}
-		err = c.importNode(uri, bitsToImportRequest(indexName, frameName, slice, bits))
-		if err != nil {
-			return errors.Wrap(err, "setting scheme on uri")
-		}
 		eg.Go(func() error {
 			return c.importNode(uri, bitsToImportRequest(indexName, frameName, slice, bits))
 		})

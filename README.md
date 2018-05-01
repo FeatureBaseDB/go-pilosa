@@ -65,7 +65,7 @@ response, err = client.Query(myframe.Bitmap(5))
 result := response.Result()
 // Act on the result
 if result != nil {
-    bits := result.Bitmap.Bits
+    bits := result.Bitmap().Bits
     fmt.Println("Got bits: ", bits)
 }
 
@@ -79,7 +79,7 @@ if err != nil {
 
 for _, result := range response.Results() {
     // Act on the result
-    fmt.Println(result.Bitmap.Bits)
+    fmt.Println(result.Bitmap().Bits)
 }
 ```
 

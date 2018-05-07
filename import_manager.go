@@ -20,7 +20,7 @@ func newBitImportManager(client *Client) *bitImportManager {
 
 func (bim bitImportManager) Run(frame *Frame, iterator RecordIterator, options ImportOptions, statusChan chan<- ImportStatusUpdate) error {
 	sliceWidth := options.sliceWidth
-	threadCount := uint64(options.ThreadCount)
+	threadCount := uint64(options.threadCount)
 	bitChans := make([]chan Record, threadCount)
 	errChans := make([]chan error, threadCount)
 
@@ -29,7 +29,7 @@ func (bim bitImportManager) Run(frame *Frame, iterator RecordIterator, options I
 	}
 
 	for i := range bitChans {
-		bitChans[i] = make(chan Record, options.BatchSize)
+		bitChans[i] = make(chan Record, options.batchSize)
 		errChans[i] = make(chan error)
 		go bitImportWorker(i, bim.client, frame, bitChans[i], errChans[i], statusChan, options)
 	}
@@ -116,10 +116,10 @@ func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan Record
 
 	var err error
 	tic := time.Now()
-	strategy := options.ImportStrategy
+	strategy := options.strategy
 	bitCount := 0
-	timeout := options.Timeout
-	batchSize := options.BatchSize
+	timeout := options.timeout
+	batchSize := options.batchSize
 
 	for bit := range bitChan {
 		bitCount += 1

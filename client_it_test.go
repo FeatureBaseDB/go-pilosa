@@ -658,7 +658,7 @@ func TestCSVImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportFrame(frame, iterator, BatchSize(10), ThreadCount(1), Timeout(400*time.Millisecond))
+	err = client.ImportFrame(frame, iterator, ImportBatchSize(10), ImportThreadCount(1), ImportTimeout(400*time.Millisecond))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -716,7 +716,7 @@ func TestImportWithTimeout(t *testing.T) {
 		t.Fatal(err)
 	}
 	statusChan := make(chan ImportStatusUpdate, 10000)
-	err = client.ImportFrameWithStatus(frame, iterator, statusChan, ThreadCount(8), ImportStrategy(TimeoutImport), Timeout(10*time.Millisecond), BatchSize(1000))
+	err = client.ImportFrameWithStatus(frame, iterator, statusChan, ImportThreadCount(8), ImportStrategy(TimeoutImport), ImportTimeout(10*time.Millisecond), ImportBatchSize(1000))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -734,7 +734,7 @@ func TestImportWithBatchSize(t *testing.T) {
 		t.Fatal(err)
 	}
 	statusChan := make(chan ImportStatusUpdate, 10)
-	err = client.ImportFrameWithStatus(frame, iterator, statusChan, ThreadCount(1), ImportStrategy(BatchImport), BatchSize(1000))
+	err = client.ImportFrameWithStatus(frame, iterator, statusChan, ImportThreadCount(1), ImportStrategy(BatchImport), ImportBatchSize(1000))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -759,7 +759,7 @@ func TestImportWithTimeoutFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	statusChan := make(chan ImportStatusUpdate, 10)
-	err = client.ImportFrameWithStatus(frame, iterator, statusChan, ThreadCount(1), ImportStrategy(TimeoutImport), Timeout(1*time.Millisecond), importBitsFunction(failingImportBits))
+	err = client.ImportFrameWithStatus(frame, iterator, statusChan, ImportThreadCount(1), ImportStrategy(TimeoutImport), ImportTimeout(1*time.Millisecond), importBitsFunction(failingImportBits))
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -777,7 +777,7 @@ func TestImportWithBatchSizeFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	statusChan := make(chan ImportStatusUpdate, 10)
-	err = client.ImportFrameWithStatus(frame, iterator, statusChan, ThreadCount(1), ImportStrategy(BatchImport), BatchSize(1000), importBitsFunction(failingImportBits))
+	err = client.ImportFrameWithStatus(frame, iterator, statusChan, ImportThreadCount(1), ImportStrategy(BatchImport), ImportBatchSize(1000), importBitsFunction(failingImportBits))
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -829,7 +829,7 @@ func TestValueCSVImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportValueFrame(frame, "foo", iterator, BatchSize(10))
+	err = client.ImportValueFrame(frame, "foo", iterator, ImportBatchSize(10))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1174,7 +1174,7 @@ func TestImportValueIteratorError(t *testing.T) {
 		t.Fatal(err)
 	}
 	iterator := NewCSVValueIterator(&BrokenReader{})
-	err = client.ImportValueFrame(frame, "foo", iterator, BatchSize(100))
+	err = client.ImportValueFrame(frame, "foo", iterator, ImportBatchSize(100))
 	if err == nil {
 		t.Fatalf("import value frame should fail with broken reader")
 	}
@@ -1226,7 +1226,7 @@ func TestImportValueFrameFailsIfImportValuesFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportValueFrame(frame, "foo", iterator, BatchSize(10))
+	err = client.ImportValueFrame(frame, "foo", iterator, ImportBatchSize(10))
 	if err == nil {
 		t.Fatalf("ImportValueFrame should fail if importValues fails")
 	}

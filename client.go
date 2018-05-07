@@ -946,11 +946,11 @@ const (
 )
 
 type ImportOptions struct {
-	ThreadCount        int
+	threadCount        int
 	sliceWidth         uint64
-	Timeout            time.Duration
-	BatchSize          int
-	ImportStrategy     ImportWorkerStrategy
+	timeout            time.Duration
+	batchSize          int
+	strategy           ImportWorkerStrategy
 	importBitsFunction func(indexName string, frameName string, slice uint64, bits []Record) error
 }
 
@@ -958,17 +958,17 @@ func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
 	updated = *opt
 	updated.sliceWidth = sliceWidth
 
-	if updated.ThreadCount <= 0 {
-		updated.ThreadCount = 1
+	if updated.threadCount <= 0 {
+		updated.threadCount = 1
 	}
-	if updated.Timeout <= 0 {
-		updated.Timeout = 100 * time.Millisecond
+	if updated.timeout <= 0 {
+		updated.timeout = 100 * time.Millisecond
 	}
-	if updated.BatchSize <= 0 {
-		updated.BatchSize = 100000
+	if updated.batchSize <= 0 {
+		updated.batchSize = 100000
 	}
-	if updated.ImportStrategy == DefaultImport {
-		updated.ImportStrategy = TimeoutImport
+	if updated.strategy == DefaultImport {
+		updated.strategy = TimeoutImport
 	}
 	return
 }
@@ -976,30 +976,30 @@ func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
 // ImportOption is used when running imports.
 type ImportOption func(options *ImportOptions) error
 
-func ThreadCount(count int) ImportOption {
+func ImportThreadCount(count int) ImportOption {
 	return func(options *ImportOptions) error {
-		options.ThreadCount = count
+		options.threadCount = count
 		return nil
 	}
 }
 
-func Timeout(timeout time.Duration) ImportOption {
+func ImportTimeout(timeout time.Duration) ImportOption {
 	return func(options *ImportOptions) error {
-		options.Timeout = timeout
+		options.timeout = timeout
 		return nil
 	}
 }
 
-func BatchSize(batchSize int) ImportOption {
+func ImportBatchSize(batchSize int) ImportOption {
 	return func(options *ImportOptions) error {
-		options.BatchSize = batchSize
+		options.batchSize = batchSize
 		return nil
 	}
 }
 
 func ImportStrategy(strategy ImportWorkerStrategy) ImportOption {
 	return func(options *ImportOptions) error {
-		options.ImportStrategy = strategy
+		options.strategy = strategy
 		return nil
 	}
 }

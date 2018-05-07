@@ -145,12 +145,14 @@ You can change the import strategy, thread count and other options by passing th
 	* `DefaultImport`: Default strategy, currently `TimeoutImport`.
 	* `BatchImport`: Read `BatchSize` records, bucket them by slices and import them. By default 100000.
 	* `TimeoutImport`: Read and bucket records by slices and after `Timeout` import the largest bucket. By default `100` milliseconds.
-* `ThreadCount`: Number of import goroutines. By default only a single importer is used.
+* `ImportThreadCount`: Number of import goroutines. By default only a single importer is used.
+* `ImportBatchSize`: Sets the `BatchSize`.
+* `ImportTimeout`: Set the `Timeout`.
 
 Here's how you would set import options:
 ```go
 err := client.ImportFrame(frame, iterator,
-	ThreadCount(4),
+	ImportThreadCount(4),
 	ImportStrategy(TimeoutImport),
 	Timeout(200 * time.Millisecond))
 ```

@@ -9,6 +9,9 @@
     * **Deprecation** Passing `IndexOptions` or `nil` to `schema.Index` function.
     * **Deprecation** `RangeEnabled` frame option. All frames have this option `true` on Pilosa 1.0.
     * **Deprecation** `InverseEnabled` frame option and `Frame.InverseBitmap`, `Frame.InverseTopN`, `Frame.InverseBitmapTopN`, `Frame.InverseFilterFieldTopN`, `Frame.InverseRange` functions. Inverse frames will be removed from Pilosa 1.0.
+    * **Removed** `NewClientFromAddresses` function. Use `NewClient([]string{address1, address2, ...}, option1, option2, ...)` instead.
+    * **Removed** `NewClientWithURI` function. Use `NewClient(uri)` instead.
+    * **Removed** `NewClientWithCluster` function. Use `NewClient(cluster, option1, option2, ...)` instead.
     
 * **v0.8.0** (2017-11-16)
     * IPv6 support.

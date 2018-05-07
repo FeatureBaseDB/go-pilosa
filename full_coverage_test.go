@@ -10,11 +10,7 @@ func TestMakeRequestData(t *testing.T) {
 	p := PQLBaseQuery{
 		pql: string(q),
 	}
-	uri, err := NewURIFromAddress("localhost:10101")
-	if err != nil {
-		t.Fatal(err)
-	}
-	cli := NewClientWithURI(uri)
+	cli := DefaultClient()
 	resp, err := cli.Query(&p, nil)
 	if err == nil {
 		t.Fatalf("expected err with too large query, but got %v", resp)

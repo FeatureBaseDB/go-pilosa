@@ -1576,8 +1576,7 @@ func TestUserAgent(t *testing.T) {
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
-	uri, _ := NewURIFromAddress(server.URL)
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(server.URL)
 	_, _, err := client.HttpRequest("GET", "/version", nil, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -1602,7 +1601,7 @@ func TestClientRace(t *testing.T) {
 }
 
 func TestImportFrameWithoutImportFunFails(t *testing.T) {
-	client := Client{}
+	client := DefaultClient()
 	err := client.ImportFrame(nil, nil, importBitsFunction(nil))
 	if err == nil {
 		t.Fatalf("Should have failed")

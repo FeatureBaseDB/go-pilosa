@@ -72,20 +72,10 @@ type Client struct {
 
 // DefaultClient creates a client with the default address and options.
 func DefaultClient() *Client {
-	return NewClientWithURI(DefaultURI())
+	return newClientWithCluster(NewClusterWithHost(DefaultURI()), nil)
 }
 
-// NewClientWithURI creates a client with the given server address.
-// **DEPRECATED** Use `NewClient(uri)` instead.
-func NewClientWithURI(uri *URI) *Client {
-	return NewClientWithCluster(NewClusterWithHost(uri), nil)
-}
-
-// NewClientFromAddresses creates a client for a cluster specified by `hosts`. Each
-// string in `hosts` is the string representation of a URI. E.G
-// node0.pilosa.com:10101
-// **DEPRECATED** Use `NewClient([]string{address1, address2, ...}, option1, option2, ...)` instead.
-func NewClientFromAddresses(addresses []string, options *ClientOptions) (*Client, error) {
+func newClientFromAddresses(addresses []string, options *ClientOptions) (*Client, error) {
 	uris := make([]*URI, len(addresses))
 	for i, address := range addresses {
 		uri, err := NewURIFromAddress(address)
@@ -95,24 +85,23 @@ func NewClientFromAddresses(addresses []string, options *ClientOptions) (*Client
 		uris[i] = uri
 	}
 	cluster := NewClusterWithHost(uris...)
-	client := NewClientWithCluster(cluster, options)
+	client := newClientWithCluster(cluster, options)
 	return client, nil
 }
 
-// NewClientWithCluster creates a client with the given cluster and options.
-// Pass nil for default options.
-// **DEPRECATED** Use `NewClient(cluster, option1, option2, ...)` instead.
-func NewClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
+func newClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 	if options == nil {
 		options = &ClientOptions{}
 	}
 	options = options.withDefaults()
-	return &Client{
+	c := &Client{
 		cluster:                cluster,
 		client:                 newHTTPClient(options.withDefaults()),
 		fragmentNodeCache:      map[string][]fragmentNode{},
 		fragmentNodeCacheMutex: &sync.RWMutex{},
 	}
+	c.importManager = newBitImportManager(c)
+	return c
 }
 
 // NewClient creates a client with the given address, URI, or cluster and options.
@@ -132,7 +121,7 @@ func NewClient(addrUriOrCluster interface{}, options ...ClientOption) (*Client, 
 		}
 		cluster = NewClusterWithHost(uri)
 	case []string:
-		return NewClientFromAddresses(u, clientOptions)
+		return newClientFromAddresses(u, clientOptions)
 	case *URI:
 		cluster = NewClusterWithHost(u)
 	case []*URI:
@@ -145,7 +134,7 @@ func NewClient(addrUriOrCluster interface{}, options ...ClientOption) (*Client, 
 		return nil, ErrAddrURIClusterExpected
 	}
 
-	return NewClientWithCluster(cluster, clientOptions), nil
+	return newClientWithCluster(cluster, clientOptions), nil
 }
 
 // Query runs the given query against the server with the given options.
@@ -372,9 +361,6 @@ func (c *Client) ImportFrame(frame *Frame, iterator RecordIterator, options ...I
 }
 
 func (c *Client) ImportFrameWithStatus(frame *Frame, iterator RecordIterator, statusChan chan<- ImportStatusUpdate, options ...ImportOption) error {
-	if c.importManager == nil {
-		c.importManager = newBitImportManager(c)
-	}
 	importOptions := &ImportOptions{}
 	importBitsFunction(c.importBits)(importOptions)
 	for _, option := range options {

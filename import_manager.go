@@ -18,13 +18,14 @@ func newBitImportManager(client *Client) *bitImportManager {
 	}
 }
 
-func (bim bitImportManager) Run(frame *Frame, iterator RecordIterator, options ImportOptions, statusChan chan<- ImportStatusUpdate) error {
+func (bim bitImportManager) Run(frame *Frame, iterator RecordIterator, options ImportOptions) error {
 	sliceWidth := options.sliceWidth
 	threadCount := uint64(options.threadCount)
 	bitChans := make([]chan Record, threadCount)
 	errChans := make([]chan error, threadCount)
+	statusChan := options.statusChan
 
-	if options.importBitsFunction == nil {
+	if options.importRecordsFunction == nil {
 		return errors.New("importBits function is required")
 	}
 
@@ -81,7 +82,7 @@ func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan Record
 	batchForSlice := map[uint64][]Record{}
 	frameName := frame.Name()
 	indexName := frame.index.Name()
-	importFun := options.importBitsFunction
+	importFun := options.importRecordsFunction
 
 	importBits := func(slice uint64, bits []Record) error {
 		tic := time.Now()

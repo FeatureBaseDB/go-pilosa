@@ -473,12 +473,19 @@ func InverseEnabled(enabled bool) FrameOption {
 	}
 }
 
-// CacheSize sets the cache size.
-func CacheSize(size uint) FrameOption {
+// OptFrameCacheSize sets the cache size.
+func OptFrameCacheSize(size uint) FrameOption {
 	return func(options *FrameOptions) error {
 		options.CacheSize = size
 		return nil
 	}
+}
+
+// CacheSize sets the cache size.
+// *DEPRECATED* Use OptFrameCacheSize instead.
+func CacheSize(size uint) FrameOption {
+	log.Println("The CacheSize frame option is deprecated and will be removed.")
+	return OptFrameCacheSize(size)
 }
 
 // RangeEnabled enables range encoding for a frame.
@@ -491,11 +498,18 @@ func RangeEnabled(enabled bool) FrameOption {
 	}
 }
 
-// IntField adds an integer field to the frame.
-func IntField(name string, min int, max int) FrameOption {
+// OptFrameIntField adds an integer field to the frame.
+func OptFrameIntField(name string, min int, max int) FrameOption {
 	return func(options *FrameOptions) error {
 		return options.AddIntField(name, min, max)
 	}
+}
+
+// IntField adds an integer field to the frame.
+// *DEPRECATED* Use OptFrameIntField instead.
+func IntField(name string, min int, max int) FrameOption {
+	log.Println("The IntField frame option is deprecated and will be removed.")
+	return OptFrameIntField(name, min, max)
 }
 
 // Frame structs are used to segment and define different functional characteristics within your entire index.

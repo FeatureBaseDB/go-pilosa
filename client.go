@@ -355,12 +355,8 @@ func (c *Client) Schema() (*Schema, error) {
 	return schema, nil
 }
 
-// ImportFrame imports bits from the given CSV iterator.
+// ImportFrame imports bits from the given iterator.
 func (c *Client) ImportFrame(frame *Frame, iterator RecordIterator, options ...ImportOption) error {
-	return c.ImportFrameWithStatus(frame, iterator, nil, options...)
-}
-
-func (c *Client) ImportFrameWithStatus(frame *Frame, iterator RecordIterator, statusChan chan<- ImportStatusUpdate, options ...ImportOption) error {
 	importOptions := &ImportOptions{}
 	importBitsFunction(c.importBits)(importOptions)
 	for _, option := range options {
@@ -368,14 +364,10 @@ func (c *Client) ImportFrameWithStatus(frame *Frame, iterator RecordIterator, st
 			return err
 		}
 	}
-	return c.importManager.Run(frame, iterator, importOptions.withDefaults(), statusChan)
+	return c.importManager.Run(frame, iterator, importOptions.withDefaults())
 }
 
 func (c *Client) ImportValueFrame(frame *Frame, field string, iterator RecordIterator, options ...ImportOption) error {
-	return c.ImportValueFrameWithStatus(frame, field, iterator, nil, options...)
-}
-
-func (c *Client) ImportValueFrameWithStatus(frame *Frame, field string, iterator RecordIterator, statusChan chan<- ImportStatusUpdate, options ...ImportOption) error {
 	// c.importValues is the default importer for this function
 	ibf := func(indexName string, frameName string, slice uint64, rows []Record) error {
 		return c.importValues(indexName, frameName, slice, field, rows)
@@ -384,7 +376,7 @@ func (c *Client) ImportValueFrameWithStatus(frame *Frame, field string, iterator
 	for _, opt := range options {
 		newOptions = append(newOptions, opt)
 	}
-	return c.ImportFrameWithStatus(frame, iterator, statusChan, newOptions...)
+	return c.ImportFrame(frame, iterator, newOptions...)
 }
 
 func (c *Client) importBits(indexName string, frameName string, slice uint64, bits []Record) error {
@@ -726,7 +718,8 @@ func bitsToImportRequest(indexName string, frameName string, slice uint64, bits 
 	rowIDs := make([]uint64, 0, len(bits))
 	columnIDs := make([]uint64, 0, len(bits))
 	timestamps := make([]int64, 0, len(bits))
-	for _, bit := range bits {
+	for _, record := range bits {
+		bit := record.(Bit)
 		rowIDs = append(rowIDs, bit.Uint64Field(0))
 		columnIDs = append(columnIDs, bit.Uint64Field(1))
 		timestamps = append(timestamps, bit.Int64Field(2))
@@ -780,44 +773,79 @@ func (co *ClientOptions) addOptions(options ...ClientOption) error {
 // ClientOption is used when creating a PilosaClient struct.
 type ClientOption func(options *ClientOptions) error
 
-// SocketTimeout is the maximum idle socket time in nanoseconds
-func SocketTimeout(timeout time.Duration) ClientOption {
+// OptClientSocketTimeout is the maximum idle socket time in nanoseconds
+func OptClientSocketTimeout(timeout time.Duration) ClientOption {
 	return func(options *ClientOptions) error {
 		options.SocketTimeout = timeout
 		return nil
 	}
 }
 
-// ConnectTimeout is the maximum time to connect in nanoseconds.
-func ConnectTimeout(timeout time.Duration) ClientOption {
+// SocketTimeout is the maximum idle socket time in nanoseconds
+// *DEPRECATED* Use OptClientSocketTimeout instead.
+func SocketTimeout(timeout time.Duration) ClientOption {
+	log.Println("The SocketTimeout client option is deprecated and will be removed.")
+	return OptClientSocketTimeout(timeout)
+}
+
+// OptClientConnectTimeout is the maximum time to connect in nanoseconds.
+func OptClientConnectTimeout(timeout time.Duration) ClientOption {
 	return func(options *ClientOptions) error {
 		options.ConnectTimeout = timeout
 		return nil
 	}
 }
 
-// PoolSizePerRoute is the maximum number of active connections in the pool to a host.
-func PoolSizePerRoute(size int) ClientOption {
+// ConnectTimeout is the maximum time to connect in nanoseconds.
+// *DEPRECATED* Use OptClientConnectTimeout instead.
+func ConnectTimeout(timeout time.Duration) ClientOption {
+	log.Println("The ConnectTimeout client option is deprecated and will be removed.")
+	return OptClientConnectTimeout(timeout)
+}
+
+// OptPoolSizePerRoute is the maximum number of active connections in the pool to a host.
+func OptClientPoolSizePerRoute(size int) ClientOption {
 	return func(options *ClientOptions) error {
 		options.PoolSizePerRoute = size
 		return nil
 	}
 }
 
-// TotalPoolSize is the maximum number of connections in the pool.
-func TotalPoolSize(size int) ClientOption {
+// PoolSizePerRoute is the maximum number of active connections in the pool to a host.
+// *DEPRECATED* Use OptClientPoolSizePerRoute instead.
+func PoolSizePerRoute(size int) ClientOption {
+	log.Println("The PoolSizePerRoute client option is deprecated and will be removed.")
+	return OptClientPoolSizePerRoute(size)
+}
+
+// OptClientTotalPoolSize is the maximum number of connections in the pool.
+func OptClientTotalPoolSize(size int) ClientOption {
 	return func(options *ClientOptions) error {
 		options.TotalPoolSize = size
 		return nil
 	}
 }
 
-// TLSConfig contains the TLS configuration.
-func TLSConfig(config *tls.Config) ClientOption {
+// TotalPoolSize is the maximum number of connections in the pool.
+// *DEPRECATED* Use OptClientTotalPoolSize instead.
+func TotalPoolSize(size int) ClientOption {
+	log.Println("The TotalPoolSize client option is deprecated and will be removed.")
+	return OptClientTotalPoolSize(size)
+}
+
+// OptClientTLSConfig contains the TLS configuration.
+func OptClientTLSConfig(config *tls.Config) ClientOption {
 	return func(options *ClientOptions) error {
 		options.TLSConfig = config
 		return nil
 	}
+}
+
+// TLSConfig contains the TLS configuration.
+// *DEPRECATED* Use OptClientTLSConfig instead.
+func TLSConfig(config *tls.Config) ClientOption {
+	log.Println("The TLSConfig client option is deprecated and will be removed.")
+	return OptClientTLSConfig(config)
 }
 
 type versionInfo struct {
@@ -887,36 +915,64 @@ func (qo *QueryOptions) addOptions(options ...interface{}) error {
 // QueryOption is used when using options with a client.Query,
 type QueryOption func(options *QueryOptions) error
 
-// ColumnAttrs enables returning column attributes in the result.
-func ColumnAttrs(enable bool) QueryOption {
+// OptQueryColumnAttrs enables returning column attributes in the result.
+func OptQueryColumnAttrs(enable bool) QueryOption {
 	return func(options *QueryOptions) error {
 		options.Columns = enable
 		return nil
 	}
 }
 
-// Slices restricts the set of slices on which a query operates.
-func Slices(slices ...uint64) QueryOption {
+// ColumnAttrs enables returning column attributes in the result.
+// *DEPRECATED* Use OptQueryColumnAttrs instead.
+func ColumnAttrs(enable bool) QueryOption {
+	log.Println("The ColumnAttrs query option is deprecated and will be removed.")
+	return OptQueryColumnAttrs(enable)
+}
+
+// OptQuerySlices restricts the set of slices on which a query operates.
+func OptQuerySlices(slices ...uint64) QueryOption {
 	return func(options *QueryOptions) error {
 		options.Slices = append(options.Slices, slices...)
 		return nil
 	}
 }
 
-// ExcludeAttrs enables discarding attributes from a result,
-func ExcludeAttrs(enable bool) QueryOption {
+// Slices restricts the set of slices on which a query operates.
+// *DEPRECATED* Use OptQuerySlices instead.
+func Slices(slices ...uint64) QueryOption {
+	log.Println("The Slices query option is deprecated and will be removed.")
+	return OptQuerySlices(slices...)
+}
+
+// OptQueryExcludeAttrs enables discarding attributes from a result,
+func OptQueryExcludeAttrs(enable bool) QueryOption {
 	return func(options *QueryOptions) error {
 		options.ExcludeAttrs = enable
 		return nil
 	}
 }
 
-// ExcludeBits enables discarding bits from a result,
-func ExcludeBits(enable bool) QueryOption {
+// ExcludeAttrs enables discarding attributes from a result,
+// *DEPRECATED* Use OptQueryExcludeAttrs instead.
+func ExcludeAttrs(enable bool) QueryOption {
+	log.Println("The ExcludeAttrs query option is deprecated and will be removed.")
+	return OptQueryExcludeAttrs(enable)
+}
+
+// OptQueryExcludeBits enables discarding bits from a result,
+func OptQueryExcludeBits(enable bool) QueryOption {
 	return func(options *QueryOptions) error {
 		options.ExcludeBits = enable
 		return nil
 	}
+}
+
+// ExcludeBits enables discarding bits from a result,
+// *DEPRECATED* Use OptQueryExcludeBits instead.
+func ExcludeBits(enable bool) QueryOption {
+	log.Println("The ExcludeBits query option is deprecated and will be removed.")
+	return OptQueryExcludeBits(enable)
 }
 
 // SkipVersionCheck disables version checking
@@ -946,12 +1002,13 @@ const (
 )
 
 type ImportOptions struct {
-	threadCount        int
-	sliceWidth         uint64
-	timeout            time.Duration
-	batchSize          int
-	strategy           ImportWorkerStrategy
-	importBitsFunction func(indexName string, frameName string, slice uint64, bits []Record) error
+	threadCount           int
+	sliceWidth            uint64
+	timeout               time.Duration
+	batchSize             int
+	strategy              ImportWorkerStrategy
+	statusChan            chan<- ImportStatusUpdate
+	importRecordsFunction func(indexName string, frameName string, slice uint64, records []Record) error
 }
 
 func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
@@ -976,37 +1033,44 @@ func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
 // ImportOption is used when running imports.
 type ImportOption func(options *ImportOptions) error
 
-func ImportThreadCount(count int) ImportOption {
+func OptImportThreadCount(count int) ImportOption {
 	return func(options *ImportOptions) error {
 		options.threadCount = count
 		return nil
 	}
 }
 
-func ImportTimeout(timeout time.Duration) ImportOption {
+func OptImportTimeout(timeout time.Duration) ImportOption {
 	return func(options *ImportOptions) error {
 		options.timeout = timeout
 		return nil
 	}
 }
 
-func ImportBatchSize(batchSize int) ImportOption {
+func OptImportBatchSize(batchSize int) ImportOption {
 	return func(options *ImportOptions) error {
 		options.batchSize = batchSize
 		return nil
 	}
 }
 
-func ImportStrategy(strategy ImportWorkerStrategy) ImportOption {
+func OptImportStrategy(strategy ImportWorkerStrategy) ImportOption {
 	return func(options *ImportOptions) error {
 		options.strategy = strategy
 		return nil
 	}
 }
 
+func OptImportStatusChannel(statusChan chan<- ImportStatusUpdate) ImportOption {
+	return func(options *ImportOptions) error {
+		options.statusChan = statusChan
+		return nil
+	}
+}
+
 func importBitsFunction(fun func(indexName string, frameName string, slice uint64, bits []Record) error) ImportOption {
 	return func(options *ImportOptions) error {
-		options.importBitsFunction = fun
+		options.importRecordsFunction = fun
 		return nil
 	}
 }

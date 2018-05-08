@@ -6,9 +6,9 @@
 
 If you have large amounts of data, it is more efficient to import it into Pilosa instead of using multiple SetBit queries. This library supports importing anything which implements the `Record` interface, such as `Bit`s or `FieldValue`s into an existing frame.
 
-Once you create the frame to import into, you need to create an instance of a struct which implements the `RecordIterator` interace. This library ships with `CSVIterator` which is described further below.
+Once you create the frame in which to import data, you need to create an instance of a struct which implements the `RecordIterator` interface. This library ships with [CSVIterator](#csv-iterator).
 
-Finally you should call `client.ImportFrame`, `client.ImportFrameWithStatus`, `client.ImportValueFrame` or `client.ImportValueFrameWithStatus` with the necessary parameters to start the import process.
+Finally you should call `client.ImportFrame` or `client.ImportValueFrame` with the necessary parameters to start the import process.
 
 ### A Simple Example
 
@@ -30,9 +30,9 @@ if err != nil {
 }
 ```
 
-It is possible to set import options, e.g., the number of goroutines and also track the status of the import. We are going to see how to accomplish those in the *Advanced Usage* section.
+It is possible to set import options, e.g., the number of goroutines and also track the status of the import. We are going to see how to accomplish those in the [Advanced Usage](#advanced-usage) section.
 
-### CSVIterator
+### <a name="csv-iterator"></a>CSVIterator
 
 The `CSVIterator` reads lines from an `io.Reader` and converts them to `Record`s using a `BitCSVUnmarshaller`.
 
@@ -75,7 +75,7 @@ iterator := NewCSVBitIterator(strings.NewReader(text))
 
 Example:
 ```go
-format := "2006-01-02T04:05"
+format := "2006-01-02T03:04"
 iterator := pilosa.NewCSVBitIteratorWithTimestampFormat(reader, format)
 ```
 
@@ -101,11 +101,11 @@ type RecordIterator interface {
 	NextRecord() (Record, error)
 }
 ```
-So, a `RecordIterator` returns the next `Record` when its `NextRecord` function is called, or an `error`. If there is no other `Record` to return, `NextRecord` returns `io.EOF. That's all needed.
+So, a `RecordIterator` returns either the next `Record` when its `NextRecord` function is called, or an `error`. If there is no other `Record` to return, `NextRecord` returns `io.EOF.
 
 A record is a struct instance which implements the `Record` interface. Currently that means `Bit` and `FieldValue` structs.
 
-Let's define a simple `RecordIterator` which returns a predifined number of random `Bit`s:
+Let's define a simple `RecordIterator` which returns a predefined number of random `Bit`s:
 ```go
 type RandomBitGenerator struct {
 	maxRowID uint64
@@ -136,30 +136,31 @@ func (gen *RandomBitGenerator) NextRecord() (Record, error) {
 }
 ```
 
-### Advanced Usage
+### <a name="advanced-usage"></a>Advanced Usage
 
 #### Import Options
 
 You can change the import strategy, thread count and other options by passing them to `client.ImportFrame` or `client.ImportFrameWithStatus` functions. Here are the import options:
-* `ImportStrategy`: Changes the import strategy of the import goroutines to one of the following:
+* `OptImportStrategy`: Changes the import strategy of the import goroutines to one of the following:
 	* `DefaultImport`: Default strategy, currently `TimeoutImport`.
 	* `BatchImport`: Read `BatchSize` records, bucket them by slices and import them. By default 100000.
 	* `TimeoutImport`: Read and bucket records by slices and after `Timeout` import the largest bucket. By default `100` milliseconds.
-* `ImportThreadCount`: Number of import goroutines. By default only a single importer is used.
-* `ImportBatchSize`: Sets the `BatchSize`.
-* `ImportTimeout`: Set the `Timeout`.
+* `OptImportThreadCount`: Number of import goroutines. By default only a single importer is used.
+* `OptImportBatchSize`: Sets the `BatchSize`.
+* `OptImportTimeout`: Sets the `Timeout`.
+* `OptImportStatusChannel`: Sets the status channel to track the import progress.
 
 Here's how you would set import options:
 ```go
 err := client.ImportFrame(frame, iterator,
-	ImportThreadCount(4),
-	ImportStrategy(TimeoutImport),
-	Timeout(200 * time.Millisecond))
+	OptImportThreadCount(4),
+	OptImportStrategy(TimeoutImport),
+	OptImportTimeout(200 * time.Millisecond))
 ```
 
 ### Tracking Import Status
 
-You can pass a channel of type `ImportStatusUpdate` to `client.ImportFrameWithStatus` to get notified when an importer imports a slice of bits. The status channel is closed by the client when the import 
+You can pass a channel of type `ImportStatusUpdate` to `client.ImportFrame` using `OptImportStatusChannel` function to get notified when an importer imports a slice of bits. The status channel is closed by the client when the import 
 ends.
 
 Note that if you use this feature, you have to consume from the status channel, otherwise import goroutines may get blocked.
@@ -178,7 +179,7 @@ Run the import process in a goroutine in order to be able to read from the statu
 ```go
 statusChan := make(chan pilosa.ImportStatusUpdate, 1000)
 go func() {
-	err := client.ImportFrameWithStatus(f1, bitIterator, statusChan, pilosa.ImportThreadCount(2))
+	err := client.ImportFrame(f1, bitIterator, pilosa.OptImportStatusChannel(statusChan), pilosa.OptImportThreadCount(2))
 	if err != nil {
 		log.Fatal(err)
 	}

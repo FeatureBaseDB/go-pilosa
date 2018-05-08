@@ -4,14 +4,14 @@
 
 *Index* and *frame*s are the main data models of Pilosa. You can check the [Pilosa documentation](https://www.pilosa.com/docs) for more detail about the data model.
 
-`schema.Index` function is used to create an index object. Note that this does not create an index on the server; the index object simply defines the schema.
+The `schema.Index` function is used to create an index object. Note that this does not create an index on the server; the index object simply defines the schema.
 
 ```go
 schema := pilosa.NewSchema()
 repository, err := schema.Index("repository")
 ```
 
-Frame definitions are created with a call to `Frame` function of an index:
+Frame definitions are created with a call to the `Frame` function of an index:
 
 ```go
 stargazer, err := repository.Frame("stargazer")
@@ -20,7 +20,7 @@ stargazer, err := repository.Frame("stargazer")
 You can pass options to frames:
 
 ```go
-stargazer, err := repository.Frame("stargazer", pilosa.InverseEnabled(true), pilosa.TimeQuantumYearMonthDay);
+stargazer, err := repository.Frame("stargazer", pilosa.OptFrameCacheSize(50000), pilosa.TimeQuantumYearMonthDay);
 ```
 
 ## Queries
@@ -47,18 +47,18 @@ query := repository.BatchQuery(
     repository.Union(stargazer.Bitmap(100), stargazer.Bitmap(5)))
 ```
 
-The recommended way of creating query structs is, using dedicated methods attached to index and frame objects. But sometimes it would be desirable to send raw queries to Pilosa. You can use `index.RawQuery` method for that. Note that query string is not validated before sending to the server:
+The recommended way of creating query structs is using dedicated methods attached to index and frame objects, but sometimes it would be desirable to send raw queries to Pilosa. You can use `index.RawQuery` method for that. Note that query string is not validated before sending to the server:
 
 ```go
 query := repository.RawQuery("Bitmap(frame='stargazer', row=5)")
 ```
 
-This client supports [Range encoded fields](https://www.pilosa.com/docs/latest/query-language/#range-bsi). Read [Range Encoded Bitmaps](https://www.pilosa.com/blog/range-encoded-bitmaps/) blog post for more information about the BSI implementation of range encoding in Pilosa.
+This client supports [Range encoded fields](https://www.pilosa.com/docs/latest/query-language/#range-bsi). Read the [Range Encoded Bitmaps](https://www.pilosa.com/blog/range-encoded-bitmaps/) blog post for more information about the BSI implementation of range encoding in Pilosa.
 
-In order to use range encoded fields, a frame should be created with one or more integer fields. Each field should have their minimums and maximums set. Here's how you would do that using this library:
+In order to use range encoded fields, a frame should be created with one or more integer fields. Each field should have their minimums and maximums set. Here's how you would do that:
 ```go
 index, _ := schema.Index("animals")
-frame, _ := index.Frame("traits", pilosa.IntField("captivity", 0, 956))
+frame, _ := index.Frame("traits", pilosa.OptFrameIntField("captivity", 0, 956))
 client.SyncSchema(schema)
 ``` 
 
@@ -86,7 +86,7 @@ response, _ = client.Query(captivity.Sum(nil))
 fmt.Println(response.Result().Value())
 ```
 
-It's possible to pass a bitmap query to `Sum`, so only columns where a row is set are filtered in:
+If you pass a bitmap query to `Sum` as a filter, then only the columns matching the filter will be considered in the `Sum` calculation:
 ```go
 // Let's run a few setbit queries first
 client.Query(index.BatchQuery(

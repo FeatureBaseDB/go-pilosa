@@ -74,7 +74,7 @@ func TestCSVBitIterator(t *testing.T) {
 }
 
 func TestCSVBitIteratorWithTimestampFormat(t *testing.T) {
-	format := "2006-01-02T04:05"
+	format := "2006-01-02T03:04"
 	reader := strings.NewReader(`1,10,1991-09-02T09:33
 		5,20,1991-09-02T09:35
 		3,41,1991-09-02T09:36`)
@@ -91,9 +91,9 @@ func TestCSVBitIteratorWithTimestampFormat(t *testing.T) {
 		bits = append(bits, bit)
 	}
 	target := []pilosa.Bit{
-		{RowID: 1, ColumnID: 10, Timestamp: 683770173},
-		{RowID: 5, ColumnID: 20, Timestamp: 683770175},
-		{RowID: 3, ColumnID: 41, Timestamp: 683770176},
+		{RowID: 1, ColumnID: 10, Timestamp: 683803980},
+		{RowID: 5, ColumnID: 20, Timestamp: 683804100},
+		{RowID: 3, ColumnID: 41, Timestamp: 683804160},
 	}
 	if len(bits) != len(target) {
 		t.Fatalf("There should be %d bits", len(target))

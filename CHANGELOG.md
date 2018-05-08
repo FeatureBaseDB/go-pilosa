@@ -1,14 +1,27 @@
 # Change Log
 
-* **Next**
-    * Compatible with Pilosa master, **not compatible with Pilosa 0.8.x releases**.
+* **v0.9.0**
+    * Compatible with Pilosa 0.9.
     * Added `Equals`, `NotEquals` and `NotNull` field operations.
     * Added `Field.Min` and `Field.Max` functions.
+    * It is possible to set the number of import goroutines and track the import progress. See: [Importing and Exporting Data](docs/imports-exports.md).
+    * **Breaking Change** The signature of `Client.ImportFrame` function was changed. See: [Importing and Exporting Data](docs/imports-exports.md).
     * **Deprecation** `TimeQuantum` for `IndexOptions`. Use `TimeQuantum` of individual `FrameOptions` instead.
     * **Deprecation** `IndexOptions` struct is deprecated and will be removed in the future.
     * **Deprecation** Passing `IndexOptions` or `nil` to `schema.Index` function.
-    * **Deprecation** `RangeEnabled` frame option. All frames have this option `true` on Pilosa 1.0.
-    * **Deprecation** `InverseEnabled` frame option and `Frame.InverseBitmap`, `Frame.InverseTopN`, `Frame.InverseBitmapTopN`, `Frame.InverseFilterFieldTopN`, `Frame.InverseRange` functions. Inverse frames will be removed from Pilosa 1.0.
+    * **Deprecation** `SocketTimeout` client option. Use `OptClientSocketTimeout` instead.
+    * **Deprecation** `ConnectTimeout` client option. Use `OptClientConnectTimeout` instead.
+    * **Deprecation** `PoolSizePerRoute` client option. Use `OptClientPoolSizePerRoute` instead.
+    * **Deprecation** `TotalPoolSize` client option. Use `OptClientTotalPoolSize` instead.
+    * **Deprecation** `TLSConfig` client option. Use `OptClientTLSConfig` instead.
+    * **Deprecation** `ColumnAttrs` query option. Use `OptQueryColumnAttrs` instead.
+    * **Deprecation** `Slices` query option. Use `OptQuerySlices` instead.
+    * **Deprecation** `ExcludeAttrs` query option. Use `OptQueryExcludeAttrs` instead.
+    * **Deprecation** `ExcludeBits` query option. Use `OptQueryExcludeBits` instead.
+    * **Deprecation** `CacheSize` frame option. Use `OptFrameCacheSize` instead.
+    * **Deprecation** `IntField` frame option. Use `OptFrameIntField` instead.
+    * **Deprecation** `RangeEnabled` frame option. All frames have this option `true` on Pilosa 0.10.
+    * **Deprecation** `InverseEnabled` frame option and `Frame.InverseBitmap`, `Frame.InverseTopN`, `Frame.InverseBitmapTopN`, `Frame.InverseFilterFieldTopN`, `Frame.InverseRange` functions. Inverse frames will be removed from Pilosa 0.10.
     * **Removed** `NewClientFromAddresses` function. Use `NewClient([]string{address1, address2, ...}, option1, option2, ...)` instead.
     * **Removed** `NewClientWithURI` function. Use `NewClient(uri)` instead.
     * **Removed** `NewClientWithCluster` function. Use `NewClient(cluster, option1, option2, ...)` instead.

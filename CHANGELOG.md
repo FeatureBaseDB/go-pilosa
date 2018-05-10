@@ -1,6 +1,6 @@
 # Change Log
 
-* **v0.9.0**
+* **v0.9.0** (2018-05-10)
     * Compatible with Pilosa 0.9.
     * Added `Equals`, `NotEquals` and `NotNull` field operations.
     * Added `Field.Min` and `Field.Max` functions.

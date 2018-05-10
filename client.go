@@ -42,8 +42,8 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -62,25 +62,20 @@ type Client struct {
 	client  *http.Client
 	// User-Agent header cache. Not used until cluster-resize support branch is merged
 	// and user agent is saved here in NewClient
-	userAgent string
+	userAgent              string
+	importThreadCount      int
+	sliceWidth             uint64
+	fragmentNodeCache      map[string][]fragmentNode
+	fragmentNodeCacheMutex *sync.RWMutex
+	importManager          *bitImportManager
 }
 
 // DefaultClient creates a client with the default address and options.
 func DefaultClient() *Client {
-	return NewClientWithURI(DefaultURI())
+	return newClientWithCluster(NewClusterWithHost(DefaultURI()), nil)
 }
 
-// NewClientWithURI creates a client with the given server address.
-// **DEPRECATED** Use `NewClient(uri)` instead.
-func NewClientWithURI(uri *URI) *Client {
-	return NewClientWithCluster(NewClusterWithHost(uri), nil)
-}
-
-// NewClientFromAddresses creates a client for a cluster specified by `hosts`. Each
-// string in `hosts` is the string representation of a URI. E.G
-// node0.pilosa.com:10101
-// **DEPRECATED** Use `NewClient([]string{address1, address2, ...}, option1, option2, ...)` instead.
-func NewClientFromAddresses(addresses []string, options *ClientOptions) (*Client, error) {
+func newClientFromAddresses(addresses []string, options *ClientOptions) (*Client, error) {
 	uris := make([]*URI, len(addresses))
 	for i, address := range addresses {
 		uri, err := NewURIFromAddress(address)
@@ -90,21 +85,23 @@ func NewClientFromAddresses(addresses []string, options *ClientOptions) (*Client
 		uris[i] = uri
 	}
 	cluster := NewClusterWithHost(uris...)
-	client := NewClientWithCluster(cluster, options)
+	client := newClientWithCluster(cluster, options)
 	return client, nil
 }
 
-// NewClientWithCluster creates a client with the given cluster and options.
-// Pass nil for default options.
-// **DEPRECATED** Use `NewClient(cluster, option1, option2, ...)` instead.
-func NewClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
+func newClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 	if options == nil {
 		options = &ClientOptions{}
 	}
-	return &Client{
-		cluster: cluster,
-		client:  newHTTPClient(options.withDefaults()),
+	options = options.withDefaults()
+	c := &Client{
+		cluster:                cluster,
+		client:                 newHTTPClient(options.withDefaults()),
+		fragmentNodeCache:      map[string][]fragmentNode{},
+		fragmentNodeCacheMutex: &sync.RWMutex{},
 	}
+	c.importManager = newBitImportManager(c)
+	return c
 }
 
 // NewClient creates a client with the given address, URI, or cluster and options.
@@ -124,7 +121,7 @@ func NewClient(addrUriOrCluster interface{}, options ...ClientOption) (*Client, 
 		}
 		cluster = NewClusterWithHost(uri)
 	case []string:
-		return NewClientFromAddresses(u, clientOptions)
+		return newClientFromAddresses(u, clientOptions)
 	case *URI:
 		cluster = NewClusterWithHost(u)
 	case []*URI:
@@ -137,7 +134,7 @@ func NewClient(addrUriOrCluster interface{}, options ...ClientOption) (*Client, 
 		return nil, ErrAddrURIClusterExpected
 	}
 
-	return NewClientWithCluster(cluster, clientOptions), nil
+	return newClientWithCluster(cluster, clientOptions), nil
 }
 
 // Query runs the given query against the server with the given options.
@@ -358,93 +355,31 @@ func (c *Client) Schema() (*Schema, error) {
 	return schema, nil
 }
 
-// ImportFrame imports bits from the given CSV iterator.
-func (c *Client) ImportFrame(frame *Frame, bitIterator BitIterator, batchSize uint) error {
-	linesLeft := true
-	bitGroup := map[uint64][]Bit{}
-	var currentBatchSize uint
-	indexName := frame.index.name
-	frameName := frame.name
-
-	for linesLeft {
-		bit, err := bitIterator.NextBit()
-		if err == io.EOF {
-			linesLeft = false
-		} else if err != nil {
+// ImportFrame imports bits from the given iterator.
+func (c *Client) ImportFrame(frame *Frame, iterator RecordIterator, options ...ImportOption) error {
+	importOptions := &ImportOptions{}
+	importBitsFunction(c.importBits)(importOptions)
+	for _, option := range options {
+		if err := option(importOptions); err != nil {
 			return err
-		} else {
-			slice := bit.ColumnID / sliceWidth
-			if sliceArray, ok := bitGroup[slice]; ok {
-				bitGroup[slice] = append(sliceArray, bit)
-			} else {
-				bitGroup[slice] = []Bit{bit}
-			}
-		}
-
-		currentBatchSize++
-		// if the batch is full or there's no line left, start importing bits
-		if currentBatchSize >= batchSize || !linesLeft {
-			for slice, bits := range bitGroup {
-				if len(bits) > 0 {
-					err := c.importBits(indexName, frameName, slice, bits)
-					if err != nil {
-						return err
-					}
-				}
-			}
-			bitGroup = map[uint64][]Bit{}
-			currentBatchSize = 0
 		}
 	}
-
-	return nil
+	return c.importManager.Run(frame, iterator, importOptions.withDefaults())
 }
 
-// ImportValueFrame imports field values from the given iterator.
-func (c *Client) ImportValueFrame(frame *Frame, field string, valueIterator ValueIterator, batchSize uint) error {
-	linesLeft := true
-	valGroup := map[uint64][]FieldValue{}
-	var currentBatchSize uint
-	indexName := frame.index.name
-	frameName := frame.name
-	fieldName := field
-
-	for linesLeft {
-		val, err := valueIterator.NextValue()
-		if err == io.EOF {
-			linesLeft = false
-		} else if err != nil {
-			return err
-		} else {
-			slice := val.ColumnID / sliceWidth
-			if sliceArray, ok := valGroup[slice]; ok {
-				valGroup[slice] = append(sliceArray, val)
-			} else {
-				valGroup[slice] = []FieldValue{val}
-			}
-		}
-
-		currentBatchSize++
-		// if the batch is full or there's no line left, start importing values
-		if currentBatchSize >= batchSize || !linesLeft {
-			for slice, vals := range valGroup {
-				if len(vals) > 0 {
-					err := c.importValues(indexName, frameName, slice, fieldName, vals)
-					if err != nil {
-						return err
-					}
-				}
-			}
-			valGroup = map[uint64][]FieldValue{}
-			currentBatchSize = 0
-		}
+func (c *Client) ImportValueFrame(frame *Frame, field string, iterator RecordIterator, options ...ImportOption) error {
+	// c.importValues is the default importer for this function
+	ibf := func(indexName string, frameName string, slice uint64, rows []Record) error {
+		return c.importValues(indexName, frameName, slice, field, rows)
 	}
-
-	return nil
+	newOptions := []ImportOption{importBitsFunction(ibf)}
+	for _, opt := range options {
+		newOptions = append(newOptions, opt)
+	}
+	return c.ImportFrame(frame, iterator, newOptions...)
 }
 
-func (c *Client) importBits(indexName string, frameName string, slice uint64, bits []Bit) error {
-	sort.Sort(bitsForSort(bits))
+func (c *Client) importBits(indexName string, frameName string, slice uint64, bits []Record) error {
 	nodes, err := c.fetchFragmentNodes(indexName, slice)
 	if err != nil {
 		return errors.Wrap(err, "fetching fragment nodes")
@@ -465,8 +400,7 @@ func (c *Client) importBits(indexName string, frameName string, slice uint64, bi
 	return errors.Wrap(err, "importing to nodes")
 }
 
-func (c *Client) importValues(indexName string, frameName string, slice uint64, fieldName string, vals []FieldValue) error {
-	sort.Sort(valsForSort(vals))
+func (c *Client) importValues(indexName string, frameName string, slice uint64, fieldName string, vals []Record) error {
 	nodes, err := c.fetchFragmentNodes(indexName, slice)
 	if err != nil {
 		return err
@@ -487,6 +421,13 @@ func (c *Client) importValues(indexName string, frameName string, slice uint64, 
 }
 
 func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentNode, error) {
+	key := fmt.Sprintf("%s-%d", indexName, slice)
+	c.fragmentNodeCacheMutex.RLock()
+	nodes, ok := c.fragmentNodeCache[key]
+	c.fragmentNodeCacheMutex.RUnlock()
+	if ok {
+		return nodes, nil
+	}
 	path := fmt.Sprintf("/fragment/nodes?slice=%d&index=%s", slice, indexName)
 	_, body, err := c.httpRequest("GET", path, []byte{}, nil)
 	if err != nil {
@@ -501,6 +442,9 @@ func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentN
 	for _, nodeURI := range fragmentNodeURIs {
 		fragmentNodes = append(fragmentNodes, nodeURI.URI)
 	}
+	c.fragmentNodeCacheMutex.Lock()
+	c.fragmentNodeCache[key] = fragmentNodes
+	c.fragmentNodeCacheMutex.Unlock()
 	return fragmentNodes, nil
 }
 
@@ -528,7 +472,7 @@ func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest) err
 }
 
 // ExportFrame exports bits for a frame.
-func (c *Client) ExportFrame(frame *Frame, view string) (BitIterator, error) {
+func (c *Client) ExportFrame(frame *Frame, view string) (RecordIterator, error) {
 	var slicesMax map[string]uint64
 	var err error
 
@@ -770,14 +714,15 @@ func makeRequestData(query string, options *QueryOptions) ([]byte, error) {
 	return r, nil
 }
 
-func bitsToImportRequest(indexName string, frameName string, slice uint64, bits []Bit) *pbuf.ImportRequest {
+func bitsToImportRequest(indexName string, frameName string, slice uint64, bits []Record) *pbuf.ImportRequest {
 	rowIDs := make([]uint64, 0, len(bits))
 	columnIDs := make([]uint64, 0, len(bits))
 	timestamps := make([]int64, 0, len(bits))
-	for _, bit := range bits {
-		rowIDs = append(rowIDs, bit.RowID)
-		columnIDs = append(columnIDs, bit.ColumnID)
-		timestamps = append(timestamps, bit.Timestamp)
+	for _, record := range bits {
+		bit := record.(Bit)
+		rowIDs = append(rowIDs, bit.Uint64Field(0))
+		columnIDs = append(columnIDs, bit.Uint64Field(1))
+		timestamps = append(timestamps, bit.Int64Field(2))
 	}
 	return &pbuf.ImportRequest{
 		Index:      indexName,
@@ -789,12 +734,12 @@ func bitsToImportRequest(indexName string, frameName string, slice uint64, bits 
 	}
 }
 
-func valsToImportRequest(indexName string, frameName string, slice uint64, fieldName string, vals []FieldValue) *pbuf.ImportValueRequest {
+func valsToImportRequest(indexName string, frameName string, slice uint64, fieldName string, vals []Record) *pbuf.ImportValueRequest {
 	columnIDs := make([]uint64, 0, len(vals))
 	values := make([]int64, 0, len(vals))
 	for _, val := range vals {
-		columnIDs = append(columnIDs, val.ColumnID)
-		values = append(values, val.Value)
+		columnIDs = append(columnIDs, val.Uint64Field(0))
+		values = append(values, val.Int64Field(1))
 	}
 	return &pbuf.ImportValueRequest{
 		Index:     indexName,
@@ -828,44 +773,83 @@ func (co *ClientOptions) addOptions(options ...ClientOption) error {
 // ClientOption is used when creating a PilosaClient struct.
 type ClientOption func(options *ClientOptions) error
 
-// SocketTimeout is the maximum idle socket time in nanoseconds
-func SocketTimeout(timeout time.Duration) ClientOption {
+// OptClientSocketTimeout is the maximum idle socket time in nanoseconds
+func OptClientSocketTimeout(timeout time.Duration) ClientOption {
 	return func(options *ClientOptions) error {
 		options.SocketTimeout = timeout
 		return nil
 	}
 }
 
-// ConnectTimeout is the maximum time to connect in nanoseconds.
-func ConnectTimeout(timeout time.Duration) ClientOption {
+// SocketTimeout is the maximum idle socket time in nanoseconds
+// *DEPRECATED* Use OptClientSocketTimeout instead.
+func SocketTimeout(timeout time.Duration) ClientOption {
+	log.Println("The SocketTimeout client option is deprecated and will be removed.")
+	return OptClientSocketTimeout(timeout)
+}
+
+// OptClientConnectTimeout is the maximum time to connect in nanoseconds.
+func OptClientConnectTimeout(timeout time.Duration) ClientOption {
 	return func(options *ClientOptions) error {
 		options.ConnectTimeout = timeout
 		return nil
 	}
 }
 
-// PoolSizePerRoute is the maximum number of active connections in the pool to a host.
-func PoolSizePerRoute(size int) ClientOption {
+// ConnectTimeout is the maximum time to connect in nanoseconds.
+// *DEPRECATED* Use OptClientConnectTimeout instead.
+func ConnectTimeout(timeout time.Duration) ClientOption {
+	log.Println("The ConnectTimeout client option is deprecated and will be removed.")
+	return OptClientConnectTimeout(timeout)
+}
+
+// OptPoolSizePerRoute is the maximum number of active connections in the pool to a host.
+func OptClientPoolSizePerRoute(size int) ClientOption {
 	return func(options *ClientOptions) error {
 		options.PoolSizePerRoute = size
 		return nil
 	}
 }
 
-// TotalPoolSize is the maximum number of connections in the pool.
-func TotalPoolSize(size int) ClientOption {
+// PoolSizePerRoute is the maximum number of active connections in the pool to a host.
+// *DEPRECATED* Use OptClientPoolSizePerRoute instead.
+func PoolSizePerRoute(size int) ClientOption {
+	log.Println("The PoolSizePerRoute client option is deprecated and will be removed.")
+	return OptClientPoolSizePerRoute(size)
+}
+
+// OptClientTotalPoolSize is the maximum number of connections in the pool.
+func OptClientTotalPoolSize(size int) ClientOption {
 	return func(options *ClientOptions) error {
 		options.TotalPoolSize = size
 		return nil
 	}
 }
 
-// TLSConfig contains the TLS configuration.
-func TLSConfig(config *tls.Config) ClientOption {
+// TotalPoolSize is the maximum number of connections in the pool.
+// *DEPRECATED* Use OptClientTotalPoolSize instead.
+func TotalPoolSize(size int) ClientOption {
+	log.Println("The TotalPoolSize client option is deprecated and will be removed.")
+	return OptClientTotalPoolSize(size)
+}
+
+// OptClientTLSConfig contains the TLS configuration.
+func OptClientTLSConfig(config *tls.Config) ClientOption {
 	return func(options *ClientOptions) error {
 		options.TLSConfig = config
 		return nil
 	}
+}
+
+// TLSConfig contains the TLS configuration.
+// *DEPRECATED* Use OptClientTLSConfig instead.
+func TLSConfig(config *tls.Config) ClientOption {
+	log.Println("The TLSConfig client option is deprecated and will be removed.")
+	return OptClientTLSConfig(config)
+}
+
+type versionInfo struct {
+	Version string `json:"version"`
 }
 
 func (co *ClientOptions) withDefaults() (updated *ClientOptions) {
@@ -931,36 +915,64 @@ func (qo *QueryOptions) addOptions(options ...interface{}) error {
 // QueryOption is used when using options with a client.Query,
 type QueryOption func(options *QueryOptions) error
 
-// ColumnAttrs enables returning column attributes in the result.
-func ColumnAttrs(enable bool) QueryOption {
+// OptQueryColumnAttrs enables returning column attributes in the result.
+func OptQueryColumnAttrs(enable bool) QueryOption {
 	return func(options *QueryOptions) error {
 		options.Columns = enable
 		return nil
 	}
 }
 
-// Slices restricts the set of slices on which a query operates.
-func Slices(slices ...uint64) QueryOption {
+// ColumnAttrs enables returning column attributes in the result.
+// *DEPRECATED* Use OptQueryColumnAttrs instead.
+func ColumnAttrs(enable bool) QueryOption {
+	log.Println("The ColumnAttrs query option is deprecated and will be removed.")
+	return OptQueryColumnAttrs(enable)
+}
+
+// OptQuerySlices restricts the set of slices on which a query operates.
+func OptQuerySlices(slices ...uint64) QueryOption {
 	return func(options *QueryOptions) error {
 		options.Slices = append(options.Slices, slices...)
 		return nil
 	}
 }
 
-// ExcludeAttrs enables discarding attributes from a result,
-func ExcludeAttrs(enable bool) QueryOption {
+// Slices restricts the set of slices on which a query operates.
+// *DEPRECATED* Use OptQuerySlices instead.
+func Slices(slices ...uint64) QueryOption {
+	log.Println("The Slices query option is deprecated and will be removed.")
+	return OptQuerySlices(slices...)
+}
+
+// OptQueryExcludeAttrs enables discarding attributes from a result,
+func OptQueryExcludeAttrs(enable bool) QueryOption {
 	return func(options *QueryOptions) error {
 		options.ExcludeAttrs = enable
 		return nil
 	}
 }
 
-// ExcludeBits enables discarding bits from a result,
-func ExcludeBits(enable bool) QueryOption {
+// ExcludeAttrs enables discarding attributes from a result,
+// *DEPRECATED* Use OptQueryExcludeAttrs instead.
+func ExcludeAttrs(enable bool) QueryOption {
+	log.Println("The ExcludeAttrs query option is deprecated and will be removed.")
+	return OptQueryExcludeAttrs(enable)
+}
+
+// OptQueryExcludeBits enables discarding bits from a result,
+func OptQueryExcludeBits(enable bool) QueryOption {
 	return func(options *QueryOptions) error {
 		options.ExcludeBits = enable
 		return nil
 	}
+}
+
+// ExcludeBits enables discarding bits from a result,
+// *DEPRECATED* Use OptQueryExcludeBits instead.
+func ExcludeBits(enable bool) QueryOption {
+	log.Println("The ExcludeBits query option is deprecated and will be removed.")
+	return OptQueryExcludeBits(enable)
 }
 
 // SkipVersionCheck disables version checking
@@ -977,6 +989,88 @@ func SkipVersionCheck() ClientOption {
 func LegacyMode(enable bool) ClientOption {
 	return func(options *ClientOptions) error {
 		log.Println("The LegacyMode client option is deprecated and will be removed - it has no effect and should be removed from your code")
+		return nil
+	}
+}
+
+type ImportWorkerStrategy int
+
+const (
+	DefaultImport ImportWorkerStrategy = iota
+	BatchImport
+	TimeoutImport
+)
+
+type ImportOptions struct {
+	threadCount           int
+	sliceWidth            uint64
+	timeout               time.Duration
+	batchSize             int
+	strategy              ImportWorkerStrategy
+	statusChan            chan<- ImportStatusUpdate
+	importRecordsFunction func(indexName string, frameName string, slice uint64, records []Record) error
+}
+
+func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
+	updated = *opt
+	updated.sliceWidth = sliceWidth
+
+	if updated.threadCount <= 0 {
+		updated.threadCount = 1
+	}
+	if updated.timeout <= 0 {
+		updated.timeout = 100 * time.Millisecond
+	}
+	if updated.batchSize <= 0 {
+		updated.batchSize = 100000
+	}
+	if updated.strategy == DefaultImport {
+		updated.strategy = TimeoutImport
+	}
+	return
+}
+
+// ImportOption is used when running imports.
+type ImportOption func(options *ImportOptions) error
+
+func OptImportThreadCount(count int) ImportOption {
+	return func(options *ImportOptions) error {
+		options.threadCount = count
+		return nil
+	}
+}
+
+func OptImportTimeout(timeout time.Duration) ImportOption {
+	return func(options *ImportOptions) error {
+		options.timeout = timeout
+		return nil
+	}
+}
+
+func OptImportBatchSize(batchSize int) ImportOption {
+	return func(options *ImportOptions) error {
+		options.batchSize = batchSize
+		return nil
+	}
+}
+
+func OptImportStrategy(strategy ImportWorkerStrategy) ImportOption {
+	return func(options *ImportOptions) error {
+		options.strategy = strategy
+		return nil
+	}
+}
+
+func OptImportStatusChannel(statusChan chan<- ImportStatusUpdate) ImportOption {
+	return func(options *ImportOptions) error {
+		options.statusChan = statusChan
+		return nil
+	}
+}
+
+func importBitsFunction(fun func(indexName string, frameName string, slice uint64, bits []Record) error) ImportOption {
+	return func(options *ImportOptions) error {
+		options.importRecordsFunction = fun
 		return nil
 	}
 }

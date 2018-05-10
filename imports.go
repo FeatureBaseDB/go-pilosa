@@ -39,80 +39,111 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
 )
+
+type Record interface {
+	Int64Field(index int) int64
+	Uint64Field(index int) uint64
+	StringField(index int) string
+	Less(other Record) bool
+}
+
+type recordSort []Record
+
+func (rc recordSort) Len() int {
+	return len(rc)
+}
+
+func (rc recordSort) Swap(i, j int) {
+	rc[i], rc[j] = rc[j], rc[i]
+}
+
+func (rc recordSort) Less(i, j int) bool {
+	return rc[i].Less(rc[j])
+}
+
+type RecordIterator interface {
+	NextRecord() (Record, error)
+}
 
 // Bit defines a single Pilosa bit.
 type Bit struct {
 	RowID     uint64
 	ColumnID  uint64
-	RowKey    string
-	ColumnKey string
 	Timestamp int64
 }
 
-// BitIterator structs return bits one by one.
-type BitIterator interface {
-	NextBit() (Bit, error)
-}
-
-// CSVBitIterator reads bits from a Reader.
-// Each line should contain a single bit in the following form:
-// rowID,columnID[,timestamp]
-type CSVBitIterator struct {
-	reader          io.Reader
-	line            int
-	scanner         *bufio.Scanner
-	timestampFormat string
-}
-
-// NewCSVBitIterator creates a CSVBitIterator from a Reader.
-func NewCSVBitIterator(reader io.Reader) *CSVBitIterator {
-	return &CSVBitIterator{
-		reader:  reader,
-		line:    0,
-		scanner: bufio.NewScanner(reader),
+func (b Bit) Int64Field(index int) int64 {
+	switch index {
+	case 0:
+		return int64(b.RowID)
+	case 1:
+		return int64(b.ColumnID)
+	case 2:
+		return b.Timestamp
+	default:
+		return 0
 	}
 }
 
-// NewCSVBitIteratorWithTimestampFormat creates a CSVBitIterator from a Reader with a custom timestamp format.
-func NewCSVBitIteratorWithTimestampFormat(reader io.Reader, timestampFormat string) *CSVBitIterator {
-	return &CSVBitIterator{
-		reader:          reader,
-		line:            0,
-		scanner:         bufio.NewScanner(reader),
-		timestampFormat: timeFormat,
+func (b Bit) Uint64Field(index int) uint64 {
+	switch index {
+	case 0:
+		return b.RowID
+	case 1:
+		return b.ColumnID
+	case 2:
+		return uint64(b.Timestamp)
+	default:
+		return 0
 	}
 }
 
-// NextBit iterates on lines of a Reader.
-// Returns io.EOF on end of iteration.
-func (c *CSVBitIterator) NextBit() (Bit, error) {
-	if ok := c.scanner.Scan(); ok {
-		c.line++
-		text := strings.TrimSpace(c.scanner.Text())
+func (b Bit) StringField(index int) string {
+	return ""
+}
+
+func (b Bit) Less(other Record) bool {
+	if ob, ok := other.(Bit); ok {
+		if b.RowID == ob.RowID {
+			return b.ColumnID < ob.ColumnID
+		}
+		return b.RowID < ob.RowID
+	}
+	return false
+}
+
+func BitCSVUnmarshaller() CSVRecordUnmarshaller {
+	return BitCSVUnmarshallerWithTimestamp("")
+}
+
+func BitCSVUnmarshallerWithTimestamp(timestampFormat string) CSVRecordUnmarshaller {
+	return func(text string) (Record, error) {
 		parts := strings.Split(text, ",")
 		if len(parts) < 2 {
-			return Bit{}, fmt.Errorf("Invalid CSV line: %d", c.line)
+			return nil, errors.New("Invalid CSV line")
 		}
-		rowID, err := strconv.Atoi(parts[0])
+		rowID, err := strconv.ParseInt(parts[0], 10, 64)
 		if err != nil {
-			return Bit{}, fmt.Errorf("Invalid row ID at line: %d", c.line)
+			return nil, errors.New("Invalid row ID")
 		}
-		columnID, err := strconv.Atoi(parts[1])
+		columnID, err := strconv.ParseInt(parts[1], 10, 64)
 		if err != nil {
-			return Bit{}, fmt.Errorf("Invalid column ID at line: %d", c.line)
+			return nil, errors.New("Invalid column ID")
 		}
 		timestamp := 0
 		if len(parts) == 3 {
-			if c.timestampFormat == "" {
+			if timestampFormat == "" {
 				timestamp, err = strconv.Atoi(parts[2])
 				if err != nil {
-					return Bit{}, fmt.Errorf("Invalid timestamp at line: %d", c.line)
+					return nil, err
 				}
 			} else {
-				t, err := time.Parse(c.timestampFormat, parts[2])
+				t, err := time.Parse(timestampFormat, parts[2])
 				if err != nil {
-					return Bit{}, fmt.Errorf("Invalid timestamp at line: %d", c.line)
+					return nil, err
 				}
 				timestamp = int(t.Unix())
 			}
@@ -124,29 +155,61 @@ func (c *CSVBitIterator) NextBit() (Bit, error) {
 		}
 		return bit, nil
 	}
+}
+
+type CSVRecordUnmarshaller func(text string) (Record, error)
+
+// CSVIterator reads records from a Reader.
+// Each line should contain a single record in the following form:
+// field1,field2,...
+type CSVIterator struct {
+	reader       io.Reader
+	line         int
+	scanner      *bufio.Scanner
+	unmarshaller CSVRecordUnmarshaller
+}
+
+// NewCSVIterator creates a CSVIterator from a Reader.
+func NewCSVIterator(reader io.Reader, unmarshaller CSVRecordUnmarshaller) *CSVIterator {
+	return &CSVIterator{
+		reader:       reader,
+		line:         0,
+		scanner:      bufio.NewScanner(reader),
+		unmarshaller: unmarshaller,
+	}
+}
+
+func NewCSVBitIterator(reader io.Reader) *CSVIterator {
+	return NewCSVIterator(reader, BitCSVUnmarshaller())
+}
+
+func NewCSVBitIteratorWithTimestampFormat(reader io.Reader, timestampFormat string) *CSVIterator {
+	return NewCSVIterator(reader, BitCSVUnmarshallerWithTimestamp(timestampFormat))
+}
+
+func NewCSVValueIterator(reader io.Reader) *CSVIterator {
+	return NewCSVIterator(reader, FieldValueCSVUnmarshaller)
+}
+
+// NextRecord iterates on lines of a Reader.
+// Returns io.EOF on end of iteration.
+func (c *CSVIterator) NextRecord() (Record, error) {
+	if ok := c.scanner.Scan(); ok {
+		c.line++
+		text := strings.TrimSpace(c.scanner.Text())
+		if text != "" {
+			rc, err := c.unmarshaller(text)
+			if err != nil {
+				return nil, fmt.Errorf("%s at line: %d", err.Error(), c.line)
+			}
+			return rc, nil
+		}
+	}
 	err := c.scanner.Err()
 	if err != nil {
-		return Bit{}, err
+		return nil, err
 	}
-	return Bit{}, io.EOF
-}
-
-type bitsForSort []Bit
-
-func (b bitsForSort) Len() int {
-	return len(b)
-}
-
-func (b bitsForSort) Swap(i, j int) {
-	b[i], b[j] = b[j], b[i]
-}
-
-func (b bitsForSort) Less(i, j int) bool {
-	bitCmp := b[i].RowID - b[j].RowID
-	if bitCmp == 0 {
-		return b[i].ColumnID < b[j].ColumnID
-	}
-	return bitCmp < 0
+	return nil, io.EOF
 }
 
 // FieldValue represents the value for a column within a
@@ -157,70 +220,60 @@ type FieldValue struct {
 	Value     int64
 }
 
-// ValueIterator structs return field values one by one.
-type ValueIterator interface {
-	NextValue() (FieldValue, error)
-}
-
-// CSVValueIterator reads field values from a Reader.
-// Each line should contain a single field value in the following form:
-// columnID,value
-type CSVValueIterator struct {
-	reader  io.Reader
-	line    int
-	scanner *bufio.Scanner
-}
-
-// NewCSVValueIterator creates a CSVValueIterator from a Reader.
-func NewCSVValueIterator(reader io.Reader) *CSVValueIterator {
-	return &CSVValueIterator{
-		reader:  reader,
-		line:    0,
-		scanner: bufio.NewScanner(reader),
+func (f FieldValue) Int64Field(index int) int64 {
+	switch index {
+	case 0:
+		return int64(f.ColumnID)
+	case 1:
+		return f.Value
+	default:
+		return 0
 	}
 }
 
-// NextValue iterates on lines of a Reader.
-// Returns io.EOF on end of iteration.
-func (c *CSVValueIterator) NextValue() (FieldValue, error) {
-	if ok := c.scanner.Scan(); ok {
-		c.line++
-		text := strings.TrimSpace(c.scanner.Text())
-		parts := strings.Split(text, ",")
-		if len(parts) < 2 {
-			return FieldValue{}, fmt.Errorf("Invalid CSV line: %d", c.line)
-		}
-		columnID, err := strconv.Atoi(parts[0])
-		if err != nil {
-			return FieldValue{}, fmt.Errorf("Invalid column ID at line: %d", c.line)
-		}
-		value, err := strconv.Atoi(parts[1])
-		if err != nil {
-			return FieldValue{}, fmt.Errorf("Invalid value at line: %d", c.line)
-		}
-		fieldValue := FieldValue{
-			ColumnID: uint64(columnID),
-			Value:    int64(value),
-		}
-		return fieldValue, nil
+func (f FieldValue) Uint64Field(index int) uint64 {
+	switch index {
+	case 0:
+		return f.ColumnID
+	case 1:
+		return uint64(f.Value)
+	default:
+		return 0
 	}
-	err := c.scanner.Err()
+}
+
+func (f FieldValue) StringField(index int) string {
+	switch index {
+	case 0:
+		return f.ColumnKey
+	default:
+		return ""
+	}
+}
+
+func (v FieldValue) Less(other Record) bool {
+	if ov, ok := other.(FieldValue); ok {
+		return v.ColumnID < ov.ColumnID
+	}
+	return false
+}
+
+func FieldValueCSVUnmarshaller(text string) (Record, error) {
+	parts := strings.Split(text, ",")
+	if len(parts) < 2 {
+		return nil, errors.New("Invalid CSV")
+	}
+	columnID, err := strconv.ParseUint(parts[0], 10, 64)
 	if err != nil {
-		return FieldValue{}, err
+		return nil, errors.New("Invalid column ID at line: %d")
 	}
-	return FieldValue{}, io.EOF
-}
-
-type valsForSort []FieldValue
-
-func (v valsForSort) Len() int {
-	return len(v)
-}
-
-func (v valsForSort) Swap(i, j int) {
-	v[i], v[j] = v[j], v[i]
-}
-
-func (v valsForSort) Less(i, j int) bool {
-	return v[i].ColumnID < v[j].ColumnID
+	value, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return nil, errors.New("Invalid value")
+	}
+	fieldValue := FieldValue{
+		ColumnID: uint64(columnID),
+		Value:    value,
+	}
+	return fieldValue, nil
 }

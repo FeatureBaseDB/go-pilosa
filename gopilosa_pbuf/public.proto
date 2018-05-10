@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package gopilosa_pbuf;
+package internal;
 
 message Bitmap {
 	repeated uint64 Bits = 1;
@@ -14,8 +14,8 @@ message Pair {
 	uint64 Count = 2;
 }
 
-message SumCount {
-	int64 Sum = 1;
+message ValCount {
+	int64 Val = 1;
 	int64 Count = 2;
 }
 
@@ -64,7 +64,7 @@ message QueryResult {
 	Bitmap Bitmap = 1;
 	uint64 N = 2;
 	repeated Pair Pairs = 3;
-	SumCount SumCount = 5;
+	ValCount ValCount = 5;
 	bool Changed = 4;
 }
 
@@ -74,8 +74,8 @@ message ImportRequest {
 	uint64 Slice = 3;
 	repeated uint64 RowIDs = 4;
 	repeated uint64 ColumnIDs = 5;
-        repeated string RowKeys = 7;
-        repeated string ColumnKeys = 8;
+	repeated string RowKeys = 7;
+	repeated string ColumnKeys = 8;
 	repeated int64 Timestamps = 6;
 }
 

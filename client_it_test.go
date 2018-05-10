@@ -401,10 +401,7 @@ func TestMaxHostsFail(t *testing.T) {
 
 func TestQueryInverseBitmap(t *testing.T) {
 	client := getClient()
-	options := &FrameOptions{
-		InverseEnabled: true,
-	}
-	f1, err := index.Frame("f1-inversable", options)
+	f1, err := index.Frame("f1-inversable", InverseEnabled(true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -416,14 +413,15 @@ func TestQueryInverseBitmap(t *testing.T) {
 		index.BatchQuery(
 			f1.SetBit(1000, 5000),
 			f1.SetBit(1000, 6000),
-			f1.SetBit(3000, 5000)), nil)
+			f1.SetBit(3000, 5000)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	response, err := client.Query(
 		index.BatchQuery(
 			f1.Bitmap(1000),
-			f1.InverseBitmap(5000)), nil)
+			f1.InverseBitmap(5000),
+		))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -660,7 +658,7 @@ func TestCSVImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportFrame(frame, iterator, 10)
+	err = client.ImportFrame(frame, iterator, OptImportBatchSize(10), OptImportThreadCount(1), OptImportTimeout(400*time.Millisecond))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -683,6 +681,128 @@ func TestCSVImport(t *testing.T) {
 		if target[i] != br.Bits[0] {
 			t.Fatalf("%d != %d", target[i], br.Bits[0])
 		}
+	}
+}
+
+type BitGenerator struct {
+	maxRowID    uint64
+	maxColumnID uint64
+	rowIndex    uint64
+	colIndex    uint64
+}
+
+func (gen *BitGenerator) NextRecord() (Record, error) {
+	bit := Bit{RowID: gen.rowIndex, ColumnID: gen.colIndex}
+	if gen.colIndex >= gen.maxColumnID {
+		gen.colIndex = 0
+		gen.rowIndex += 1
+	}
+	if gen.rowIndex >= gen.maxRowID {
+		return Bit{}, io.EOF
+	}
+	gen.colIndex += 1
+	return bit, nil
+}
+
+func TestImportWithTimeout(t *testing.T) {
+	client := getClient()
+	iterator := &BitGenerator{maxRowID: 100, maxColumnID: 1000}
+	frame, err := index.Frame("importframe-timeout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statusChan := make(chan ImportStatusUpdate, 10000)
+	err = client.ImportFrame(frame, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(8), OptImportStrategy(TimeoutImport), OptImportTimeout(10*time.Millisecond), OptImportBatchSize(1000))
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestImportWithBatchSize(t *testing.T) {
+	client := getClient()
+	iterator := &BitGenerator{maxRowID: 10, maxColumnID: 1000}
+	frame, err := index.Frame("importframe-batchsize")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statusChan := make(chan ImportStatusUpdate, 10)
+	err = client.ImportFrame(frame, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(BatchImport), OptImportBatchSize(1000))
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func failingImportBits(indexName string, frameName string, slice uint64, bits []Record) error {
+	if len(bits) > 0 {
+		return errors.New("some error")
+	}
+	return nil
+}
+
+func TestImportWithTimeoutFails(t *testing.T) {
+	client := getClient()
+	iterator := &BitGenerator{maxRowID: 10, maxColumnID: 1000}
+	frame, err := index.Frame("importframe-timeout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statusChan := make(chan ImportStatusUpdate, 10)
+	err = client.ImportFrame(frame, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(TimeoutImport), OptImportTimeout(1*time.Millisecond), importBitsFunction(failingImportBits))
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
+func TestImportWithBatchSizeFails(t *testing.T) {
+	client := getClient()
+	iterator := &BitGenerator{maxRowID: 10, maxColumnID: 1000}
+	frame, err := index.Frame("importframe-batchsize")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statusChan := make(chan ImportStatusUpdate, 10)
+	err = client.ImportFrame(frame, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(BatchImport), OptImportBatchSize(1000), importBitsFunction(failingImportBits))
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
+func ErrorImportOption(err error) ImportOption {
+	return func(options *ImportOptions) error {
+		return err
+	}
+}
+func TestErrorReturningImportOption(t *testing.T) {
+	text := `10,7
+		10,5
+		2,3
+		7,1`
+	iterator := NewCSVBitIterator(strings.NewReader(text))
+	frame, err := index.Frame("importframe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := getClient()
+	optionErr := errors.New("ERR")
+	err = client.ImportFrame(frame, iterator, ErrorImportOption(optionErr))
+	if err != optionErr {
+		t.Fatal("ImportFrame should fail if an import option fails")
 	}
 }
 
@@ -709,7 +829,7 @@ func TestValueCSVImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportValueFrame(frame, "foo", iterator, 10)
+	err = client.ImportValueFrame(frame, "foo", iterator, OptImportBatchSize(10))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -718,8 +838,8 @@ func TestValueCSVImport(t *testing.T) {
 		t.Fatal(err)
 	}
 	target := int64(8)
-	if target != response.Result().Sum() {
-		t.Fatalf("%d != %d", target, response.Result().Sum())
+	if target != response.Result().Value() {
+		t.Fatalf("%d != %d", target, response.Result().Value())
 	}
 }
 
@@ -738,18 +858,18 @@ func TestCSVExport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	targetBits := []Bit{
+	target := []Bit{
 		{RowID: 1, ColumnID: 1},
 		{RowID: 1, ColumnID: 10},
 		{RowID: 2, ColumnID: 1048577},
 	}
-	bits := []Bit{}
+	bits := []Record{}
 	iterator, err := client.ExportFrame(frame, "standard")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for {
-		bit, err := iterator.NextBit()
+		bit, err := iterator.NextRecord()
 		if err == io.EOF {
 			break
 		}
@@ -758,8 +878,13 @@ func TestCSVExport(t *testing.T) {
 		}
 		bits = append(bits, bit)
 	}
-	if !reflect.DeepEqual(targetBits, bits) {
-		t.Fatalf("ExportFrame should export the frame")
+	if len(bits) != len(target) {
+		t.Fatalf("There should be %d bits", len(target))
+	}
+	for i := range target {
+		if !reflect.DeepEqual(target[i], bits[i]) {
+			t.Fatalf("%v != %v", target, bits)
+		}
 	}
 }
 
@@ -830,6 +955,14 @@ func TestFetchFragmentNodes(t *testing.T) {
 	if len(nodes) != 1 {
 		t.Fatalf("1 node should be returned")
 	}
+	// running the same for coverage
+	nodes, err = client.fetchFragmentNodes(index.Name(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes) != 1 {
+		t.Fatalf("1 node should be returned")
+	}
 }
 
 func TestFetchStatus(t *testing.T) {
@@ -872,27 +1005,53 @@ func TestRangeFrame(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	foo := frame.Field("foo")
+
 	_, err = client.Query(index.BatchQuery(
 		frame.SetBit(1, 10),
 		frame.SetBit(1, 100),
-		frame.Field("foo").SetIntValue(10, 11),
-		frame.Field("foo").SetIntValue(100, 15),
+		foo.SetIntValue(10, 11),
+		foo.SetIntValue(100, 15),
 	), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp, err := client.Query(frame.Sum(frame.Bitmap(1), "foo"), nil)
+
+	resp, err := client.Query(foo.Sum(frame.Bitmap(1)), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Result().Sum() != 26 {
-		t.Fatalf("Sum 26 != %d", resp.Result().Sum())
+	if resp.Result().Value() != 26 {
+		t.Fatalf("Sum 26 != %d", resp.Result().Value())
 	}
 	if resp.Result().Count() != 2 {
 		t.Fatalf("Count 2 != %d", resp.Result().Count())
 	}
 
-	resp, err = client.Query(frame.Field("foo").LT(15), nil)
+	resp, err = client.Query(foo.Min(frame.Bitmap(1)), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Result().Value() != 11 {
+		t.Fatalf("Min 11 != %d", resp.Result().Value())
+	}
+	if resp.Result().Count() != 1 {
+		t.Fatalf("Count 2 != %d", resp.Result().Count())
+	}
+
+	resp, err = client.Query(foo.Max(frame.Bitmap(1)), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Result().Value() != 15 {
+		t.Fatalf("Max 15 != %d", resp.Result().Value())
+	}
+	if resp.Result().Count() != 1 {
+		t.Fatalf("Count 2 != %d", resp.Result().Count())
+	}
+
+	resp, err = client.Query(foo.LT(15), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -929,8 +1088,8 @@ func TestCreateIntField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Result().Sum() != 26 {
-		t.Fatalf("Sum 26 != %d", resp.Result().Sum())
+	if resp.Result().Value() != 26 {
+		t.Fatalf("Sum 26 != %d", resp.Result().Value())
 	}
 	if resp.Result().Count() != 2 {
 		t.Fatalf("Count 2 != %d", resp.Result().Count())
@@ -1002,7 +1161,7 @@ func TestImportBitIteratorError(t *testing.T) {
 		t.Fatal(err)
 	}
 	iterator := NewCSVBitIterator(&BrokenReader{})
-	err = client.ImportFrame(frame, iterator, 100)
+	err = client.ImportFrame(frame, iterator)
 	if err == nil {
 		t.Fatalf("import frame should fail with broken reader")
 	}
@@ -1015,7 +1174,7 @@ func TestImportValueIteratorError(t *testing.T) {
 		t.Fatal(err)
 	}
 	iterator := NewCSVValueIterator(&BrokenReader{})
-	err = client.ImportValueFrame(frame, "foo", iterator, 100)
+	err = client.ImportValueFrame(frame, "foo", iterator, OptImportBatchSize(100))
 	if err == nil {
 		t.Fatalf("import value frame should fail with broken reader")
 	}
@@ -1025,7 +1184,7 @@ func TestImportFailsOnImportBitsError(t *testing.T) {
 	server := getMockServer(500, []byte{}, 0)
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	err := client.importBits("foo", "bar", 0, []Bit{})
+	err := client.importBits("foo", "bar", 0, []Record{})
 	if err == nil {
 		t.Fatalf("importBits should fail when fetch fragment nodes fails")
 	}
@@ -1035,7 +1194,7 @@ func TestValueImportFailsOnImportValueError(t *testing.T) {
 	server := getMockServer(500, []byte{}, 0)
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	err := client.importValues("foo", "bar", 0, "foo", []FieldValue{})
+	err := client.importValues("foo", "bar", 0, "foo", nil)
 	if err == nil {
 		t.Fatalf("importValues should fail when fetch fragment nodes fails")
 	}
@@ -1051,7 +1210,7 @@ func TestImportFrameFailsIfImportBitsFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportFrame(frame, iterator, 10)
+	err = client.ImportFrame(frame, iterator)
 	if err == nil {
 		t.Fatalf("ImportFrame should fail if importBits fails")
 	}
@@ -1067,7 +1226,7 @@ func TestImportValueFrameFailsIfImportValuesFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportValueFrame(frame, "foo", iterator, 10)
+	err = client.ImportValueFrame(frame, "foo", iterator, OptImportBatchSize(10))
 	if err == nil {
 		t.Fatalf("ImportValueFrame should fail if importValues fails")
 	}
@@ -1078,7 +1237,7 @@ func TestImportBitsFailInvalidNodeAddress(t *testing.T) {
 	server := getMockServer(200, data, len(data))
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	err := client.importBits("foo", "bar", 0, []Bit{})
+	err := client.importBits("foo", "bar", 0, []Record{})
 	if err == nil {
 		t.Fatalf("importBits should fail on invalid node host")
 	}
@@ -1089,7 +1248,7 @@ func TestImportValuesFailInvalidNodeAddress(t *testing.T) {
 	server := getMockServer(200, data, len(data))
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	err := client.importValues("foo", "bar", 0, "foo", []FieldValue{})
+	err := client.importValues("foo", "bar", 0, "foo", nil)
 	if err == nil {
 		t.Fatalf("importValues should fail on invalid node host")
 	}
@@ -1253,12 +1412,7 @@ func TestStatusToNodeSlicesForIndex(t *testing.T) {
 	if len(sliceMap) != 1 {
 		t.Fatalf("len(sliceMap) %d != %d", 1, len(sliceMap))
 	}
-	if uri, ok := sliceMap[0]; ok {
-		target, _ := NewURIFromAddress(getPilosaBindAddress())
-		if !uri.Equals(target) {
-			t.Fatalf("slice map should have the correct URI")
-		}
-	} else {
+	if _, ok := sliceMap[0]; !ok {
 		t.Fatalf("slice map should have the correct slice")
 	}
 }
@@ -1422,8 +1576,7 @@ func TestUserAgent(t *testing.T) {
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
-	uri, _ := NewURIFromAddress(server.URL)
-	client := NewClientWithURI(uri)
+	client, _ := NewClient(server.URL)
 	_, _, err := client.HttpRequest("GET", "/version", nil, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -1447,6 +1600,14 @@ func TestClientRace(t *testing.T) {
 	}
 }
 
+func TestImportFrameWithoutImportFunFails(t *testing.T) {
+	client := DefaultClient()
+	err := client.ImportFrame(nil, nil, importBitsFunction(nil))
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
 func getClient() *Client {
 	var client *Client
 	var err error
@@ -1455,7 +1616,7 @@ func getClient() *Client {
 		panic(err)
 	}
 	client, err = NewClient(uri,
-		TLSConfig(&tls.Config{InsecureSkipVerify: true}),
+		OptClientTLSConfig(&tls.Config{InsecureSkipVerify: true}),
 	)
 	if err != nil {
 		panic(err)

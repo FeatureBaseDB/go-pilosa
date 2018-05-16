@@ -20,7 +20,7 @@ stargazer, err := repository.Frame("stargazer")
 You can pass options to frames:
 
 ```go
-stargazer, err := repository.Frame("stargazer", pilosa.OptFrameCacheSize(50000), pilosa.TimeQuantumYearMonthDay);
+stargazer, err := repository.Frame("stargazer", pilosa.OptFrameCacheSize(50000), pilosa.TimeQuantumYearMonthDay)
 ```
 
 ## Queries
@@ -79,7 +79,7 @@ Let's write a range query:
 ```go
 // Query for all animals with more than 100 specimens
 response, _ := client.Query(captivity.GT(100))
-fmt.Println(response.Result().Bitmap.Bits)
+fmt.Println(response.Result().Bitmap().Bits)
 
 // Query for the total number of animals in captivity
 response, _ = client.Query(captivity.Sum(nil))
@@ -113,19 +113,19 @@ Index:
 Frame:
 
 * `Bitmap(rowID uint64) *PQLBitmapQuery`
-* `InverseBitmap(columnID uint64) *PQLBitmapQuery`
 * `SetBit(rowID uint64, columnID uint64) *PQLBaseQuery`
 * `SetBitTimestamp(rowID uint64, columnID uint64, timestamp time.Time) *PQLBaseQuery`
 * `ClearBit(rowID uint64, columnID uint64) *PQLBaseQuery`
 * `TopN(n uint64) *PQLBitmapQuery`
 * `BitmapTopN(n uint64, bitmap *PQLBitmapQuery) *PQLBitmapQuery`
 * `FilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, values ...interface{}) *PQLBitmapQuery`
-* `InverseTopN(n uint64) *PQLBitmapQuery`
-* `InverseBitmapTopN(n uint64, bitmap *PQLBitmapQuery) *PQLBitmapQuery`
-* `InverseFilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, values ...interface{}) *PQLBitmapQuery`
 * `Range(rowID uint64, start time.Time, end time.Time) *PQLBitmapQuery`
-* `InverseRange(columnID uint64, start time.Time, end time.Time) *PQLBitmapQuery`
 * `SetRowAttrs(rowID uint64, attrs map[string]interface{}) *PQLBaseQuery`
+* (**deprecated**) `InverseBitmap(columnID uint64) *PQLBitmapQuery`
+* (**deprecated**) `InverseTopN(n uint64) *PQLBitmapQuery`
+* (**deprecated**) `InverseBitmapTopN(n uint64, bitmap *PQLBitmapQuery) *PQLBitmapQuery`
+* (**deprecated**) `InverseFilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, values ...interface{}) *PQLBitmapQuery`
+* (**deprecated**) `InverseRange(columnID uint64, start time.Time, end time.Time) *PQLBitmapQuery`
 * (**deprecated**) `Sum(bitmap *PQLBitmapQuery, field string) *PQLBaseQuery`
 * (**deprecated**) `SetIntFieldValue(columnID uint64, field string, value int) *PQLBaseQuery`
 

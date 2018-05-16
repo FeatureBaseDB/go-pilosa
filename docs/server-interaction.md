@@ -122,7 +122,7 @@ if result != nil {
 }
 
 // iterate over all results
-for result := range response.Results() {
+for _, result := range response.Results() {
     // Act on the result
 }
 ```
@@ -132,11 +132,8 @@ Similarly, a `QueryResponse` struct may include a number of columns (column obje
 ```go
 var column *pilosa.ColumnItem
 
-// check that there's a column and act on it
 column = response.Column()
-if (column != nil) {
-    // Act on the column
-}
+// Act on the column
 
 // iterate over all columns
 for _, column = range response.Columns() {
@@ -146,18 +143,24 @@ for _, column = range response.Columns() {
 
 `QueryResult` objects contain:
 
-* `Bitmap` field to retrieve a bitmap result,
-* `CountItems` fied to retrieve column count per row ID entries returned from `TopN` queries,
-* `Count` field to retrieve the number of rows per the given row ID returned from `Count` queries.
+* `Bitmap()` function to retrieve a bitmap result,
+* `CountItems()` function to retrieve column count per row ID entries returned from `TopN` queries,
+* `Count()` function to retrieve the number of rows per the given row ID returned from `Count` queries.
+* `Value()` function to retrieve the result of `Min`, `Max` or `Sum` queries.
+* `Changed()` function returns whether a `SetBit` or `ClearBit` query changed a bit.
 
 ```go
-bitmap := result.Bitmap
+bitmap := result.Bitmap()
 bits := bitmap.Bits
 attributes := bitmap.Attributes
 
-countItems := result.CountItems
+countItems := result.CountItems()
 
-count := result.Count
+count := result.Count()
+
+value := result.Value()
+
+changed := result.Changed()
 ```
 
 ## SSL/TLS
@@ -170,6 +173,6 @@ This client library uses the `net/http` module of Go standard library. You can p
 
 If you are using a self signed certificate, just pass `pilosa.TLSConfig(&tls.Config{InsecureSkipVerify: true})` to `pilosa.NewClient` function:
 ```go
-client, _ := NewClient("https://01.pilosa.local:10501", TLSConfig(&tls.Config{InsecureSkipVerify: true}))
+client, _ := pilosa.NewClient("https://01.pilosa.local:10501", pilosa.TLSConfig(&tls.Config{InsecureSkipVerify: true}))
 ```
 

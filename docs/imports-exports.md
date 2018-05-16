@@ -66,7 +66,7 @@ ROW_ID,COLUMN_ID,TIMESTAMP
 
 Example:
 ```go
-iterator := NewCSVBitIterator(strings.NewReader(text))
+iterator := pilosa.NewCSVBitIterator(strings.NewReader(text))
 ```
 
 #### BitCSVUnmarshallerWithTimestamp and CSVBitIteratorWithTimestamp
@@ -76,7 +76,7 @@ iterator := NewCSVBitIterator(strings.NewReader(text))
 Example:
 ```go
 format := "2006-01-02T03:04"
-iterator := pilosa.NewCSVBitIteratorWithTimestampFormat(reader, format)
+iterator := pilosa.NewCSVBitIteratorWithTimestampFormat(strings.NewReader(text), format)
 ```
 
 #### FieldValueCSVUnmarshaller and CSVValueIterator
@@ -90,7 +90,7 @@ COLUMN_ID,INTEGER_VALUE
 
 Example:
 ```go
-iterator := NewCSVValueIterator(strings.NewReader(text))
+iterator := pilosa.NewCSVValueIterator(strings.NewReader(text))
 ```
 
 ### RecordIterator
@@ -113,26 +113,26 @@ type RandomBitGenerator struct {
 	maxBits int
 }
 
-func (gen *RandomBitGenerator) NextRecord() (Record, error) {
+func (gen *RandomBitGenerator) NextRecord() (pilosa.Record, error) {
 	if gen.maxBits <= 0 {
 		return nil, io.EOF
 	}
 	gen.maxBits -= 1
-	return Bit{
-		RowID: rand.Uint64n(gen.maxRowID),
-		ColumnID: rand.Uint64n(gen.maxColumnID),
-	}, nil
+    return pilosa.Bit{
+        RowID: uint64(rand.Int63n(int64(gen.maxRowID))),
+        ColumnID: uint64(rand.Int63n(int64(gen.maxColumnID))),
+    }, nil 
 }
 ```
 
 If you intend to import values for a range field, return `FieldValue`s instead of `Bit`s:
-```
-func (gen *RandomBitGenerator) NextRecord() (Record, error) {
+```go
+func (gen *RandomBitGenerator) NextRecord() (pilosa.Record, error) {
 	// ...
-	return FieldValue{
-		ColumnID: rand.Uint64n(gen.maxRowID),
-		Value: 42,
-	}, nil
+    return pilosa.FieldValue{
+        ColumnID: uint64(rand.Int63n(int64(gen.maxRowID))),
+        Value: 42,
+    }, nil
 }
 ```
 
@@ -153,9 +153,9 @@ You can change the import strategy, thread count and other options by passing th
 Here's how you would set import options:
 ```go
 err := client.ImportFrame(frame, iterator,
-	OptImportThreadCount(4),
-	OptImportStrategy(TimeoutImport),
-	OptImportTimeout(200 * time.Millisecond))
+	pilosa.OptImportThreadCount(4),
+	pilosa.OptImportStrategy(pilosa.TimeoutImport),
+	pilosa.OptImportTimeout(200 * time.Millisecond))
 ```
 
 ### Tracking Import Status
@@ -186,8 +186,6 @@ go func() {
 }()
 
 var status pilosa.ImportStatusUpdate
-totalImported := 0
-tic := time.Now()
 ok := true
 for ok {
 	select {
@@ -222,13 +220,15 @@ if err != nil {
 
 bits := []pilosa.Bit{}
 for {
-    bit, err := iterator.NextBit()
+    record, err := iterator.NextRecord()
     if err == io.EOF {
         break
-    }
+    }   
     if err != nil {
         log.Fatal(err)
-    }
-    bits = append(bits, bit)
+    }   
+    if bit, ok := record.(pilosa.Bit); ok {
+        bits = append(bits, bit)
+    }   
 }
 ```

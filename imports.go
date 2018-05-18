@@ -191,6 +191,19 @@ func NewCSVValueIterator(reader io.Reader) *CSVIterator {
 	return NewCSVIterator(reader, FieldValueCSVUnmarshaller)
 }
 
+func (c *CSVIterator) NextValue() (FieldValue, error) {
+	r, err := c.NextRecord()
+	if err != nil {
+		return FieldValue{}, err
+	}
+	col := r.Uint64Field(0)
+	val := r.Int64Field(1)
+	return FieldValue{
+		ColumnID: col,
+		Value:    val,
+	}, nil
+}
+
 // NextRecord iterates on lines of a Reader.
 // Returns io.EOF on end of iteration.
 func (c *CSVIterator) NextRecord() (Record, error) {

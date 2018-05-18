@@ -829,7 +829,7 @@ func TestValueCSVImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportValueFrame(frame, "foo", iterator, OptImportBatchSize(10))
+	err = client.ImportValueFrame(frame, "foo", iterator, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1174,7 +1174,7 @@ func TestImportValueIteratorError(t *testing.T) {
 		t.Fatal(err)
 	}
 	iterator := NewCSVValueIterator(&BrokenReader{})
-	err = client.ImportValueFrame(frame, "foo", iterator, OptImportBatchSize(100))
+	err = client.ImportValueFrame(frame, "foo", iterator, 100)
 	if err == nil {
 		t.Fatalf("import value frame should fail with broken reader")
 	}
@@ -1226,7 +1226,7 @@ func TestImportValueFrameFailsIfImportValuesFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportValueFrame(frame, "foo", iterator, OptImportBatchSize(10))
+	err = client.ImportValueFrame(frame, "foo", iterator, 10)
 	if err == nil {
 		t.Fatalf("ImportValueFrame should fail if importValues fails")
 	}

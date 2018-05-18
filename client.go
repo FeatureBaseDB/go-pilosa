@@ -42,6 +42,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -367,16 +368,51 @@ func (c *Client) ImportFrame(frame *Frame, iterator RecordIterator, options ...I
 	return c.importManager.Run(frame, iterator, importOptions.withDefaults())
 }
 
-func (c *Client) ImportValueFrame(frame *Frame, field string, iterator RecordIterator, options ...ImportOption) error {
-	// c.importValues is the default importer for this function
-	ibf := func(indexName string, frameName string, slice uint64, rows []Record) error {
-		return c.importValues(indexName, frameName, slice, field, rows)
+type ValueIterator interface {
+	NextValue() (FieldValue, error)
+}
+
+// ImportValueFrame imports field values from the given iterator.
+func (c *Client) ImportValueFrame(frame *Frame, field string, valueIterator ValueIterator, batchSize uint) error {
+	linesLeft := true
+	valGroup := map[uint64][]FieldValue{}
+	var currentBatchSize uint
+	indexName := frame.index.name
+	frameName := frame.name
+	fieldName := field
+
+	for linesLeft {
+		val, err := valueIterator.NextValue()
+		if err == io.EOF {
+			linesLeft = false
+		} else if err != nil {
+			return err
+		} else {
+			slice := val.ColumnID / sliceWidth
+			if sliceArray, ok := valGroup[slice]; ok {
+				valGroup[slice] = append(sliceArray, val)
+			} else {
+				valGroup[slice] = []FieldValue{val}
+			}
+		}
+
+		currentBatchSize++
+		// if the batch is full or there's no line left, start importing values
+		if currentBatchSize >= batchSize || !linesLeft {
+			for slice, vals := range valGroup {
+				if len(vals) > 0 {
+					err := c.importValues(indexName, frameName, slice, fieldName, vals)
+					if err != nil {
+						return err
+					}
+				}
+			}
+			valGroup = map[uint64][]FieldValue{}
+			currentBatchSize = 0
+		}
 	}
-	newOptions := []ImportOption{importBitsFunction(ibf)}
-	for _, opt := range options {
-		newOptions = append(newOptions, opt)
-	}
-	return c.ImportFrame(frame, iterator, newOptions...)
+
+	return nil
 }
 
 func (c *Client) importBits(indexName string, frameName string, slice uint64, bits []Record) error {
@@ -400,7 +436,22 @@ func (c *Client) importBits(indexName string, frameName string, slice uint64, bi
 	return errors.Wrap(err, "importing to nodes")
 }
 
-func (c *Client) importValues(indexName string, frameName string, slice uint64, fieldName string, vals []Record) error {
+type valsForSort []FieldValue
+
+func (v valsForSort) Len() int {
+	return len(v)
+}
+
+func (v valsForSort) Swap(i, j int) {
+	v[i], v[j] = v[j], v[i]
+}
+
+func (v valsForSort) Less(i, j int) bool {
+	return v[i].ColumnID < v[j].ColumnID
+}
+
+func (c *Client) importValues(indexName string, frameName string, slice uint64, fieldName string, vals []FieldValue) error {
+	sort.Sort(valsForSort(vals))
 	nodes, err := c.fetchFragmentNodes(indexName, slice)
 	if err != nil {
 		return err
@@ -734,12 +785,12 @@ func bitsToImportRequest(indexName string, frameName string, slice uint64, bits 
 	}
 }
 
-func valsToImportRequest(indexName string, frameName string, slice uint64, fieldName string, vals []Record) *pbuf.ImportValueRequest {
+func valsToImportRequest(indexName string, frameName string, slice uint64, fieldName string, vals []FieldValue) *pbuf.ImportValueRequest {
 	columnIDs := make([]uint64, 0, len(vals))
 	values := make([]int64, 0, len(vals))
 	for _, val := range vals {
-		columnIDs = append(columnIDs, val.Uint64Field(0))
-		values = append(values, val.Int64Field(1))
+		columnIDs = append(columnIDs, val.ColumnID)
+		values = append(values, val.Value)
 	}
 	return &pbuf.ImportValueRequest{
 		Index:     indexName,

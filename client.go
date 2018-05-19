@@ -720,9 +720,9 @@ func bitsToImportRequest(indexName string, frameName string, slice uint64, bits 
 	timestamps := make([]int64, 0, len(bits))
 	for _, record := range bits {
 		bit := record.(Bit)
-		rowIDs = append(rowIDs, bit.Uint64Field(0))
-		columnIDs = append(columnIDs, bit.Uint64Field(1))
-		timestamps = append(timestamps, bit.Int64Field(2))
+		rowIDs = append(rowIDs, bit.RowID)
+		columnIDs = append(columnIDs, bit.ColumnID)
+		timestamps = append(timestamps, bit.Timestamp)
 	}
 	return &pbuf.ImportRequest{
 		Index:      indexName,
@@ -737,9 +737,10 @@ func bitsToImportRequest(indexName string, frameName string, slice uint64, bits 
 func valsToImportRequest(indexName string, frameName string, slice uint64, fieldName string, vals []Record) *pbuf.ImportValueRequest {
 	columnIDs := make([]uint64, 0, len(vals))
 	values := make([]int64, 0, len(vals))
-	for _, val := range vals {
-		columnIDs = append(columnIDs, val.Uint64Field(0))
-		values = append(values, val.Int64Field(1))
+	for _, record := range vals {
+		val := record.(FieldValue)
+		columnIDs = append(columnIDs, val.ColumnID)
+		values = append(values, val.Value)
 	}
 	return &pbuf.ImportValueRequest{
 		Index:     indexName,

@@ -46,7 +46,7 @@ func (bim bitImportManager) Run(frame *Frame, iterator RecordIterator, options I
 			}
 			break
 		}
-		slice := bit.Uint64Field(1) / sliceWidth
+		slice := bit.Slice(sliceWidth)
 		bitChans[slice%threadCount] <- bit
 	}
 
@@ -124,7 +124,7 @@ func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan Record
 
 	for bit := range bitChan {
 		bitCount += 1
-		slice := bit.Uint64Field(1) / sliceWidth
+		slice := bit.Slice(sliceWidth)
 		batchForSlice[slice] = append(batchForSlice[slice], bit)
 		if strategy == BatchImport && bitCount >= batchSize {
 			for slice, bits := range batchForSlice {

@@ -207,22 +207,16 @@ func (r BrokenReader) Read(p []byte) (n int, err error) {
 	return 0, errors.New("broken reader")
 }
 
-func TestBitInt64Field(t *testing.T) {
-	b := pilosa.Bit{RowID: 15, ColumnID: 55, Timestamp: 100101}
-	target := []int64{15, 55, 100101, 0}
-	checkInt64Record(t, target, b)
-}
-
-func TestBitUint64Field(t *testing.T) {
-	b := pilosa.Bit{RowID: 15, ColumnID: 55, Timestamp: 100101}
-	target := []uint64{15, 55, 100101, 0}
-	checkUint64Record(t, target, b)
-}
-
-func TestBitStringField(t *testing.T) {
-	b := pilosa.Bit{}
-	target := []string{""}
-	checkStringRecord(t, target, b)
+func TestBitSlice(t *testing.T) {
+	a := pilosa.Bit{RowID: 15, ColumnID: 55, Timestamp: 100101}
+	target := uint64(0)
+	if a.Slice(100) != target {
+		t.Fatalf("slice %d != %d", target, a.Slice(100))
+	}
+	target = 5
+	if a.Slice(10) != target {
+		t.Fatalf("slice %d != %d", target, a.Slice(10))
+	}
 }
 
 func TestBitLess(t *testing.T) {
@@ -244,22 +238,17 @@ func TestBitLess(t *testing.T) {
 	}
 }
 
-func TestFieldValueInt64Field(t *testing.T) {
-	b := pilosa.FieldValue{ColumnID: 55, Value: 125}
-	target := []int64{55, 125, 0}
-	checkInt64Record(t, target, b)
-}
+func TestFieldValueSlice(t *testing.T) {
+	a := pilosa.FieldValue{ColumnID: 55, Value: 125}
+	target := uint64(0)
+	if a.Slice(100) != target {
+		t.Fatalf("slice %d != %d", target, a.Slice(100))
+	}
+	target = 5
+	if a.Slice(10) != target {
+		t.Fatalf("slice %d != %d", target, a.Slice(10))
+	}
 
-func TestFieldValueUint64Field(t *testing.T) {
-	b := pilosa.FieldValue{ColumnID: 55, Value: 125}
-	target := []uint64{55, 125, 0}
-	checkUint64Record(t, target, b)
-}
-
-func TestFieldValueStringField(t *testing.T) {
-	b := pilosa.FieldValue{ColumnKey: "abc", Value: 125}
-	target := []string{"abc", ""}
-	checkStringRecord(t, target, b)
 }
 
 func TestFieldValueLess(t *testing.T) {
@@ -274,32 +263,5 @@ func TestFieldValueLess(t *testing.T) {
 	}
 	if c.Less(a) {
 		t.Fatalf("%v should not be less than %v", c, a)
-	}
-}
-
-func checkInt64Record(t *testing.T, target []int64, rc pilosa.Record) {
-	for i := range target {
-		value := rc.Int64Field(i)
-		if target[i] != value {
-			t.Fatalf("%d != %d", target[i], value)
-		}
-	}
-}
-
-func checkUint64Record(t *testing.T, target []uint64, rc pilosa.Record) {
-	for i := range target {
-		value := rc.Uint64Field(i)
-		if target[i] != value {
-			t.Fatalf("%d != %d", target[i], value)
-		}
-	}
-}
-
-func checkStringRecord(t *testing.T, target []string, rc pilosa.Record) {
-	for i := range target {
-		value := rc.StringField(i)
-		if target[i] != value {
-			t.Fatalf("%s != %s", target[i], value)
-		}
 	}
 }

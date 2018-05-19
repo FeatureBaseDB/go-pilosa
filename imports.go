@@ -44,9 +44,7 @@ import (
 )
 
 type Record interface {
-	Int64Field(index int) int64
-	Uint64Field(index int) uint64
-	StringField(index int) string
+	Slice(sliceWidth uint64) uint64
 	Less(other Record) bool
 }
 
@@ -75,34 +73,8 @@ type Bit struct {
 	Timestamp int64
 }
 
-func (b Bit) Int64Field(index int) int64 {
-	switch index {
-	case 0:
-		return int64(b.RowID)
-	case 1:
-		return int64(b.ColumnID)
-	case 2:
-		return b.Timestamp
-	default:
-		return 0
-	}
-}
-
-func (b Bit) Uint64Field(index int) uint64 {
-	switch index {
-	case 0:
-		return b.RowID
-	case 1:
-		return b.ColumnID
-	case 2:
-		return uint64(b.Timestamp)
-	default:
-		return 0
-	}
-}
-
-func (b Bit) StringField(index int) string {
-	return ""
+func (b Bit) Slice(sliceWidth uint64) uint64 {
+	return b.ColumnID / sliceWidth
 }
 
 func (b Bit) Less(other Record) bool {
@@ -220,35 +192,8 @@ type FieldValue struct {
 	Value     int64
 }
 
-func (f FieldValue) Int64Field(index int) int64 {
-	switch index {
-	case 0:
-		return int64(f.ColumnID)
-	case 1:
-		return f.Value
-	default:
-		return 0
-	}
-}
-
-func (f FieldValue) Uint64Field(index int) uint64 {
-	switch index {
-	case 0:
-		return f.ColumnID
-	case 1:
-		return uint64(f.Value)
-	default:
-		return 0
-	}
-}
-
-func (f FieldValue) StringField(index int) string {
-	switch index {
-	case 0:
-		return f.ColumnKey
-	default:
-		return ""
-	}
+func (v FieldValue) Slice(sliceWidth uint64) uint64 {
+	return v.ColumnID / sliceWidth
 }
 
 func (v FieldValue) Less(other Record) bool {

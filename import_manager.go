@@ -121,6 +121,7 @@ func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan Record
 	bitCount := 0
 	timeout := options.timeout
 	batchSize := options.batchSize
+	sliceWidth := options.sliceWidth
 
 	for bit := range bitChan {
 		bitCount += 1

@@ -53,7 +53,6 @@ import (
 )
 
 const maxHosts = 10
-const sliceWidth = 1048576
 const pilosaMinVersion = ">=0.9.0"
 
 // Client is the HTTP client for Pilosa server.
@@ -1014,7 +1013,7 @@ type ImportOptions struct {
 
 func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
 	updated = *opt
-	updated.sliceWidth = sliceWidth
+	updated.sliceWidth = 1048576
 
 	if updated.threadCount <= 0 {
 		updated.threadCount = 1

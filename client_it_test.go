@@ -658,6 +658,8 @@ func TestCSVImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// TODO: This test doesn't actually use batch or time import strategy because it falls through to the
+	// "remaining records" part of import_manager.recordImportWorker. These functional options are misleading.
 	err = client.ImportFrame(frame, iterator, OptImportBatchSize(10), OptImportThreadCount(1), OptImportTimeout(400*time.Millisecond))
 	if err != nil {
 		t.Fatal(err)

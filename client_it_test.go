@@ -759,7 +759,7 @@ func TestImportWithTimeoutFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	statusChan := make(chan ImportStatusUpdate, 10)
-	err = client.ImportFrame(frame, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(TimeoutImport), OptImportTimeout(1*time.Millisecond), importBitsFunction(failingImportBits))
+	err = client.ImportFrame(frame, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(TimeoutImport), OptImportTimeout(1*time.Millisecond), importRecordsFunction(failingImportBits))
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -777,7 +777,7 @@ func TestImportWithBatchSizeFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	statusChan := make(chan ImportStatusUpdate, 10)
-	err = client.ImportFrame(frame, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(BatchImport), OptImportBatchSize(1000), importBitsFunction(failingImportBits))
+	err = client.ImportFrame(frame, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(BatchImport), OptImportBatchSize(1000), importRecordsFunction(failingImportBits))
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -1602,7 +1602,7 @@ func TestClientRace(t *testing.T) {
 
 func TestImportFrameWithoutImportFunFails(t *testing.T) {
 	client := DefaultClient()
-	err := client.ImportFrame(nil, nil, importBitsFunction(nil))
+	err := client.ImportFrame(nil, nil, importRecordsFunction(nil))
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}

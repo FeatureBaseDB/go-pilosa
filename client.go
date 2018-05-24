@@ -66,7 +66,7 @@ type Client struct {
 	sliceWidth             uint64
 	fragmentNodeCache      map[string][]fragmentNode
 	fragmentNodeCacheMutex *sync.RWMutex
-	importManager          *bitImportManager
+	importManager          *recordImportManager
 }
 
 // DefaultClient creates a client with the default address and options.
@@ -99,7 +99,7 @@ func newClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 		fragmentNodeCache:      map[string][]fragmentNode{},
 		fragmentNodeCacheMutex: &sync.RWMutex{},
 	}
-	c.importManager = newBitImportManager(c)
+	c.importManager = newRecordImportManager(c)
 	return c
 }
 
@@ -354,10 +354,10 @@ func (c *Client) Schema() (*Schema, error) {
 	return schema, nil
 }
 
-// ImportFrame imports bits from the given iterator.
+// ImportFrame imports records from the given iterator.
 func (c *Client) ImportFrame(frame *Frame, iterator RecordIterator, options ...ImportOption) error {
 	importOptions := &ImportOptions{}
-	importBitsFunction(c.importBits)(importOptions)
+	importRecordsFunction(c.importBits)(importOptions)
 	for _, option := range options {
 		if err := option(importOptions); err != nil {
 			return err
@@ -368,10 +368,10 @@ func (c *Client) ImportFrame(frame *Frame, iterator RecordIterator, options ...I
 
 func (c *Client) ImportValueFrame(frame *Frame, field string, iterator RecordIterator, options ...ImportOption) error {
 	// c.importValues is the default importer for this function
-	ibf := func(indexName string, frameName string, slice uint64, rows []Record) error {
-		return c.importValues(indexName, frameName, slice, field, rows)
+	irf := func(indexName string, frameName string, slice uint64, vals []Record) error {
+		return c.importValues(indexName, frameName, slice, field, vals)
 	}
-	newOptions := []ImportOption{importBitsFunction(ibf)}
+	newOptions := []ImportOption{importRecordsFunction(irf)}
 	for _, opt := range options {
 		newOptions = append(newOptions, opt)
 	}
@@ -1068,7 +1068,7 @@ func OptImportStatusChannel(statusChan chan<- ImportStatusUpdate) ImportOption {
 	}
 }
 
-func importBitsFunction(fun func(indexName string, frameName string, slice uint64, bits []Record) error) ImportOption {
+func importRecordsFunction(fun func(indexName string, frameName string, slice uint64, records []Record) error) ImportOption {
 	return func(options *ImportOptions) error {
 		options.importRecordsFunction = fun
 		return nil

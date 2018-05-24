@@ -8,49 +8,49 @@ import (
 	"github.com/pkg/errors"
 )
 
-type bitImportManager struct {
+type recordImportManager struct {
 	client *Client
 }
 
-func newBitImportManager(client *Client) *bitImportManager {
-	return &bitImportManager{
+func newRecordImportManager(client *Client) *recordImportManager {
+	return &recordImportManager{
 		client: client,
 	}
 }
 
-func (bim bitImportManager) Run(frame *Frame, iterator RecordIterator, options ImportOptions) error {
+func (rim recordImportManager) Run(frame *Frame, iterator RecordIterator, options ImportOptions) error {
 	sliceWidth := options.sliceWidth
 	threadCount := uint64(options.threadCount)
-	bitChans := make([]chan Record, threadCount)
+	recordChans := make([]chan Record, threadCount)
 	errChans := make([]chan error, threadCount)
 	statusChan := options.statusChan
 
 	if options.importRecordsFunction == nil {
-		return errors.New("importBits function is required")
+		return errors.New("importRecords function is required")
 	}
 
-	for i := range bitChans {
-		bitChans[i] = make(chan Record, options.batchSize)
+	for i := range recordChans {
+		recordChans[i] = make(chan Record, options.batchSize)
 		errChans[i] = make(chan error)
-		go bitImportWorker(i, bim.client, frame, bitChans[i], errChans[i], statusChan, options)
+		go recordImportWorker(i, rim.client, frame, recordChans[i], errChans[i], statusChan, options)
 	}
 
-	var bit Record
-	var bitIteratorError error
+	var record Record
+	var recordIteratorError error
 
 	for {
-		bit, bitIteratorError = iterator.NextRecord()
-		if bitIteratorError != nil {
-			if bitIteratorError == io.EOF {
-				bitIteratorError = nil
+		record, recordIteratorError = iterator.NextRecord()
+		if recordIteratorError != nil {
+			if recordIteratorError == io.EOF {
+				recordIteratorError = nil
 			}
 			break
 		}
-		slice := bit.Slice(sliceWidth)
-		bitChans[slice%threadCount] <- bit
+		slice := record.Slice(sliceWidth)
+		recordChans[slice%threadCount] <- record
 	}
 
-	for _, q := range bitChans {
+	for _, q := range recordChans {
 		close(q)
 	}
 
@@ -63,12 +63,13 @@ func (bim bitImportManager) Run(frame *Frame, iterator RecordIterator, options I
 		}
 	}
 
+	// TODO: Closing this channel will panic if the frame has multiple fields.
 	if statusChan != nil {
 		close(statusChan)
 	}
 
-	if bitIteratorError != nil {
-		return bitIteratorError
+	if recordIteratorError != nil {
+		return recordIteratorError
 	}
 
 	if workerErr != nil {
@@ -78,16 +79,16 @@ func (bim bitImportManager) Run(frame *Frame, iterator RecordIterator, options I
 	return nil
 }
 
-func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan Record, errChan chan<- error, statusChan chan<- ImportStatusUpdate, options ImportOptions) {
+func recordImportWorker(id int, client *Client, frame *Frame, recordChan <-chan Record, errChan chan<- error, statusChan chan<- ImportStatusUpdate, options ImportOptions) {
 	batchForSlice := map[uint64][]Record{}
 	frameName := frame.Name()
 	indexName := frame.index.Name()
 	importFun := options.importRecordsFunction
 
-	importBits := func(slice uint64, bits []Record) error {
+	importRecords := func(slice uint64, records []Record) error {
 		tic := time.Now()
-		sort.Sort(recordSort(bits))
-		err := importFun(indexName, frameName, slice, bits)
+		sort.Sort(recordSort(records))
+		err := importFun(indexName, frameName, slice, records)
 		if err != nil {
 			return err
 		}
@@ -96,7 +97,7 @@ func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan Record
 			statusChan <- ImportStatusUpdate{
 				ThreadID:      id,
 				Slice:         slice,
-				ImportedCount: len(bits),
+				ImportedCount: len(records),
 				Time:          took,
 			}
 		}
@@ -106,9 +107,9 @@ func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan Record
 	largestSlice := func() uint64 {
 		largest := 0
 		resultSlice := uint64(0)
-		for slice, bits := range batchForSlice {
-			if len(bits) > largest {
-				largest = len(bits)
+		for slice, records := range batchForSlice {
+			if len(records) > largest {
+				largest = len(records)
 				resultSlice = slice
 			}
 		}
@@ -118,33 +119,34 @@ func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan Record
 	var err error
 	tic := time.Now()
 	strategy := options.strategy
-	bitCount := 0
+	recordCount := 0
 	timeout := options.timeout
 	batchSize := options.batchSize
 	sliceWidth := options.sliceWidth
 
-	for bit := range bitChan {
-		bitCount += 1
-		slice := bit.Slice(sliceWidth)
-		batchForSlice[slice] = append(batchForSlice[slice], bit)
-		if strategy == BatchImport && bitCount >= batchSize {
-			for slice, bits := range batchForSlice {
-				err = importBits(slice, bits)
+	for record := range recordChan {
+		recordCount += 1
+		slice := record.Slice(sliceWidth)
+		batchForSlice[slice] = append(batchForSlice[slice], record)
+
+		if strategy == BatchImport && recordCount >= batchSize {
+			for slice, records := range batchForSlice {
+				err = importRecords(slice, records)
 				if err != nil {
 					break
 				}
 				batchForSlice[slice] = nil
 			}
-			bitCount = 0
+			recordCount = 0
 			tic = time.Now()
 		} else if strategy == TimeoutImport && time.Since(tic) >= timeout {
 			slice := largestSlice()
-			err = importBits(slice, batchForSlice[slice])
+			err = importRecords(slice, batchForSlice[slice])
 			if err != nil {
 				break
 			}
 			batchForSlice[slice] = nil
-			bitCount = 0
+			recordCount = 0
 			tic = time.Now()
 		}
 	}
@@ -154,10 +156,10 @@ func bitImportWorker(id int, client *Client, frame *Frame, bitChan <-chan Record
 		return
 	}
 
-	// import remaining bits
-	for slice, bits := range batchForSlice {
-		if len(bits) > 0 {
-			err = importBits(slice, bits)
+	// import remaining records
+	for slice, records := range batchForSlice {
+		if len(records) > 0 {
+			err = importRecords(slice, records)
 			if err != nil {
 				break
 			}

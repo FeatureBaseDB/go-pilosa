@@ -742,6 +742,31 @@ func TestImportWithBatchSize(t *testing.T) {
 	}
 }
 
+// Ensure that the client does not send batches of zero records to Pilosa.
+// In our case it should send:
+// batch 1: slice[0,1]
+// batch 2: slice[1,2]
+// batch 3: slice[2,3 remainder]
+// In other words, we want to ensure that batch 2 is not sending slice[0,1,2] where slice 0 contains 0 records.
+func TestImportWithBatchSizeExpectingZero(t *testing.T) {
+	const sliceWidth = 1048576
+	client := getClient()
+	iterator := &BitGenerator{maxRowID: 1, maxColumnID: 3 * sliceWidth}
+	frame, err := index.Frame("importframe-batchsize-zero")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statusChan := make(chan ImportStatusUpdate, 10)
+	err = client.ImportFrame(frame, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(BatchImport), OptImportBatchSize(sliceWidth+10))
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func failingImportBits(indexName string, frameName string, slice uint64, bits []Record) error {
 	if len(bits) > 0 {
 		return errors.New("some error")

@@ -687,28 +687,28 @@ func TestCSVImport(t *testing.T) {
 }
 
 type BitGenerator struct {
-	maxRowID    uint64
-	maxColumnID uint64
-	rowIndex    uint64
-	colIndex    uint64
+	numRows    uint64
+	numColumns uint64
+	rowIndex   uint64
+	colIndex   uint64
 }
 
 func (gen *BitGenerator) NextRecord() (Record, error) {
 	bit := Bit{RowID: gen.rowIndex, ColumnID: gen.colIndex}
-	if gen.colIndex >= gen.maxColumnID {
-		gen.colIndex = 0
-		gen.rowIndex += 1
-	}
-	if gen.rowIndex >= gen.maxRowID {
+	if gen.rowIndex >= gen.numRows {
 		return Bit{}, io.EOF
 	}
 	gen.colIndex += 1
+	if gen.colIndex >= gen.numColumns {
+		gen.colIndex = 0
+		gen.rowIndex += 1
+	}
 	return bit, nil
 }
 
 func TestImportWithTimeout(t *testing.T) {
 	client := getClient()
-	iterator := &BitGenerator{maxRowID: 100, maxColumnID: 1000}
+	iterator := &BitGenerator{numRows: 100, numColumns: 1000}
 	frame, err := index.Frame("importframe-timeout")
 	if err != nil {
 		t.Fatal(err)
@@ -726,7 +726,7 @@ func TestImportWithTimeout(t *testing.T) {
 
 func TestImportWithBatchSize(t *testing.T) {
 	client := getClient()
-	iterator := &BitGenerator{maxRowID: 10, maxColumnID: 1000}
+	iterator := &BitGenerator{numRows: 10, numColumns: 1000}
 	frame, err := index.Frame("importframe-batchsize")
 	if err != nil {
 		t.Fatal(err)
@@ -751,7 +751,7 @@ func TestImportWithBatchSize(t *testing.T) {
 func TestImportWithBatchSizeExpectingZero(t *testing.T) {
 	const sliceWidth = 1048576
 	client := getClient()
-	iterator := &BitGenerator{maxRowID: 1, maxColumnID: 3 * sliceWidth}
+	iterator := &BitGenerator{numRows: 1, numColumns: 3 * sliceWidth}
 	frame, err := index.Frame("importframe-batchsize-zero")
 	if err != nil {
 		t.Fatal(err)
@@ -776,7 +776,7 @@ func failingImportBits(indexName string, frameName string, slice uint64, bits []
 
 func TestImportWithTimeoutFails(t *testing.T) {
 	client := getClient()
-	iterator := &BitGenerator{maxRowID: 10, maxColumnID: 1000}
+	iterator := &BitGenerator{numRows: 10, numColumns: 1000}
 	frame, err := index.Frame("importframe-timeout")
 	if err != nil {
 		t.Fatal(err)
@@ -794,7 +794,7 @@ func TestImportWithTimeoutFails(t *testing.T) {
 
 func TestImportWithBatchSizeFails(t *testing.T) {
 	client := getClient()
-	iterator := &BitGenerator{maxRowID: 10, maxColumnID: 1000}
+	iterator := &BitGenerator{numRows: 10, numColumns: 1000}
 	frame, err := index.Frame("importframe-batchsize")
 	if err != nil {
 		t.Fatal(err)

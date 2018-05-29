@@ -706,6 +706,30 @@ func (gen *BitGenerator) NextRecord() (Record, error) {
 	return bit, nil
 }
 
+// GivenBitGenerator iterates over the set of bits provided in New().
+// This is being used because Goveralls would run out of memory
+// when providing BitGenerator with a large number of columns (3 * sliceWidth).
+type GivenBitGenerator struct {
+	ii      int
+	records []Record
+}
+
+func (gen *GivenBitGenerator) NextRecord() (Record, error) {
+	if len(gen.records) > gen.ii {
+		rec := gen.records[gen.ii]
+		gen.ii++
+		return rec, nil
+	}
+	return Bit{}, io.EOF
+}
+
+func NewGivenBitGenerator(recs []Record) *GivenBitGenerator {
+	return &GivenBitGenerator{
+		ii:      0,
+		records: recs,
+	}
+}
+
 func TestImportWithTimeout(t *testing.T) {
 	client := getClient()
 	iterator := &BitGenerator{numRows: 100, numColumns: 1000}
@@ -746,12 +770,29 @@ func TestImportWithBatchSize(t *testing.T) {
 // In our case it should send:
 // batch 1: slice[0,1]
 // batch 2: slice[1,2]
-// batch 3: slice[2,3 remainder]
 // In other words, we want to ensure that batch 2 is not sending slice[0,1,2] where slice 0 contains 0 records.
 func TestImportWithBatchSizeExpectingZero(t *testing.T) {
 	const sliceWidth = 1048576
 	client := getClient()
-	iterator := &BitGenerator{numRows: 1, numColumns: 3 * sliceWidth}
+
+	iterator := NewGivenBitGenerator(
+		[]Record{
+			Bit{RowID: 1, ColumnID: 1},
+			Bit{RowID: 1, ColumnID: 2},
+			Bit{RowID: 1, ColumnID: 3},
+			Bit{RowID: 1, ColumnID: sliceWidth + 1},
+			Bit{RowID: 1, ColumnID: sliceWidth + 2},
+			Bit{RowID: 1, ColumnID: sliceWidth + 3},
+
+			Bit{RowID: 1, ColumnID: sliceWidth + 4},
+			Bit{RowID: 1, ColumnID: sliceWidth + 5},
+			Bit{RowID: 1, ColumnID: sliceWidth + 6},
+			Bit{RowID: 1, ColumnID: 2*sliceWidth + 1},
+			Bit{RowID: 1, ColumnID: 2*sliceWidth + 2},
+			Bit{RowID: 1, ColumnID: 2*sliceWidth + 3},
+		},
+	)
+
 	frame, err := index.Frame("importframe-batchsize-zero")
 	if err != nil {
 		t.Fatal(err)
@@ -761,7 +802,7 @@ func TestImportWithBatchSizeExpectingZero(t *testing.T) {
 		t.Fatal(err)
 	}
 	statusChan := make(chan ImportStatusUpdate, 10)
-	err = client.ImportFrame(frame, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(BatchImport), OptImportBatchSize(sliceWidth+10))
+	err = client.ImportFrame(frame, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(BatchImport), OptImportBatchSize(6))
 	if err != nil {
 		t.Fatal(err)
 	}

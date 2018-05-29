@@ -658,6 +658,8 @@ func TestCSVImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// TODO: This test doesn't actually use batch or time import strategy because it falls through to the
+	// "remaining records" part of import_manager.recordImportWorker. These functional options are misleading.
 	err = client.ImportFrame(frame, iterator, OptImportBatchSize(10), OptImportThreadCount(1), OptImportTimeout(400*time.Millisecond))
 	if err != nil {
 		t.Fatal(err)
@@ -685,28 +687,52 @@ func TestCSVImport(t *testing.T) {
 }
 
 type BitGenerator struct {
-	maxRowID    uint64
-	maxColumnID uint64
-	rowIndex    uint64
-	colIndex    uint64
+	numRows    uint64
+	numColumns uint64
+	rowIndex   uint64
+	colIndex   uint64
 }
 
 func (gen *BitGenerator) NextRecord() (Record, error) {
 	bit := Bit{RowID: gen.rowIndex, ColumnID: gen.colIndex}
-	if gen.colIndex >= gen.maxColumnID {
-		gen.colIndex = 0
-		gen.rowIndex += 1
-	}
-	if gen.rowIndex >= gen.maxRowID {
+	if gen.rowIndex >= gen.numRows {
 		return Bit{}, io.EOF
 	}
 	gen.colIndex += 1
+	if gen.colIndex >= gen.numColumns {
+		gen.colIndex = 0
+		gen.rowIndex += 1
+	}
 	return bit, nil
+}
+
+// GivenBitGenerator iterates over the set of bits provided in New().
+// This is being used because Goveralls would run out of memory
+// when providing BitGenerator with a large number of columns (3 * sliceWidth).
+type GivenBitGenerator struct {
+	ii      int
+	records []Record
+}
+
+func (gen *GivenBitGenerator) NextRecord() (Record, error) {
+	if len(gen.records) > gen.ii {
+		rec := gen.records[gen.ii]
+		gen.ii++
+		return rec, nil
+	}
+	return Bit{}, io.EOF
+}
+
+func NewGivenBitGenerator(recs []Record) *GivenBitGenerator {
+	return &GivenBitGenerator{
+		ii:      0,
+		records: recs,
+	}
 }
 
 func TestImportWithTimeout(t *testing.T) {
 	client := getClient()
-	iterator := &BitGenerator{maxRowID: 100, maxColumnID: 1000}
+	iterator := &BitGenerator{numRows: 100, numColumns: 1000}
 	frame, err := index.Frame("importframe-timeout")
 	if err != nil {
 		t.Fatal(err)
@@ -724,7 +750,7 @@ func TestImportWithTimeout(t *testing.T) {
 
 func TestImportWithBatchSize(t *testing.T) {
 	client := getClient()
-	iterator := &BitGenerator{maxRowID: 10, maxColumnID: 1000}
+	iterator := &BitGenerator{numRows: 10, numColumns: 1000}
 	frame, err := index.Frame("importframe-batchsize")
 	if err != nil {
 		t.Fatal(err)
@@ -740,6 +766,48 @@ func TestImportWithBatchSize(t *testing.T) {
 	}
 }
 
+// Ensure that the client does not send batches of zero records to Pilosa.
+// In our case it should send:
+// batch 1: slice[0,1]
+// batch 2: slice[1,2]
+// In other words, we want to ensure that batch 2 is not sending slice[0,1,2] where slice 0 contains 0 records.
+func TestImportWithBatchSizeExpectingZero(t *testing.T) {
+	const sliceWidth = 1048576
+	client := getClient()
+
+	iterator := NewGivenBitGenerator(
+		[]Record{
+			Bit{RowID: 1, ColumnID: 1},
+			Bit{RowID: 1, ColumnID: 2},
+			Bit{RowID: 1, ColumnID: 3},
+			Bit{RowID: 1, ColumnID: sliceWidth + 1},
+			Bit{RowID: 1, ColumnID: sliceWidth + 2},
+			Bit{RowID: 1, ColumnID: sliceWidth + 3},
+
+			Bit{RowID: 1, ColumnID: sliceWidth + 4},
+			Bit{RowID: 1, ColumnID: sliceWidth + 5},
+			Bit{RowID: 1, ColumnID: sliceWidth + 6},
+			Bit{RowID: 1, ColumnID: 2*sliceWidth + 1},
+			Bit{RowID: 1, ColumnID: 2*sliceWidth + 2},
+			Bit{RowID: 1, ColumnID: 2*sliceWidth + 3},
+		},
+	)
+
+	frame, err := index.Frame("importframe-batchsize-zero")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statusChan := make(chan ImportStatusUpdate, 10)
+	err = client.ImportFrame(frame, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(BatchImport), OptImportBatchSize(6))
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func failingImportBits(indexName string, frameName string, slice uint64, bits []Record) error {
 	if len(bits) > 0 {
 		return errors.New("some error")
@@ -749,7 +817,7 @@ func failingImportBits(indexName string, frameName string, slice uint64, bits []
 
 func TestImportWithTimeoutFails(t *testing.T) {
 	client := getClient()
-	iterator := &BitGenerator{maxRowID: 10, maxColumnID: 1000}
+	iterator := &BitGenerator{numRows: 10, numColumns: 1000}
 	frame, err := index.Frame("importframe-timeout")
 	if err != nil {
 		t.Fatal(err)
@@ -767,7 +835,7 @@ func TestImportWithTimeoutFails(t *testing.T) {
 
 func TestImportWithBatchSizeFails(t *testing.T) {
 	client := getClient()
-	iterator := &BitGenerator{maxRowID: 10, maxColumnID: 1000}
+	iterator := &BitGenerator{numRows: 10, numColumns: 1000}
 	frame, err := index.Frame("importframe-batchsize")
 	if err != nil {
 		t.Fatal(err)

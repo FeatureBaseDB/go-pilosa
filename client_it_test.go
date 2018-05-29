@@ -658,6 +658,8 @@ func TestCSVImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// TODO: This test doesn't actually use batch or time import strategy because it falls through to the
+	// "remaining records" part of import_manager.recordImportWorker. These functional options are misleading.
 	err = client.ImportFrame(frame, iterator, OptImportBatchSize(10), OptImportThreadCount(1), OptImportTimeout(400*time.Millisecond))
 	if err != nil {
 		t.Fatal(err)
@@ -735,6 +737,31 @@ func TestImportWithBatchSize(t *testing.T) {
 	}
 	statusChan := make(chan ImportStatusUpdate, 10)
 	err = client.ImportFrame(frame, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(BatchImport), OptImportBatchSize(1000))
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Ensure that the client does not send batches of zero records to Pilosa.
+// In our case it should send:
+// batch 1: slice[0,1]
+// batch 2: slice[1,2]
+// batch 3: slice[2,3 remainder]
+// In other words, we want to ensure that batch 2 is not sending slice[0,1,2] where slice 0 contains 0 records.
+func TestImportWithBatchSizeExpectingZero(t *testing.T) {
+	const sliceWidth = 1048576
+	client := getClient()
+	iterator := &BitGenerator{maxRowID: 1, maxColumnID: 3 * sliceWidth}
+	frame, err := index.Frame("importframe-batchsize-zero")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureFrame(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statusChan := make(chan ImportStatusUpdate, 10)
+	err = client.ImportFrame(frame, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(BatchImport), OptImportBatchSize(sliceWidth+10))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-# Go Client for Pilosa
+# Go Client for Pilosa (TESING TRAVISCI)
 
 <a href="https://github.com/pilosa"><img src="https://img.shields.io/badge/pilosa-master-blue.svg"></a>
 <a href="https://godoc.org/github.com/pilosa/go-pilosa"><img src="https://godoc.org/github.com/pilosa/go-pilosa?status.svg" alt="GoDoc"></a>

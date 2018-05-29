@@ -131,6 +131,9 @@ func recordImportWorker(id int, client *Client, frame *Frame, recordChan <-chan 
 
 		if strategy == BatchImport && recordCount >= batchSize {
 			for slice, records := range batchForSlice {
+				if len(records) == 0 {
+					continue
+				}
 				err = importRecords(slice, records)
 				if err != nil {
 					break
@@ -158,11 +161,12 @@ func recordImportWorker(id int, client *Client, frame *Frame, recordChan <-chan 
 
 	// import remaining records
 	for slice, records := range batchForSlice {
-		if len(records) > 0 {
-			err = importRecords(slice, records)
-			if err != nil {
-				break
-			}
+		if len(records) == 0 {
+			continue
+		}
+		err = importRecords(slice, records)
+		if err != nil {
+			break
 		}
 	}
 

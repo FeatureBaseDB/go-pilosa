@@ -63,7 +63,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	testFrame, err = index.Frame("test-frame", &FrameOptions{})
+	testFrame, err = index.Frame("test-frame")
 	if err != nil {
 		panic(err)
 	}
@@ -1088,7 +1088,7 @@ func TestRangeFrame(t *testing.T) {
 
 func TestCreateIntField(t *testing.T) {
 	client := getClient()
-	frame, _ := index.Frame("rangeframe-addfield", &FrameOptions{})
+	frame, _ := index.Frame("rangeframe-addfield")
 	err := client.EnsureFrame(frame)
 	if err != nil {
 		t.Fatal(err)

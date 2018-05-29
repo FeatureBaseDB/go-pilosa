@@ -63,7 +63,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	testFrame, err = index.Frame("test-frame", &FrameOptions{RangeEnabled: true})
+	testFrame, err = index.Frame("test-frame", &FrameOptions{})
 	if err != nil {
 		panic(err)
 	}
@@ -399,47 +399,6 @@ func TestMaxHostsFail(t *testing.T) {
 	}
 }
 
-func TestQueryInverseBitmap(t *testing.T) {
-	client := getClient()
-	f1, err := index.Frame("f1-inversable", InverseEnabled(true))
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.EnsureFrame(f1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = client.Query(
-		index.BatchQuery(
-			f1.SetBit(1000, 5000),
-			f1.SetBit(1000, 6000),
-			f1.SetBit(3000, 5000)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	response, err := client.Query(
-		index.BatchQuery(
-			f1.Bitmap(1000),
-			f1.InverseBitmap(5000),
-		))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(response.Results()) != 2 {
-		t.Fatalf("Response should contain 2 results")
-	}
-	bits1 := response.Results()[0].Bitmap().Bits
-	targetBits1 := []uint64{5000, 6000}
-	if !reflect.DeepEqual(targetBits1, bits1) {
-		t.Fatalf("bits should be: %v, but it is: %v", targetBits1, bits1)
-	}
-	bits2 := response.Results()[1].Bitmap().Bits
-	targetBits2 := []uint64{1000, 3000}
-	if !reflect.DeepEqual(targetBits2, bits2) {
-		t.Fatalf("bits should be: %v, but it is: %v", targetBits2, bits2)
-	}
-}
-
 func TestQueryFailsIfAddressNotResolved(t *testing.T) {
 	uri, _ := NewURIFromAddress("nonexisting.domain.pilosa.com:3456")
 	client, _ := NewClient(uri)
@@ -515,7 +474,6 @@ func TestSchema(t *testing.T) {
 	f, err := index.Frame("schema-test-frame",
 		CacheTypeLRU,
 		CacheSize(9999),
-		InverseEnabled(true),
 		TimeQuantumYearMonthDay,
 	)
 	err = client.EnsureFrame(f)
@@ -536,9 +494,6 @@ func TestSchema(t *testing.T) {
 	}
 	if opt.CacheSize != 9999 {
 		t.Fatalf("cache size 9999 != %d", opt.CacheSize)
-	}
-	if opt.InverseEnabled != true {
-		t.Fatal("inverse enabled false")
 	}
 	if opt.TimeQuantum != TimeQuantumYearMonthDay {
 		t.Fatalf("time quantum %s != %s", string(TimeQuantumYearMonthDay), string(opt.TimeQuantum))
@@ -1133,8 +1088,7 @@ func TestRangeFrame(t *testing.T) {
 
 func TestCreateIntField(t *testing.T) {
 	client := getClient()
-	options := &FrameOptions{RangeEnabled: true}
-	frame, _ := index.Frame("rangeframe-addfield", options)
+	frame, _ := index.Frame("rangeframe-addfield", &FrameOptions{})
 	err := client.EnsureFrame(frame)
 	if err != nil {
 		t.Fatal(err)
@@ -1558,7 +1512,7 @@ func TestExportFrameFailure(t *testing.T) {
 			contentLength: -1,
 		},
 		"/slices/max": {
-			content:       []byte(`{"standard":{"go-testindex": 0},"inverse":{}}`),
+			content:       []byte(`{"standard":{"go-testindex": 0}}`),
 			statusCode:    404,
 			contentLength: -1,
 		},

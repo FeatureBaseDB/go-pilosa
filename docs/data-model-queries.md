@@ -121,11 +121,6 @@ Frame:
 * `FilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, values ...interface{}) *PQLBitmapQuery`
 * `Range(rowID uint64, start time.Time, end time.Time) *PQLBitmapQuery`
 * `SetRowAttrs(rowID uint64, attrs map[string]interface{}) *PQLBaseQuery`
-* (**deprecated**) `InverseBitmap(columnID uint64) *PQLBitmapQuery`
-* (**deprecated**) `InverseTopN(n uint64) *PQLBitmapQuery`
-* (**deprecated**) `InverseBitmapTopN(n uint64, bitmap *PQLBitmapQuery) *PQLBitmapQuery`
-* (**deprecated**) `InverseFilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, values ...interface{}) *PQLBitmapQuery`
-* (**deprecated**) `InverseRange(columnID uint64, start time.Time, end time.Time) *PQLBitmapQuery`
 * (**deprecated**) `Sum(bitmap *PQLBitmapQuery, field string) *PQLBaseQuery`
 * (**deprecated**) `SetIntFieldValue(columnID uint64, field string, value int) *PQLBaseQuery`
 

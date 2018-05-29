@@ -324,11 +324,9 @@ func (c *Client) Schema() (*Schema, error) {
 		for _, frameInfo := range indexInfo.Frames {
 			fields := make(map[string]rangeField)
 			frameOptions := &FrameOptions{
-				CacheSize:      frameInfo.Options.CacheSize,
-				CacheType:      CacheType(frameInfo.Options.CacheType),
-				InverseEnabled: frameInfo.Options.InverseEnabled,
-				TimeQuantum:    TimeQuantum(frameInfo.Options.TimeQuantum),
-				RangeEnabled:   frameInfo.Options.RangeEnabled,
+				CacheSize:   frameInfo.Options.CacheSize,
+				CacheType:   CacheType(frameInfo.Options.CacheType),
+				TimeQuantum: TimeQuantum(frameInfo.Options.TimeQuantum),
 			}
 			for _, fieldInfo := range frameInfo.Options.Fields {
 				fields[fieldInfo.Name] = map[string]interface{}{
@@ -1119,12 +1117,10 @@ type StatusFrame struct {
 
 // StatusOptions contains options for a frame or an index.
 type StatusOptions struct {
-	CacheType      string        `json:"cacheType"`
-	CacheSize      uint          `json:"cacheSize"`
-	InverseEnabled bool          `json:"inverseEnabled"`
-	RangeEnabled   bool          `json:"rangeEnabled"`
-	Fields         []StatusField `json:"fields"`
-	TimeQuantum    string        `json:"timeQuantum"`
+	CacheType   string        `json:"cacheType"`
+	CacheSize   uint          `json:"cacheSize"`
+	Fields      []StatusField `json:"fields"`
+	TimeQuantum string        `json:"timeQuantum"`
 }
 
 // StatusField contains a field in the status.

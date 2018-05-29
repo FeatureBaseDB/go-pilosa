@@ -18,10 +18,10 @@ test:
 	go test
 
 test-all:
-	go test -tags=integration -v
+	go test -tags=integration
 
 test-all-race:
-	go test -race -tags=integration -v
+	go test -race -tags=integration
 
 release:
 	printf "package pilosa\nconst Version = \"$(VERSION)\"" > version.go

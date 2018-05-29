@@ -184,10 +184,9 @@ func TestFrame(t *testing.T) {
 
 func TestFrameCopy(t *testing.T) {
 	options := &FrameOptions{
-		TimeQuantum:    TimeQuantumMonthDayHour,
-		CacheType:      CacheTypeRanked,
-		CacheSize:      123456,
-		InverseEnabled: true,
+		TimeQuantum: TimeQuantumMonthDayHour,
+		CacheType:   CacheTypeRanked,
+		CacheSize:   123456,
 	}
 	frame, err := sampleIndex.Frame("my-frame-4copy", options)
 	if err != nil {
@@ -246,32 +245,6 @@ func TestBitmapK(t *testing.T) {
 	comparePQL(t,
 		"Bitmap(row='myrow', frame='sample-frame')",
 		sampleFrame.BitmapK("myrow"))
-}
-
-func TestInverseBitmap(t *testing.T) {
-	options := &FrameOptions{
-		InverseEnabled: true,
-	}
-	f1, err := projectIndex.Frame("f1-inversable", options)
-	if err != nil {
-		t.Fatal(err)
-	}
-	comparePQL(t,
-		"Bitmap(col=5, frame='f1-inversable')",
-		f1.InverseBitmap(5))
-}
-
-func TestInverseBitmapK(t *testing.T) {
-	options := &FrameOptions{
-		InverseEnabled: true,
-	}
-	f1, err := projectIndex.Frame("f1-inversable", options)
-	if err != nil {
-		t.Fatal(err)
-	}
-	comparePQL(t,
-		"Bitmap(col='myrow', frame='f1-inversable')",
-		f1.InverseBitmapK("myrow"))
 }
 
 func TestSetBit(t *testing.T) {
@@ -389,26 +362,14 @@ func TestXor(t *testing.T) {
 
 func TestTopN(t *testing.T) {
 	comparePQL(t,
-		"TopN(frame='sample-frame', n=27, inverse=false)",
+		"TopN(frame='sample-frame', n=27)",
 		sampleFrame.TopN(27))
 	comparePQL(t,
-		"TopN(frame='sample-frame', n=27, inverse=true)",
-		sampleFrame.InverseTopN(27))
-	comparePQL(t,
-		"TopN(Bitmap(row=3, frame='collaboration'), frame='sample-frame', n=10, inverse=false)",
+		"TopN(Bitmap(row=3, frame='collaboration'), frame='sample-frame', n=10)",
 		sampleFrame.BitmapTopN(10, collabFrame.Bitmap(3)))
 	comparePQL(t,
-		"TopN(Bitmap(row=3, frame='collaboration'), frame='sample-frame', n=10, inverse=true)",
-		sampleFrame.InverseBitmapTopN(10, collabFrame.Bitmap(3)))
-	comparePQL(t,
-		"TopN(Bitmap(row=7, frame='collaboration'), frame='sample-frame', n=12, inverse=false, field='category', filters=[80,81])",
+		"TopN(Bitmap(row=7, frame='collaboration'), frame='sample-frame', n=12, field='category', filters=[80,81])",
 		sampleFrame.FilterFieldTopN(12, collabFrame.Bitmap(7), "category", 80, 81))
-	comparePQL(t,
-		"TopN(Bitmap(row=7, frame='collaboration'), frame='sample-frame', n=12, inverse=true, field='category', filters=[80,81])",
-		sampleFrame.InverseFilterFieldTopN(12, collabFrame.Bitmap(7), "category", 80, 81))
-	comparePQL(t,
-		"TopN(frame='sample-frame', n=12, inverse=true, field='category', filters=[80,81])",
-		sampleFrame.InverseFilterFieldTopN(12, nil, "category", 80, 81))
 }
 
 func TestFieldLT(t *testing.T) {
@@ -631,9 +592,6 @@ func TestRange(t *testing.T) {
 	comparePQL(t,
 		"Range(row=10, frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
 		collabFrame.Range(10, start, end))
-	comparePQL(t,
-		"Range(col=10, frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
-		collabFrame.InverseRange(10, start, end))
 }
 
 func TestRangeK(t *testing.T) {
@@ -642,16 +600,11 @@ func TestRangeK(t *testing.T) {
 	comparePQL(t,
 		"Range(row='foo', frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
 		collabFrame.RangeK("foo", start, end))
-	comparePQL(t,
-		"Range(col='foo', frame='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
-		collabFrame.InverseRangeK("foo", start, end))
 }
 
 func TestFrameOptionsToString(t *testing.T) {
 	frame, err := sampleIndex.Frame("stargazer",
 		TimeQuantumDayHour,
-		InverseEnabled(true),
-		RangeEnabled(true), // unnecessary, just to be able to have one less test
 		CacheTypeRanked,
 		CacheSize(1000),
 		IntField("foo", 10, 100),
@@ -660,7 +613,7 @@ func TestFrameOptionsToString(t *testing.T) {
 		t.Fatal(err)
 	}
 	jsonString := frame.options.String()
-	targetString := `{"options": {"cacheSize":1000,"cacheType":"ranked","fields":[{"max":100,"min":10,"name":"foo","type":"int"},{"max":1,"min":-1,"name":"bar","type":"int"}],"inverseEnabled":true,"rangeEnabled":true,"timeQuantum":"DH"}}`
+	targetString := `{"options": {"cacheSize":1000,"cacheType":"ranked","fields":[{"max":100,"min":10,"name":"foo","type":"int"},{"max":1,"min":-1,"name":"bar","type":"int"}],"timeQuantum":"DH"}}`
 	if sortedString(targetString) != sortedString(jsonString) {
 		t.Fatalf("`%s` != `%s`", targetString, jsonString)
 	}

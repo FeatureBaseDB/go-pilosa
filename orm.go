@@ -371,12 +371,9 @@ type FrameInfo struct {
 type FrameOptions struct {
 	// If a Frame has a time quantum, then Views are generated for each of the defined time segments.
 	TimeQuantum TimeQuantum
-	// Enables inverted frames
-	InverseEnabled bool
-	CacheType      CacheType
-	CacheSize      uint
-	RangeEnabled   bool
-	fields         map[string]rangeField
+	CacheType   CacheType
+	CacheSize   uint
+	fields      map[string]rangeField
 }
 
 func (fo *FrameOptions) withDefaults() (updated *FrameOptions) {
@@ -392,9 +389,6 @@ func (fo *FrameOptions) withDefaults() (updated *FrameOptions) {
 
 func (fo FrameOptions) String() string {
 	mopt := map[string]interface{}{}
-	if fo.InverseEnabled {
-		mopt["inverseEnabled"] = true
-	}
 	if fo.TimeQuantum != TimeQuantumNone {
 		mopt["timeQuantum"] = string(fo.TimeQuantum)
 	}
@@ -404,11 +398,7 @@ func (fo FrameOptions) String() string {
 	if fo.CacheSize != 0 {
 		mopt["cacheSize"] = fo.CacheSize
 	}
-	if fo.RangeEnabled {
-		mopt["rangeEnabled"] = true
-	}
 	if len(fo.fields) > 0 {
-		mopt["rangeEnabled"] = true
 		fields := make([]rangeField, 0, len(fo.fields))
 		for _, field := range fo.fields {
 			fields = append(fields, field)
@@ -463,16 +453,6 @@ func (fo *FrameOptions) addOptions(options ...interface{}) error {
 // FrameOption is used to pass an option to index.Frame function.
 type FrameOption func(options *FrameOptions) error
 
-// InverseEnabled enables inverse frame.
-// *DEPRECATED*
-func InverseEnabled(enabled bool) FrameOption {
-	return func(options *FrameOptions) error {
-		log.Println("The InverseEnabled frame option is deprecated and will be removed.")
-		options.InverseEnabled = enabled
-		return nil
-	}
-}
-
 // OptFrameCacheSize sets the cache size.
 func OptFrameCacheSize(size uint) FrameOption {
 	return func(options *FrameOptions) error {
@@ -486,16 +466,6 @@ func OptFrameCacheSize(size uint) FrameOption {
 func CacheSize(size uint) FrameOption {
 	log.Println("The CacheSize frame option is deprecated and will be removed.")
 	return OptFrameCacheSize(size)
-}
-
-// RangeEnabled enables range encoding for a frame.
-// *DEPRECATED*
-func RangeEnabled(enabled bool) FrameOption {
-	return func(options *FrameOptions) error {
-		log.Println("The RangeEnabled frame option is deprecated and will be removed.")
-		options.RangeEnabled = enabled
-		return nil
-	}
 }
 
 // OptFrameIntField adds an integer field to the frame.
@@ -565,22 +535,6 @@ func (f *Frame) BitmapK(rowKey string) *PQLBitmapQuery {
 		rowKey, f.name), f.index, nil)
 }
 
-// InverseBitmap creates a bitmap query using the column label.
-// Bitmap retrieves the indices of all the set bits in a row or column based on whether the row label or column label is given in the query.
-// It also retrieves any attributes set on that row or column.
-// *DEPRECATED*
-func (f *Frame) InverseBitmap(columnID uint64) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("Bitmap(col=%d, frame='%s')",
-		columnID, f.name), f.index, nil)
-}
-
-// InverseBitmapK creates a Bitmap query using a string key instead of an
-// integer columnID. This will only work against a Pilosa Enterprise server.
-func (f *Frame) InverseBitmapK(columnKey string) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("Bitmap(col='%s', frame='%s')",
-		columnKey, f.name), f.index, nil)
-}
-
 // SetBit creates a SetBit query.
 // SetBit, assigns a value of 1 to a bit in the binary matrix, thus associating the given row in the given frame with the given column.
 func (f *Frame) SetBit(rowID uint64, columnID uint64) *PQLBaseQuery {
@@ -628,47 +582,23 @@ func (f *Frame) ClearBitK(rowKey string, columnKey string) *PQLBaseQuery {
 // TopN creates a TopN query with the given item count.
 // Returns the id and count of the top n bitmaps (by count of bits) in the frame.
 func (f *Frame) TopN(n uint64) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("TopN(frame='%s', n=%d, inverse=false)", f.name, n), f.index, nil)
-}
-
-// InverseTopN creates a TopN query with the given item count.
-// Returns the id and count of the top n bitmaps (by count of bits) in the frame.
-// This variant sets inverse=true
-// *DEPRECATED*
-func (f *Frame) InverseTopN(n uint64) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("TopN(frame='%s', n=%d, inverse=true)", f.name, n), f.index, nil)
+	return NewPQLBitmapQuery(fmt.Sprintf("TopN(frame='%s', n=%d)", f.name, n), f.index, nil)
 }
 
 // BitmapTopN creates a TopN query with the given item count and bitmap.
 // This variant supports customizing the bitmap query.
 func (f *Frame) BitmapTopN(n uint64, bitmap *PQLBitmapQuery) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d, inverse=false)",
-		bitmap.serialize(), f.name, n), f.index, nil)
-}
-
-// InverseBitmapTopN creates a TopN query with the given item count and bitmap.
-// This variant supports customizing the bitmap query and sets inverse=true.
-// *DEPRECATED*
-func (f *Frame) InverseBitmapTopN(n uint64, bitmap *PQLBitmapQuery) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d, inverse=true)",
+	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d)",
 		bitmap.serialize(), f.name, n), f.index, nil)
 }
 
 // FilterFieldTopN creates a TopN query with the given item count, bitmap, field and the filter for that field
 // The field and filters arguments work together to only return Bitmaps which have the attribute specified by field with one of the values specified in filters.
 func (f *Frame) FilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, values ...interface{}) *PQLBitmapQuery {
-	return f.filterFieldTopN(n, bitmap, false, field, values...)
+	return f.filterFieldTopN(n, bitmap, field, values...)
 }
 
-// InverseFilterFieldTopN creates a TopN query with the given item count, bitmap, field and the filter for that field
-// The field and filters arguments work together to only return Bitmaps which have the attribute specified by field with one of the values specified in filters.
-// This variant sets inverse=true.
-// *DEPRECATED*
-func (f *Frame) InverseFilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, values ...interface{}) *PQLBitmapQuery {
-	return f.filterFieldTopN(n, bitmap, true, field, values...)
-}
-
-func (f *Frame) filterFieldTopN(n uint64, bitmap *PQLBitmapQuery, inverse bool, field string, values ...interface{}) *PQLBitmapQuery {
+func (f *Frame) filterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, values ...interface{}) *PQLBitmapQuery {
 	if err := validateLabel(field); err != nil {
 		return NewPQLBitmapQuery("", f.index, err)
 	}
@@ -676,16 +606,12 @@ func (f *Frame) filterFieldTopN(n uint64, bitmap *PQLBitmapQuery, inverse bool, 
 	if err != nil {
 		return NewPQLBitmapQuery("", f.index, err)
 	}
-	inverseStr := "true"
-	if !inverse {
-		inverseStr = "false"
-	}
 	if bitmap == nil {
-		return NewPQLBitmapQuery(fmt.Sprintf("TopN(frame='%s', n=%d, inverse=%s, field='%s', filters=%s)",
-			f.name, n, inverseStr, field, string(b)), f.index, nil)
+		return NewPQLBitmapQuery(fmt.Sprintf("TopN(frame='%s', n=%d, field='%s', filters=%s)",
+			f.name, n, field, string(b)), f.index, nil)
 	}
-	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d, inverse=%s, field='%s', filters=%s)",
-		bitmap.serialize(), f.name, n, inverseStr, field, string(b)), f.index, nil)
+	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d, field='%s', filters=%s)",
+		bitmap.serialize(), f.name, n, field, string(b)), f.index, nil)
 }
 
 // Range creates a Range query.
@@ -700,22 +626,6 @@ func (f *Frame) Range(rowID uint64, start time.Time, end time.Time) *PQLBitmapQu
 func (f *Frame) RangeK(rowKey string, start time.Time, end time.Time) *PQLBitmapQuery {
 	return NewPQLBitmapQuery(fmt.Sprintf("Range(row='%s', frame='%s', start='%s', end='%s')",
 		rowKey, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
-}
-
-// InverseRange creates a Range query.
-// Similar to Bitmap, but only returns bits which were set with timestamps between the given start and end timestamps.
-// *DEPRECATED*
-func (f *Frame) InverseRange(columnID uint64, start time.Time, end time.Time) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("Range(col=%d, frame='%s', start='%s', end='%s')",
-		columnID, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
-}
-
-// InverseRangeK creates a Range query using a string column key. This will only
-// work against a Pilosa Enterprise server.
-// *DEPRECATED*
-func (f *Frame) InverseRangeK(columnKey string, start time.Time, end time.Time) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("Range(col='%s', frame='%s', start='%s', end='%s')",
-		columnKey, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
 }
 
 // SetRowAttrs creates a SetRowAttrs query.

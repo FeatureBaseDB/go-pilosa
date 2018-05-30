@@ -370,6 +370,9 @@ func TestTopN(t *testing.T) {
 	comparePQL(t,
 		"TopN(Bitmap(row=7, frame='collaboration'), frame='sample-frame', n=12, field='category', filters=[80,81])",
 		sampleFrame.FilterFieldTopN(12, collabFrame.Bitmap(7), "category", 80, 81))
+	comparePQL(t,
+		"TopN(frame='sample-frame', n=12, field='category', filters=[80,81])",
+		sampleFrame.FilterFieldTopN(12, nil, "category", 80, 81))
 }
 
 func TestFieldLT(t *testing.T) {

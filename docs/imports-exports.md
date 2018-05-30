@@ -203,17 +203,12 @@ for ok {
 
 ## Exporting Data
 
-You can export a view of a frame from Pilosa using `client.ExportFrame` function which returns a `BitIterator`. Use the `NextBit` function of this iterator to receive all bits for the specified frame. When there are no more bits, `io.EOF` is returned.
+You can export a frame from Pilosa using `client.ExportFrame` function which returns a `BitIterator`. Use the `NextBit` function of this iterator to receive all bits for the specified frame. When there are no more bits, `io.EOF` is returned.
 
-The `PilosaClient` struct has the `Views` function which returns all of the views for a particular frame. You can use this function to retrieve view names:
-```go
-views, err := client.Views(frame)
-```
-
-Here's sample code which retrieves bits of the `standard` view:
+Here's sample code for exporting a frame:
 
 ```go
-iterator, err := client.ExportFrame(frame, "standard")
+iterator, err := client.ExportFrame(frame)
 if err != nil {
     log.Fatal(err)
 }

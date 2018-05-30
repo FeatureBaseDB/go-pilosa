@@ -469,7 +469,7 @@ func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest) err
 }
 
 // ExportFrame exports bits for a frame.
-func (c *Client) ExportFrame(frame *Frame, view string) (RecordIterator, error) {
+func (c *Client) ExportFrame(frame *Frame) (RecordIterator, error) {
 	var slicesMax map[string]uint64
 	var err error
 
@@ -486,22 +486,7 @@ func (c *Client) ExportFrame(frame *Frame, view string) (RecordIterator, error) 
 	if err != nil {
 		return nil, err
 	}
-	return NewCSVBitIterator(newExportReader(c, sliceURIs, frame, view)), nil
-}
-
-// Views fetches and returns the views of a frame
-func (c *Client) Views(frame *Frame) ([]string, error) {
-	path := fmt.Sprintf("/index/%s/frame/%s/views", frame.index.name, frame.name)
-	_, body, err := c.httpRequest("GET", path, nil, nil)
-	if err != nil {
-		return nil, err
-	}
-	viewsInfo := viewsInfo{}
-	err = json.Unmarshal(body, &viewsInfo)
-	if err != nil {
-		return nil, err
-	}
-	return viewsInfo.Views, nil
+	return NewCSVBitIterator(newExportReader(c, sliceURIs, frame)), nil
 }
 
 // Status returns the serves status.
@@ -1131,10 +1116,6 @@ type StatusField struct {
 	Min  int64
 }
 
-type viewsInfo struct {
-	Views []string `json:"views"`
-}
-
 type exportReader struct {
 	client       *Client
 	sliceURIs    map[uint64]*URI
@@ -1143,16 +1124,14 @@ type exportReader struct {
 	bodyIndex    int
 	currentSlice uint64
 	sliceCount   uint64
-	view         string
 }
 
-func newExportReader(client *Client, sliceURIs map[uint64]*URI, frame *Frame, view string) *exportReader {
+func newExportReader(client *Client, sliceURIs map[uint64]*URI, frame *Frame) *exportReader {
 	return &exportReader{
 		client:     client,
 		sliceURIs:  sliceURIs,
 		frame:      frame,
 		sliceCount: uint64(len(sliceURIs)),
-		view:       view,
 	}
 }
 
@@ -1167,8 +1146,8 @@ func (r *exportReader) Read(p []byte) (n int, err error) {
 		headers := map[string]string{
 			"Accept": "text/csv",
 		}
-		path := fmt.Sprintf("/export?index=%s&frame=%s&slice=%d&view=%s",
-			r.frame.index.Name(), r.frame.Name(), r.currentSlice, r.view)
+		path := fmt.Sprintf("/export?index=%s&frame=%s&slice=%d",
+			r.frame.index.Name(), r.frame.Name(), r.currentSlice)
 		resp, err := r.client.doRequest(uri, "GET", path, headers, nil)
 		if err = anyError(resp, err); err != nil {
 			return 0, errors.Wrap(err, "doing export request")

@@ -887,7 +887,7 @@ func TestCSVExport(t *testing.T) {
 		{RowID: 2, ColumnID: 1048577},
 	}
 	bits := []Record{}
-	iterator, err := client.ExportFrame(frame, "standard")
+	iterator, err := client.ExportFrame(frame)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -919,7 +919,7 @@ func TestCSVExportFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = client.ExportFrame(frame, "standard")
+	_, err = client.ExportFrame(frame)
 	if err == nil {
 		t.Fatal("should have failed")
 	}
@@ -940,7 +940,7 @@ func TestExportReaderFailure(t *testing.T) {
 		0: uri,
 	}
 	client, _ := NewClient(uri)
-	reader := newExportReader(client, sliceURIs, frame, "standard")
+	reader := newExportReader(client, sliceURIs, frame)
 	buf := make([]byte, 1000)
 	_, err = reader.Read(buf)
 	if err == nil {
@@ -961,7 +961,7 @@ func TestExportReaderReadBodyFailure(t *testing.T) {
 	}
 	sliceURIs := map[uint64]*URI{0: uri}
 	client, _ := NewClient(uri)
-	reader := newExportReader(client, sliceURIs, frame, "standard")
+	reader := newExportReader(client, sliceURIs, frame)
 	buf := make([]byte, 1000)
 	_, err = reader.Read(buf)
 	if err == nil {
@@ -996,26 +996,6 @@ func TestFetchStatus(t *testing.T) {
 	}
 	if len(status.Nodes) == 0 {
 		t.Fatalf("There should be at least 1 host in the status")
-	}
-}
-
-func TestFetchViews(t *testing.T) {
-	client := getClient()
-	options := &FrameOptions{
-		TimeQuantum: "YMD",
-	}
-	frame, err := index.Frame("viewsframe", options)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client.EnsureFrame(frame)
-	client.Query(frame.SetBitTimestamp(10, 100, time.Now()), nil)
-	views, err := client.Views(frame)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(views) != 4 {
-		t.Fatalf("4 views should have been returned")
 	}
 }
 
@@ -1369,28 +1349,6 @@ func TestStatusUnmarshalFails(t *testing.T) {
 	}
 }
 
-func TestFetchViewsFails(t *testing.T) {
-	server := getMockServer(404, nil, 0)
-	defer server.Close()
-	client, _ := NewClient(server.URL)
-	frame, _ := index.Frame("viewfail", nil)
-	_, err := client.Views(frame)
-	if err == nil {
-		t.Fatalf("Should have failed")
-	}
-}
-
-func TestFetchViewsUnmarshalFails(t *testing.T) {
-	server := getMockServer(200, []byte("foo"), 3)
-	defer server.Close()
-	client, _ := NewClient(server.URL)
-	frame, _ := index.Frame("viewfail", nil)
-	_, err := client.Views(frame)
-	if err == nil {
-		t.Fatalf("Should have failed")
-	}
-}
-
 func TestCreateIntFieldFails(t *testing.T) {
 	server := getMockServer(404, nil, 0)
 	defer server.Close()
@@ -1520,21 +1478,21 @@ func TestExportFrameFailure(t *testing.T) {
 	server := getMockPathServer(paths)
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	_, err := client.ExportFrame(testFrame, "standard")
+	_, err := client.ExportFrame(testFrame)
 	if err == nil {
 		t.Fatal("should have failed")
 	}
 	statusItem := paths["/status"]
 	statusItem.statusCode = 200
 	paths["/status"] = statusItem
-	_, err = client.ExportFrame(testFrame, "standard")
+	_, err = client.ExportFrame(testFrame)
 	if err == nil {
 		t.Fatal("should have failed")
 	}
 	statusItem = paths["/slices/max"]
 	statusItem.statusCode = 200
 	paths["/slices/max"] = statusItem
-	_, err = client.ExportFrame(testFrame, "standard")
+	_, err = client.ExportFrame(testFrame)
 	if err == nil {
 		t.Fatal("should have failed")
 	}

@@ -369,7 +369,6 @@ type FrameInfo struct {
 // FrameOptions contains options to customize Frame objects and frame queries.
 // *DEPRECATED* `RowLabel` field is deprecated and will be removed in a future release.
 type FrameOptions struct {
-	// If a Frame has a time quantum, then Views are generated for each of the defined time segments.
 	TimeQuantum TimeQuantum
 	CacheType   CacheType
 	CacheSize   uint

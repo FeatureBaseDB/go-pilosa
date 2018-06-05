@@ -75,7 +75,7 @@ var (
 	ErrAddrURIClusterExpected = NewError("Addresses, URIs or a cluster is expected")
 	ErrInvalidQueryOption     = NewError("Invalid query option")
 	ErrInvalidIndexOption     = NewError("Invalid index option")
-	ErrInvalidFrameOption     = NewError("Invalid frame option")
+	ErrInvalidFieldOption     = NewError("Invalid frame option")
 	ErrNoFragmentNodes        = NewError("No fragment nodes")
 	ErrNoSlice                = NewError("Index has no slices")
 	ErrUnknownType            = NewError("Unknown type")

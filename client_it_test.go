@@ -55,7 +55,7 @@ import (
 )
 
 var index *Index
-var testFrame *Frame
+var testFrame *Field
 
 func TestMain(m *testing.M) {
 	var err error
@@ -346,7 +346,7 @@ func TestEnsureFrameExists(t *testing.T) {
 
 func TestCreateFrameWithTimeQuantum(t *testing.T) {
 	client := getClient()
-	options := &FrameOptions{TimeQuantum: TimeQuantumYear}
+	options := &FieldOptions{TimeQuantum: TimeQuantumYear}
 	frame, err := index.Frame("frame-with-timequantum", options)
 	if err != nil {
 		t.Fatal(err)
@@ -473,7 +473,7 @@ func TestSchema(t *testing.T) {
 	}
 	f, err := index.Frame("schema-test-frame",
 		CacheTypeLRU,
-		CacheSize(9999),
+		OptFieldCacheSize(9999),
 		TimeQuantumYearMonthDay,
 	)
 	err = client.EnsureFrame(f)
@@ -834,9 +834,9 @@ func TestValueCSVImport(t *testing.T) {
 	text := `10,7
 		7,1`
 	iterator := NewCSVValueIterator(strings.NewReader(text))
-	frameOptions := &FrameOptions{}
-	frameOptions.AddIntField("foo", 0, 100)
-	frame, err := index.Frame("importvalueframe", frameOptions)
+	fieldOptions := &FieldOptions{}
+	fieldOptions.AddIntField("foo", 0, 100)
+	frame, err := index.Frame("importvaluefield", fieldOptions)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1001,7 +1001,7 @@ func TestFetchStatus(t *testing.T) {
 
 func TestRangeFrame(t *testing.T) {
 	client := getClient()
-	options := &FrameOptions{}
+	options := &FieldOptions{}
 	options.AddIntField("foo", 10, 20)
 	frame, _ := index.Frame("rangeframe", options)
 	err := client.EnsureFrame(frame)
@@ -1100,7 +1100,7 @@ func TestCreateIntField(t *testing.T) {
 
 func TestDeleteField(t *testing.T) {
 	client := getClient()
-	options := &FrameOptions{}
+	options := &FieldOptions{}
 	options.AddIntField("foo", 10, 20)
 	frame, _ := index.Frame("rangeframe-deletefield", options)
 	err := client.EnsureFrame(frame)

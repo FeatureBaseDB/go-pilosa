@@ -184,7 +184,7 @@ func (c *Client) CreateIndex(index *Index) error {
 }
 
 // CreateFrame creates a frame on the server using the given Frame struct.
-func (c *Client) CreateFrame(frame *Frame) error {
+func (c *Client) CreateFrame(frame *Field) error {
 	data := []byte(frame.options.String())
 	path := fmt.Sprintf("/index/%s/frame/%s", frame.index.name, frame.name)
 	response, _, err := c.httpRequest("POST", path, data, nil)
@@ -207,7 +207,7 @@ func (c *Client) EnsureIndex(index *Index) error {
 }
 
 // EnsureFrame creates a frame on the server if it doesn't exists.
-func (c *Client) EnsureFrame(frame *Frame) error {
+func (c *Client) EnsureFrame(frame *Field) error {
 	err := c.CreateFrame(frame)
 	if err == ErrFrameExists {
 		return nil
@@ -225,7 +225,7 @@ func (c *Client) DeleteIndex(index *Index) error {
 
 // CreateIntField creates an integer range field.
 // *Experimental*: This feature may be removed or its interface may be modified in the future.
-func (c *Client) CreateIntField(frame *Frame, name string, min int, max int) error {
+func (c *Client) CreateIntField(frame *Field, name string, min int, max int) error {
 	// TODO: refactor the code below when we have more fields types
 	field, err := newIntRangeField(name, min, max)
 	if err != nil {
@@ -243,7 +243,7 @@ func (c *Client) CreateIntField(frame *Frame, name string, min int, max int) err
 
 // DeleteField delete a range field.
 // *Experimental*: This feature may be removed or its interface may be modified in the future.
-func (c *Client) DeleteField(frame *Frame, name string) error {
+func (c *Client) DeleteField(frame *Field, name string) error {
 	path := fmt.Sprintf("/index/%s/frame/%s/field/%s",
 		frame.index.name, frame.name, name)
 	_, _, err := c.httpRequest("DELETE", path, nil, nil)
@@ -254,7 +254,7 @@ func (c *Client) DeleteField(frame *Frame, name string) error {
 }
 
 // DeleteFrame deletes a frame on the server.
-func (c *Client) DeleteFrame(frame *Frame) error {
+func (c *Client) DeleteFrame(frame *Field) error {
 	path := fmt.Sprintf("/index/%s/frame/%s", frame.index.name, frame.name)
 	_, _, err := c.httpRequest("DELETE", path, nil, nil)
 	return err
@@ -323,7 +323,7 @@ func (c *Client) Schema() (*Schema, error) {
 		}
 		for _, frameInfo := range indexInfo.Frames {
 			fields := make(map[string]rangeField)
-			frameOptions := &FrameOptions{
+			frameOptions := &FieldOptions{
 				CacheSize:   frameInfo.Options.CacheSize,
 				CacheType:   CacheType(frameInfo.Options.CacheType),
 				TimeQuantum: TimeQuantum(frameInfo.Options.TimeQuantum),
@@ -353,7 +353,7 @@ func (c *Client) Schema() (*Schema, error) {
 }
 
 // ImportFrame imports records from the given iterator.
-func (c *Client) ImportFrame(frame *Frame, iterator RecordIterator, options ...ImportOption) error {
+func (c *Client) ImportFrame(frame *Field, iterator RecordIterator, options ...ImportOption) error {
 	importOptions := &ImportOptions{}
 	importRecordsFunction(c.importBits)(importOptions)
 	for _, option := range options {
@@ -364,7 +364,7 @@ func (c *Client) ImportFrame(frame *Frame, iterator RecordIterator, options ...I
 	return c.importManager.Run(frame, iterator, importOptions.withDefaults())
 }
 
-func (c *Client) ImportValueFrame(frame *Frame, field string, iterator RecordIterator, options ...ImportOption) error {
+func (c *Client) ImportValueFrame(frame *Field, field string, iterator RecordIterator, options ...ImportOption) error {
 	// c.importValues is the default importer for this function
 	irf := func(indexName string, frameName string, slice uint64, vals []Record) error {
 		return c.importValues(indexName, frameName, slice, field, vals)
@@ -469,7 +469,7 @@ func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest) err
 }
 
 // ExportFrame exports bits for a frame.
-func (c *Client) ExportFrame(frame *Frame) (RecordIterator, error) {
+func (c *Client) ExportFrame(frame *Field) (RecordIterator, error) {
 	var slicesMax map[string]uint64
 	var err error
 
@@ -1119,14 +1119,14 @@ type StatusField struct {
 type exportReader struct {
 	client       *Client
 	sliceURIs    map[uint64]*URI
-	frame        *Frame
+	frame        *Field
 	body         []byte
 	bodyIndex    int
 	currentSlice uint64
 	sliceCount   uint64
 }
 
-func newExportReader(client *Client, sliceURIs map[uint64]*URI, frame *Frame) *exportReader {
+func newExportReader(client *Client, sliceURIs map[uint64]*URI, frame *Field) *exportReader {
 	return &exportReader{
 		client:     client,
 		sliceURIs:  sliceURIs,

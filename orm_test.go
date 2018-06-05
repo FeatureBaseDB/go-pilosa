@@ -147,7 +147,7 @@ func TestIndexFrames(t *testing.T) {
 	frame11, _ := index11.Frame("frame1-1")
 	frame12, _ := index11.Frame("frame1-2")
 	frames := index11.Frames()
-	target := map[string]*Frame{
+	target := map[string]*Field{
 		"frame1-1": frame11,
 		"frame1-2": frame12,
 	}
@@ -159,7 +159,7 @@ func TestIndexFrames(t *testing.T) {
 func TestIndexToString(t *testing.T) {
 	schema1 := NewSchema()
 	index, _ := schema1.Index("test-index")
-	target := fmt.Sprintf(`&pilosa.Index{name:"test-index", frames:map[string]*pilosa.Frame{}}`)
+	target := fmt.Sprintf(`&pilosa.Index{name:"test-index", frames:map[string]*pilosa.Field{}}`)
 	if target != index.String() {
 		t.Fatalf("%s != %s", target, index.String())
 	}
@@ -183,7 +183,7 @@ func TestFrame(t *testing.T) {
 }
 
 func TestFrameCopy(t *testing.T) {
-	options := &FrameOptions{
+	options := &FieldOptions{
 		TimeQuantum: TimeQuantumMonthDayHour,
 		CacheType:   CacheTypeRanked,
 		CacheSize:   123456,
@@ -213,7 +213,7 @@ func TestFrameToString(t *testing.T) {
 	schema1 := NewSchema()
 	index, _ := schema1.Index("test-index")
 	frame, _ := index.Frame("test-frame")
-	target := fmt.Sprintf(`&pilosa.Frame{name:"test-frame", index:(*pilosa.Index)(%p), options:(*pilosa.FrameOptions)(%p), fields:map[string]*pilosa.RangeField{}}`,
+	target := fmt.Sprintf(`&pilosa.Field{name:"test-frame", index:(*pilosa.Index)(%p), options:(*pilosa.FieldOptions)(%p), bsiGroups:map[string]*pilosa.BSIGroup{}}`,
 		frame.index, frame.options)
 	if target != frame.String() {
 		t.Fatalf("%s != %s", target, frame.String())
@@ -225,7 +225,7 @@ func TestFrameFields(t *testing.T) {
 	index, _ := schema1.Index("test-index")
 	frame, _ := index.Frame("test-frame")
 	field := frame.Field("some-field")
-	target := map[string]*RangeField{"some-field": field}
+	target := map[string]*BSIGroup{"some-field": field}
 	if !reflect.DeepEqual(target, frame.Fields()) {
 		t.Fatalf("%v != %v", target, frame.Fields())
 	}
@@ -609,9 +609,9 @@ func TestFrameOptionsToString(t *testing.T) {
 	frame, err := sampleIndex.Frame("stargazer",
 		TimeQuantumDayHour,
 		CacheTypeRanked,
-		CacheSize(1000),
-		IntField("foo", 10, 100),
-		IntField("bar", -1, 1))
+		OptFieldCacheSize(1000),
+		OptFieldIntField("foo", 10, 100),
+		OptFieldIntField("bar", -1, 1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -631,7 +631,7 @@ func TestInvalidFrameOption(t *testing.T) {
 	if err == nil {
 		t.Fatalf("should have failed")
 	}
-	_, err = sampleIndex.Frame("invalid-frame-opt", TimeQuantumDayHour, &FrameOptions{})
+	_, err = sampleIndex.Frame("invalid-frame-opt", TimeQuantumDayHour, &FieldOptions{})
 	if err == nil {
 		t.Fatalf("should have failed")
 	}
@@ -642,7 +642,7 @@ func TestInvalidFrameOption(t *testing.T) {
 }
 
 func TestAddInvalidField(t *testing.T) {
-	frameOptions := &FrameOptions{}
+	frameOptions := &FieldOptions{}
 	err := frameOptions.AddIntField("?invalid field!", 0, 100)
 	if err == nil {
 		t.Fatalf("Adding a field with an invalid name should have failed")
@@ -689,7 +689,7 @@ func mustNewIndex(schema *Schema, name string) (index *Index) {
 	return
 }
 
-func mustNewFrame(index *Index, name string) *Frame {
+func mustNewFrame(index *Index, name string) *Field {
 	var err error
 	frame, err := index.Frame(name)
 	if err != nil {
@@ -704,8 +704,8 @@ func sortedString(s string) string {
 	return strings.Join(arr, "")
 }
 
-func FrameOptionErr(int) FrameOption {
-	return func(*FrameOptions) error {
+func FrameOptionErr(int) FieldOption {
+	return func(*FieldOptions) error {
 		return errors.New("Some error")
 	}
 }

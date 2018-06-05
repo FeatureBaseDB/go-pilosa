@@ -18,7 +18,7 @@ func newRecordImportManager(client *Client) *recordImportManager {
 	}
 }
 
-func (rim recordImportManager) Run(frame *Frame, iterator RecordIterator, options ImportOptions) error {
+func (rim recordImportManager) Run(frame *Field, iterator RecordIterator, options ImportOptions) error {
 	sliceWidth := options.sliceWidth
 	threadCount := uint64(options.threadCount)
 	recordChans := make([]chan Record, threadCount)
@@ -79,7 +79,7 @@ func (rim recordImportManager) Run(frame *Frame, iterator RecordIterator, option
 	return nil
 }
 
-func recordImportWorker(id int, client *Client, frame *Frame, recordChan <-chan Record, errChan chan<- error, statusChan chan<- ImportStatusUpdate, options ImportOptions) {
+func recordImportWorker(id int, client *Client, frame *Field, recordChan <-chan Record, errChan chan<- error, statusChan chan<- ImportStatusUpdate, options ImportOptions) {
 	batchForSlice := map[uint64][]Record{}
 	frameName := frame.Name()
 	indexName := frame.index.Name()

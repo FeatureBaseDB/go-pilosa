@@ -223,36 +223,6 @@ func (c *Client) DeleteIndex(index *Index) error {
 
 }
 
-// CreateIntField creates an integer range field.
-// *Experimental*: This feature may be removed or its interface may be modified in the future.
-func (c *Client) CreateIntField(frame *Field, name string, min int, max int) error {
-	// TODO: refactor the code below when we have more fields types
-	field, err := newIntRangeField(name, min, max)
-	if err != nil {
-		return err
-	}
-	path := fmt.Sprintf("/index/%s/frame/%s/field/%s",
-		frame.index.name, frame.name, name)
-	data := []byte(encodeMap(field))
-	_, _, err = c.httpRequest("POST", path, data, nil)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// DeleteField delete a range field.
-// *Experimental*: This feature may be removed or its interface may be modified in the future.
-func (c *Client) DeleteField(frame *Field, name string) error {
-	path := fmt.Sprintf("/index/%s/frame/%s/field/%s",
-		frame.index.name, frame.name, name)
-	_, _, err := c.httpRequest("DELETE", path, nil, nil)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 // DeleteFrame deletes a frame on the server.
 func (c *Client) DeleteFrame(frame *Field) error {
 	path := fmt.Sprintf("/index/%s/frame/%s", frame.index.name, frame.name)

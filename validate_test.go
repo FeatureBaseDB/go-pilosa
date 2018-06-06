@@ -58,26 +58,26 @@ func TestValidateIndexNameInvalid(t *testing.T) {
 	}
 }
 
-func TestValidateFrameName(t *testing.T) {
+func TestValidateFieldName(t *testing.T) {
 	names := []string{
 		"a", "ab", "ab1", "b-c", "d_e",
 		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}
 	for _, name := range names {
-		if validateFrameName(name) != nil {
-			t.Fatalf("Should be valid frame name: %s", name)
+		if validateFieldName(name) != nil {
+			t.Fatalf("Should be valid field name: %s", name)
 		}
 	}
 }
 
-func TestValidateFrameNameInvalid(t *testing.T) {
+func TestValidateFieldNameInvalid(t *testing.T) {
 	names := []string{
 		"", "'", "^", "/", "\\", "A", "*", "a:b", "valid?no", "yüce", "_", "-", ".data", "d.e", "1",
 		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1",
 	}
 	for _, name := range names {
-		if validateFrameName(name) == nil {
-			t.Fatalf("Should be invalid frame name: %s", name)
+		if validateFieldName(name) == nil {
+			t.Fatalf("Should be invalid field name: %s", name)
 		}
 	}
 

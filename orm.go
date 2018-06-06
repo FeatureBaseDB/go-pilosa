@@ -34,7 +34,6 @@ package pilosa
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -88,16 +87,16 @@ func (s *Schema) diff(other *Schema) *Schema {
 			// if the index doesn't exist in the other schema, simply copy it
 			result.indexes[indexName] = index.copy()
 		} else {
-			// the index exists in the other schema; check the frames
+			// the index exists in the other schema; check the fields
 			resultIndex, _ := NewIndex(indexName)
-			for frameName, frame := range index.frames {
-				if _, ok := otherIndex.frames[frameName]; !ok {
-					// the frame doesn't exist in the other schema, copy it
-					resultIndex.frames[frameName] = frame.copy()
+			for fieldName, field := range index.fields {
+				if _, ok := otherIndex.fields[fieldName]; !ok {
+					// the field doesn't exist in the other schema, copy it
+					resultIndex.fields[fieldName] = field.copy()
 				}
 			}
 			// check whether we modified result index
-			if len(resultIndex.frames) > 0 {
+			if len(resultIndex.fields) > 0 {
 				// if so, move it to the result
 				result.indexes[indexName] = resultIndex
 			}
@@ -169,8 +168,8 @@ func (q PQLBitmapQuery) Error() error {
 //
 // Usage:
 //
-// 	index, err := NewIndex("repository", nil)
-// 	stargazer, err := index.Frame("stargazer", nil)
+// 	index, err := NewIndex("repository")
+// 	stargazer, err := index.Field("stargazer")
 // 	query := repo.BatchQuery(
 // 		stargazer.Bitmap(5),
 //		stargazer.Bitmap(15),
@@ -216,7 +215,7 @@ func NewPQLBitmapQuery(pql string, index *Index, err error) *PQLBitmapQuery {
 // You cannot perform cross-index queries. Column-level attributes are global to the Index.
 type Index struct {
 	name   string
-	frames map[string]*Field
+	fields map[string]*Field
 }
 
 func (idx *Index) String() string {
@@ -230,27 +229,27 @@ func NewIndex(name string) (*Index, error) {
 	}
 	return &Index{
 		name:   name,
-		frames: map[string]*Field{},
+		fields: map[string]*Field{},
 	}, nil
 }
 
-// Frames return a copy of the frames in this index
-func (idx *Index) Frames() map[string]*Field {
+// Fields return a copy of the fields in this index
+func (idx *Index) Fields() map[string]*Field {
 	result := make(map[string]*Field)
-	for k, v := range idx.frames {
+	for k, v := range idx.fields {
 		result[k] = v.copy()
 	}
 	return result
 }
 
 func (idx *Index) copy() *Index {
-	frames := make(map[string]*Field)
-	for name, f := range idx.frames {
-		frames[name] = f.copy()
+	fields := make(map[string]*Field)
+	for name, f := range idx.fields {
+		fields[name] = f.copy()
 	}
 	index := &Index{
 		name:   idx.name,
-		frames: frames,
+		fields: fields,
 	}
 	return index
 }
@@ -260,24 +259,24 @@ func (idx *Index) Name() string {
 	return idx.name
 }
 
-// Frame creates a frame struct with the specified name and defaults.
-func (idx *Index) Frame(name string, options ...interface{}) (*Field, error) {
-	if frame, ok := idx.frames[name]; ok {
-		return frame, nil
+// Field creates a Field struct with the specified name and defaults.
+func (idx *Index) Field(name string, options ...interface{}) (*Field, error) {
+	if field, ok := idx.fields[name]; ok {
+		return field, nil
 	}
-	if err := validateFrameName(name); err != nil {
+	if err := validateFieldName(name); err != nil {
 		return nil, err
 	}
-	frameOptions := &FieldOptions{}
-	err := frameOptions.addOptions(options...)
+	fieldOptions := &FieldOptions{}
+	err := fieldOptions.addOptions(options...)
 	if err != nil {
 		return nil, err
 	}
-	frameOptions = frameOptions.withDefaults()
-	frame := newField(name, idx)
-	frame.options = frameOptions
-	idx.frames[name] = frame
-	return frame, nil
+	fieldOptions = fieldOptions.withDefaults()
+	field := newField(name, idx)
+	field.options = fieldOptions
+	idx.fields[name] = field
+	return field, nil
 }
 
 // BatchQuery creates a batch query with the given queries.
@@ -367,55 +366,42 @@ type FieldInfo struct {
 
 // FieldOptions contains options to customize Field objects and field queries.
 type FieldOptions struct {
-	TimeQuantum TimeQuantum
-	CacheType   CacheType
-	CacheSize   uint
-	fields      map[string]rangeField
+	fieldType   FieldType
+	timeQuantum TimeQuantum
+	cacheType   CacheType
+	cacheSize   uint
+	min         int64
+	max         int64
 }
 
 func (fo *FieldOptions) withDefaults() (updated *FieldOptions) {
 	// copy options so the original is not updated
 	updated = &FieldOptions{}
 	*updated = *fo
-	// impose defaults
-	if updated.fields == nil {
-		updated.fields = map[string]rangeField{}
-	}
 	return
 }
 
 func (fo FieldOptions) String() string {
 	mopt := map[string]interface{}{}
-	if fo.TimeQuantum != TimeQuantumNone {
-		mopt["timeQuantum"] = string(fo.TimeQuantum)
-	}
-	if fo.CacheType != CacheTypeDefault {
-		mopt["cacheType"] = string(fo.CacheType)
-	}
-	if fo.CacheSize != 0 {
-		mopt["cacheSize"] = fo.CacheSize
-	}
-	if len(fo.fields) > 0 {
-		fields := make([]rangeField, 0, len(fo.fields))
-		for _, field := range fo.fields {
-			fields = append(fields, field)
-		}
-		mopt["fields"] = fields
-	}
-	return fmt.Sprintf(`{"options": %s}`, encodeMap(mopt))
-}
 
-// AddIntField adds an integer field to the field options
-func (fo *FieldOptions) AddIntField(name string, min int, max int) error {
-	field, err := newIntRangeField(name, min, max)
-	if err != nil {
-		return err
+	switch fo.fieldType {
+	case FieldTypeInt:
+		mopt["min"] = fo.min
+		mopt["max"] = fo.max
+	case FieldTypeTime:
+		mopt["timeQuantum"] = string(fo.timeQuantum)
 	}
-	if fo.fields == nil {
-		fo.fields = map[string]rangeField{}
+
+	if fo.fieldType != FieldTypeDefault {
+		mopt["type"] = string(fo.fieldType)
 	}
-	fo.fields[name] = field
-	return nil
+	if fo.cacheType != CacheTypeDefault {
+		mopt["cacheType"] = string(fo.cacheType)
+	}
+	if fo.cacheSize != 0 {
+		mopt["cacheSize"] = fo.cacheSize
+	}
+	return fmt.Sprintf(`{"options":%s}`, encodeMap(mopt))
 }
 
 func (fo *FieldOptions) addOptions(options ...interface{}) error {
@@ -436,10 +422,12 @@ func (fo *FieldOptions) addOptions(options ...interface{}) error {
 			if err != nil {
 				return err
 			}
+		case FieldType:
+			fo.fieldType = o
 		case TimeQuantum:
-			fo.TimeQuantum = o
+			fo.timeQuantum = o
 		case CacheType:
-			fo.CacheType = o
+			fo.cacheType = o
 		default:
 			return ErrInvalidFieldOption
 		}
@@ -447,21 +435,32 @@ func (fo *FieldOptions) addOptions(options ...interface{}) error {
 	return nil
 }
 
-// FieldOption is used to pass an option to index.Frame function.
+// FieldOption is used to pass an option to index.Field function.
 type FieldOption func(options *FieldOptions) error
 
 // OptFieldCacheSize sets the cache size.
 func OptFieldCacheSize(size uint) FieldOption {
 	return func(options *FieldOptions) error {
-		options.CacheSize = size
+		options.cacheSize = size
 		return nil
 	}
 }
 
-// OptFieldIntField adds an integer field.
-func OptFieldIntField(name string, min int, max int) FieldOption {
+// OptFieldInt adds an integer field.
+func OptFieldInt(min int64, max int64) FieldOption {
 	return func(options *FieldOptions) error {
-		return options.AddIntField(name, min, max)
+		options.fieldType = FieldTypeInt
+		options.min = min
+		options.max = max
+		return nil
+	}
+}
+
+func OptFieldTime(quantum TimeQuantum) FieldOption {
+	return func(options *FieldOptions) error {
+		options.fieldType = FieldTypeTime
+		options.timeQuantum = quantum
+		return nil
 	}
 }
 
@@ -469,10 +468,9 @@ func OptFieldIntField(name string, min int, max int) FieldOption {
 // You can think of a Field as a table-like data partition within your Index.
 // Row-level attributes are namespaced at the Field level.
 type Field struct {
-	name      string
-	index     *Index
-	options   *FieldOptions
-	bsiGroups map[string]*BSIGroup
+	name    string
+	index   *Index
+	options *FieldOptions
 }
 
 func (f *Field) String() string {
@@ -481,10 +479,9 @@ func (f *Field) String() string {
 
 func newField(name string, index *Index) *Field {
 	return &Field{
-		name:      name,
-		index:     index,
-		options:   &FieldOptions{},
-		bsiGroups: make(map[string]*BSIGroup),
+		name:    name,
+		index:   index,
+		options: &FieldOptions{},
 	}
 }
 
@@ -496,10 +493,6 @@ func (f *Field) Name() string {
 func (f *Field) copy() *Field {
 	field := newField(f.name, f.index)
 	*field.options = *f.options
-	field.bsiGroups = make(map[string]*BSIGroup)
-	for k, v := range f.bsiGroups {
-		field.bsiGroups[k] = v
-	}
 	return field
 }
 
@@ -634,41 +627,6 @@ func (f *Field) SetRowAttrsK(rowKey string, attrs map[string]interface{}) *PQLBa
 		rowKey, f.name, attrsString), f.index, nil)
 }
 
-// Sum creates a Sum query.
-// The corresponding frame should include the field in its options.
-// *DEPRECATED* Use `field.Sum(bitmap)` instead.
-func (f *Field) Sum(bitmap *PQLBitmapQuery, field string) *PQLBaseQuery {
-	return f.Field(field).Sum(bitmap)
-}
-
-// SetIntFieldValue creates a SetFieldValue query.
-// *DEPRECATED* Use `frame.SetIntValue(columnID, value)` instead.
-func (f *Field) SetIntFieldValue(columnID uint64, field string, value int) *PQLBaseQuery {
-	return f.Field(field).SetIntValue(columnID, value)
-}
-
-// Field returns a field to operate on.
-func (f *Field) Field(name string) *BSIGroup {
-	field := f.bsiGroups[name]
-	if field == nil {
-		field = newRangeField(f, name)
-		// do not cache fields with error
-		if field.err == nil {
-			f.bsiGroups[name] = field
-		}
-	}
-	return field
-}
-
-// Fields return a copy of the fields in this frame
-func (f *Field) Fields() map[string]*BSIGroup {
-	result := make(map[string]*BSIGroup)
-	for k, v := range f.bsiGroups {
-		result[k] = v
-	}
-	return result
-}
-
 func createAttributesString(attrs map[string]interface{}) (string, error) {
 	attrsList := make([]string, 0, len(attrs))
 	for k, v := range attrs {
@@ -686,7 +644,17 @@ func createAttributesString(attrs map[string]interface{}) (string, error) {
 	return strings.Join(attrsList, ", "), nil
 }
 
-// TimeQuantum type represents valid time quantum values for frames having support for that.
+// FieldType
+type FieldType string
+
+const (
+	FieldTypeDefault FieldType = ""
+	FieldTypeSet     FieldType = "set"
+	FieldTypeInt     FieldType = "int"
+	FieldTypeTime    FieldType = "time"
+)
+
+// TimeQuantum type represents valid time quantum values time fields.
 type TimeQuantum string
 
 // TimeQuantum constants
@@ -704,7 +672,7 @@ const (
 	TimeQuantumYearMonthDayHour TimeQuantum = "YMDH"
 )
 
-// CacheType represents cache type for a frame
+// CacheType represents cache type for a field
 type CacheType string
 
 // CacheType constants
@@ -712,130 +680,91 @@ const (
 	CacheTypeDefault CacheType = ""
 	CacheTypeLRU     CacheType = "lru"
 	CacheTypeRanked  CacheType = "ranked"
+	CacheTypeNone    CacheType = "none"
 )
 
-// rangeField represents a single field.
-// TODO: rename.
-type rangeField map[string]interface{}
-
-func newIntRangeField(name string, min int, max int) (rangeField, error) {
-	err := validateLabel(name)
-	if err != nil {
-		return nil, err
-	}
-	if max <= min {
-		return nil, errors.New("Max should be greater than min for int fields")
-	}
-	return map[string]interface{}{
-		"name": name,
-		"type": "int",
-		"min":  min,
-		"max":  max,
-	}, nil
-}
-
-// BSIGroup enables writing queries for range encoded fields.
-type BSIGroup struct {
-	frame *Field
-	name  string
-	err   error
-}
-
-func newRangeField(frame *Field, name string) *BSIGroup {
-	err := validateLabel(name)
-	return &BSIGroup{
-		frame: frame,
-		name:  name,
-		err:   err,
-	}
-}
-
 // LT creates a less than query.
-func (field *BSIGroup) LT(n int) *PQLBitmapQuery {
+func (field *Field) LT(n int) *PQLBitmapQuery {
 	return field.binaryOperation("<", n)
 }
 
 // LTE creates a less than or equal query.
-func (field *BSIGroup) LTE(n int) *PQLBitmapQuery {
+func (field *Field) LTE(n int) *PQLBitmapQuery {
 	return field.binaryOperation("<=", n)
 }
 
 // GT creates a greater than query.
-func (field *BSIGroup) GT(n int) *PQLBitmapQuery {
+func (field *Field) GT(n int) *PQLBitmapQuery {
 	return field.binaryOperation(">", n)
 }
 
 // GTE creates a greater than or equal query.
-func (field *BSIGroup) GTE(n int) *PQLBitmapQuery {
+func (field *Field) GTE(n int) *PQLBitmapQuery {
 	return field.binaryOperation(">=", n)
 }
 
 // Equals creates an equals query.
-func (field *BSIGroup) Equals(n int) *PQLBitmapQuery {
+func (field *Field) Equals(n int) *PQLBitmapQuery {
 	return field.binaryOperation("==", n)
 }
 
 // NotEquals creates a not equals query.
-func (field *BSIGroup) NotEquals(n int) *PQLBitmapQuery {
+func (field *Field) NotEquals(n int) *PQLBitmapQuery {
 	return field.binaryOperation("!=", n)
 }
 
 // NotNull creates a not equal to null query.
-func (field *BSIGroup) NotNull() *PQLBitmapQuery {
-	qry := fmt.Sprintf("Range(frame='%s', %s != null)", field.frame.name, field.name)
-	return NewPQLBitmapQuery(qry, field.frame.index, field.err)
+func (field *Field) NotNull() *PQLBitmapQuery {
+	qry := fmt.Sprintf("Range(%s != null)", field.name)
+	return NewPQLBitmapQuery(qry, field.index, nil)
 }
 
 // Between creates a between query.
-func (field *BSIGroup) Between(a int, b int) *PQLBitmapQuery {
-	qry := fmt.Sprintf("Range(frame='%s', %s >< [%d,%d])", field.frame.name, field.name, a, b)
-	return NewPQLBitmapQuery(qry, field.frame.index, field.err)
+func (field *Field) Between(a int, b int) *PQLBitmapQuery {
+	qry := fmt.Sprintf("Range(%s >< [%d,%d])", field.name, a, b)
+	return NewPQLBitmapQuery(qry, field.index, nil)
 }
 
 // Sum creates a sum query.
-func (field *BSIGroup) Sum(bitmap *PQLBitmapQuery) *PQLBaseQuery {
+func (field *Field) Sum(bitmap *PQLBitmapQuery) *PQLBaseQuery {
 	return field.valQuery("Sum", bitmap)
 }
 
 // Min creates a min query.
-func (field *BSIGroup) Min(bitmap *PQLBitmapQuery) *PQLBaseQuery {
+func (field *Field) Min(bitmap *PQLBitmapQuery) *PQLBaseQuery {
 	return field.valQuery("Min", bitmap)
 }
 
 // Max creates a min query.
-func (field *BSIGroup) Max(bitmap *PQLBitmapQuery) *PQLBaseQuery {
+func (field *Field) Max(bitmap *PQLBitmapQuery) *PQLBaseQuery {
 	return field.valQuery("Max", bitmap)
 }
 
 // SetIntValue creates a SetValue query.
-func (field *BSIGroup) SetIntValue(columnID uint64, value int) *PQLBaseQuery {
-	index := field.frame.index
-	qry := fmt.Sprintf("SetFieldValue(frame='%s', col=%d, %s=%d)",
-		field.frame.name, columnID, field.name, value)
-	return NewPQLBaseQuery(qry, index, nil)
+func (field *Field) SetIntValue(columnID uint64, value int) *PQLBaseQuery {
+	qry := fmt.Sprintf("SetValue(col=%d, %s=%d)", columnID, field.name, value)
+	return NewPQLBaseQuery(qry, field.index, nil)
 }
 
 // SetIntValueK creates a SetValue query using a string column key. This will
 // only work against a Pilosa Enterprise server.
-func (field *BSIGroup) SetIntValueK(columnKey string, value int) *PQLBaseQuery {
-	index := field.frame.index
-	qry := fmt.Sprintf("SetFieldValue(frame='%s', col='%s', %s=%d)",
-		field.frame.name, columnKey, field.name, value)
-	return NewPQLBaseQuery(qry, index, nil)
+func (field *Field) SetIntValueK(columnKey string, value int) *PQLBaseQuery {
+	qry := fmt.Sprintf("SetValue(col='%s', %s=%d)", columnKey, field.name, value)
+	return NewPQLBaseQuery(qry, field.index, nil)
 }
 
-func (field *BSIGroup) binaryOperation(op string, n int) *PQLBitmapQuery {
-	qry := fmt.Sprintf("Range(frame='%s', %s %s %d)", field.frame.name, field.name, op, n)
-	return NewPQLBitmapQuery(qry, field.frame.index, field.err)
+func (field *Field) binaryOperation(op string, n int) *PQLBitmapQuery {
+	qry := fmt.Sprintf("Range(%s %s %d)", field.name, op, n)
+	return NewPQLBitmapQuery(qry, field.index, nil)
 }
 
-func (field *BSIGroup) valQuery(op string, bitmap *PQLBitmapQuery) *PQLBaseQuery {
+func (field *Field) valQuery(op string, bitmap *PQLBitmapQuery) *PQLBaseQuery {
 	bitmapStr := ""
 	if bitmap != nil {
 		bitmapStr = fmt.Sprintf("%s, ", bitmap.serialize())
 	}
-	qry := fmt.Sprintf("%s(%sframe='%s', field='%s')", op, bitmapStr, field.frame.name, field.name)
-	return NewPQLBaseQuery(qry, field.frame.index, field.err)
+	qry := fmt.Sprintf("%s(%sfield='%s')", op, bitmapStr, field.name)
+	return NewPQLBaseQuery(qry, field.index, nil)
 }
 
 func encodeMap(m map[string]interface{}) string {

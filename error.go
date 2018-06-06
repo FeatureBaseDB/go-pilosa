@@ -66,9 +66,9 @@ var (
 var (
 	ErrEmptyCluster           = NewError("No usable addresses in the cluster")
 	ErrIndexExists            = NewError("Index exists")
-	ErrFrameExists            = NewError("Frame exists")
+	ErrFieldExists            = NewError("Frame exists")
 	ErrInvalidIndexName       = NewError("Invalid index name")
-	ErrInvalidFrameName       = NewError("Invalid frame name")
+	ErrInvalidFieldName       = NewError("Invalid frame name")
 	ErrInvalidLabel           = NewError("Invalid label")
 	ErrInvalidKey             = NewError("Invalid key")
 	ErrTriedMaxHosts          = NewError("Tried max hosts, still failing")

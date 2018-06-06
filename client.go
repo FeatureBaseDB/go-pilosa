@@ -183,14 +183,14 @@ func (c *Client) CreateIndex(index *Index) error {
 
 }
 
-// CreateFrame creates a frame on the server using the given Frame struct.
-func (c *Client) CreateFrame(frame *Field) error {
-	data := []byte(frame.options.String())
-	path := fmt.Sprintf("/index/%s/frame/%s", frame.index.name, frame.name)
+// CreateField creates a field on the server using the given Field struct.
+func (c *Client) CreateField(field *Field) error {
+	data := []byte(field.options.String())
+	path := fmt.Sprintf("/index/%s/frame/%s", field.index.name, field.name)
 	response, _, err := c.httpRequest("POST", path, data, nil)
 	if err != nil {
 		if response != nil && response.StatusCode == 409 {
-			return ErrFrameExists
+			return ErrFieldExists
 		}
 		return err
 	}
@@ -206,10 +206,10 @@ func (c *Client) EnsureIndex(index *Index) error {
 	return err
 }
 
-// EnsureFrame creates a frame on the server if it doesn't exists.
-func (c *Client) EnsureFrame(frame *Field) error {
-	err := c.CreateFrame(frame)
-	if err == ErrFrameExists {
+// EnsureField creates a field on the server if it doesn't exists.
+func (c *Client) EnsureField(field *Field) error {
+	err := c.CreateField(field)
+	if err == ErrFieldExists {
 		return nil
 	}
 	return err
@@ -223,16 +223,16 @@ func (c *Client) DeleteIndex(index *Index) error {
 
 }
 
-// DeleteFrame deletes a frame on the server.
-func (c *Client) DeleteFrame(frame *Field) error {
-	path := fmt.Sprintf("/index/%s/frame/%s", frame.index.name, frame.name)
+// DeleteField deletes a field on the server.
+func (c *Client) DeleteField(field *Field) error {
+	path := fmt.Sprintf("/index/%s/frame/%s", field.index.name, field.name)
 	_, _, err := c.httpRequest("DELETE", path, nil, nil)
 	return err
 }
 
-// SyncSchema updates a schema with the indexes and frames on the server and
-// creates the indexes and frames in the schema on the server side.
-// This function does not delete indexes and the frames on the server side nor in the schema.
+// SyncSchema updates a schema with the indexes and fields on the server and
+// creates the indexes and fields in the schema on the server side.
+// This function does not delete indexes and the fields on the server side nor in the schema.
 func (c *Client) SyncSchema(schema *Schema) error {
 	serverSchema, err := c.Schema()
 	if err != nil {
@@ -247,7 +247,7 @@ func (c *Client) syncSchema(schema *Schema, serverSchema *Schema) error {
 
 	// find out local - remote schema
 	diffSchema := schema.diff(serverSchema)
-	// create the indexes and frames which doesn't exist on the server side
+	// create the indexes and fields which doesn't exist on the server side
 	for indexName, index := range diffSchema.indexes {
 		if _, ok := serverSchema.indexes[indexName]; !ok {
 			err = c.EnsureIndex(index)
@@ -255,8 +255,8 @@ func (c *Client) syncSchema(schema *Schema, serverSchema *Schema) error {
 				return err
 			}
 		}
-		for _, frame := range index.frames {
-			err = c.EnsureFrame(frame)
+		for _, field := range index.fields {
+			err = c.EnsureField(field)
 			if err != nil {
 				return err
 			}
@@ -269,8 +269,8 @@ func (c *Client) syncSchema(schema *Schema, serverSchema *Schema) error {
 		if localIndex, ok := schema.indexes[indexName]; !ok {
 			schema.indexes[indexName] = index
 		} else {
-			for frameName, frame := range index.frames {
-				localIndex.frames[frameName] = frame
+			for fieldName, field := range index.fields {
+				localIndex.fields[fieldName] = field
 			}
 		}
 	}
@@ -278,7 +278,7 @@ func (c *Client) syncSchema(schema *Schema, serverSchema *Schema) error {
 	return nil
 }
 
-// Schema returns the indexes and frames on the server.
+// Schema returns the indexes and fields on the server.
 func (c *Client) Schema() (*Schema, error) {
 	var indexes []StatusIndex
 	indexes, err := c.readSchema()
@@ -291,39 +291,26 @@ func (c *Client) Schema() (*Schema, error) {
 		if err != nil {
 			return nil, err
 		}
-		for _, frameInfo := range indexInfo.Frames {
-			fields := make(map[string]rangeField)
-			frameOptions := &FieldOptions{
-				CacheSize:   frameInfo.Options.CacheSize,
-				CacheType:   CacheType(frameInfo.Options.CacheType),
-				TimeQuantum: TimeQuantum(frameInfo.Options.TimeQuantum),
+		for _, fieldInfo := range indexInfo.Fields {
+			fieldOptions := &FieldOptions{
+				fieldType:   fieldInfo.Options.FieldType,
+				cacheSize:   fieldInfo.Options.CacheSize,
+				cacheType:   CacheType(fieldInfo.Options.CacheType),
+				timeQuantum: TimeQuantum(fieldInfo.Options.TimeQuantum),
+				min:         fieldInfo.Options.Min,
+				max:         fieldInfo.Options.Max,
 			}
-			for _, fieldInfo := range frameInfo.Options.Fields {
-				fields[fieldInfo.Name] = map[string]interface{}{
-					"Name": fieldInfo.Name,
-					"Type": fieldInfo.Type,
-					"Max":  fieldInfo.Max,
-					"Min":  fieldInfo.Min,
-				}
-			}
-			frameOptions.fields = fields
-			fram, err := index.Frame(frameInfo.Name, frameOptions)
+			_, err := index.Field(fieldInfo.Name, fieldOptions)
 			if err != nil {
 				return nil, err
-			}
-			for name := range fields {
-				ff := fram.Field(name)
-				if ff.err != nil {
-					return nil, errors.Wrap(ff.err, "fielding frame")
-				}
 			}
 		}
 	}
 	return schema, nil
 }
 
-// ImportFrame imports records from the given iterator.
-func (c *Client) ImportFrame(frame *Field, iterator RecordIterator, options ...ImportOption) error {
+// ImportField imports records from the given iterator.
+func (c *Client) ImportField(field *Field, iterator RecordIterator, options ...ImportOption) error {
 	importOptions := &ImportOptions{}
 	importRecordsFunction(c.importBits)(importOptions)
 	for _, option := range options {
@@ -331,22 +318,22 @@ func (c *Client) ImportFrame(frame *Field, iterator RecordIterator, options ...I
 			return err
 		}
 	}
-	return c.importManager.Run(frame, iterator, importOptions.withDefaults())
+	return c.importManager.Run(field, iterator, importOptions.withDefaults())
 }
 
-func (c *Client) ImportValueFrame(frame *Field, field string, iterator RecordIterator, options ...ImportOption) error {
+func (c *Client) ImportIntField(field *Field, iterator RecordIterator, options ...ImportOption) error {
 	// c.importValues is the default importer for this function
-	irf := func(indexName string, frameName string, slice uint64, vals []Record) error {
-		return c.importValues(indexName, frameName, slice, field, vals)
+	irf := func(indexName string, fieldName string, slice uint64, vals []Record) error {
+		return c.importValues(indexName, fieldName, slice, vals)
 	}
 	newOptions := []ImportOption{importRecordsFunction(irf)}
 	for _, opt := range options {
 		newOptions = append(newOptions, opt)
 	}
-	return c.ImportFrame(frame, iterator, newOptions...)
+	return c.ImportField(field, iterator, newOptions...)
 }
 
-func (c *Client) importBits(indexName string, frameName string, slice uint64, bits []Record) error {
+func (c *Client) importBits(indexName string, fieldName string, slice uint64, bits []Record) error {
 	nodes, err := c.fetchFragmentNodes(indexName, slice)
 	if err != nil {
 		return errors.Wrap(err, "fetching fragment nodes")
@@ -360,14 +347,14 @@ func (c *Client) importBits(indexName string, frameName string, slice uint64, bi
 			port:   node.Port,
 		}
 		eg.Go(func() error {
-			return c.importNode(uri, bitsToImportRequest(indexName, frameName, slice, bits))
+			return c.importNode(uri, bitsToImportRequest(indexName, fieldName, slice, bits))
 		})
 	}
 	err = eg.Wait()
 	return errors.Wrap(err, "importing to nodes")
 }
 
-func (c *Client) importValues(indexName string, frameName string, slice uint64, fieldName string, vals []Record) error {
+func (c *Client) importValues(indexName string, fieldName string, slice uint64, vals []Record) error {
 	nodes, err := c.fetchFragmentNodes(indexName, slice)
 	if err != nil {
 		return err
@@ -378,7 +365,7 @@ func (c *Client) importValues(indexName string, frameName string, slice uint64, 
 			host:   node.Host,
 			port:   node.Port,
 		}
-		err = c.importValueNode(uri, valsToImportRequest(indexName, frameName, slice, fieldName, vals))
+		err = c.importValueNode(uri, valsToImportRequest(indexName, fieldName, slice, vals))
 		if err != nil {
 			return err
 		}
@@ -438,8 +425,8 @@ func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest) err
 	return nil
 }
 
-// ExportFrame exports bits for a frame.
-func (c *Client) ExportFrame(frame *Field) (RecordIterator, error) {
+// ExportField exports bits for a field.
+func (c *Client) ExportField(field *Field) (RecordIterator, error) {
 	var slicesMax map[string]uint64
 	var err error
 
@@ -452,11 +439,11 @@ func (c *Client) ExportFrame(frame *Field) (RecordIterator, error) {
 		return nil, err
 	}
 	status.indexMaxSlice = slicesMax
-	sliceURIs, err := c.statusToNodeSlicesForIndex(status, frame.index.Name())
+	sliceURIs, err := c.statusToNodeSlicesForIndex(status, field.index.Name())
 	if err != nil {
 		return nil, err
 	}
-	return NewCSVBitIterator(newExportReader(c, sliceURIs, frame)), nil
+	return NewCSVBitIterator(newExportReader(c, sliceURIs, field)), nil
 }
 
 // Status returns the serves status.
@@ -666,7 +653,7 @@ func makeRequestData(query string, options *QueryOptions) ([]byte, error) {
 	return r, nil
 }
 
-func bitsToImportRequest(indexName string, frameName string, slice uint64, bits []Record) *pbuf.ImportRequest {
+func bitsToImportRequest(indexName string, fieldName string, slice uint64, bits []Record) *pbuf.ImportRequest {
 	rowIDs := make([]uint64, 0, len(bits))
 	columnIDs := make([]uint64, 0, len(bits))
 	timestamps := make([]int64, 0, len(bits))
@@ -678,7 +665,7 @@ func bitsToImportRequest(indexName string, frameName string, slice uint64, bits 
 	}
 	return &pbuf.ImportRequest{
 		Index:      indexName,
-		Frame:      frameName,
+		Frame:      fieldName,
 		Slice:      slice,
 		RowIDs:     rowIDs,
 		ColumnIDs:  columnIDs,
@@ -686,7 +673,7 @@ func bitsToImportRequest(indexName string, frameName string, slice uint64, bits 
 	}
 }
 
-func valsToImportRequest(indexName string, frameName string, slice uint64, fieldName string, vals []Record) *pbuf.ImportValueRequest {
+func valsToImportRequest(indexName string, fieldName string, slice uint64, vals []Record) *pbuf.ImportValueRequest {
 	columnIDs := make([]uint64, 0, len(vals))
 	values := make([]int64, 0, len(vals))
 	for _, record := range vals {
@@ -696,7 +683,7 @@ func valsToImportRequest(indexName string, frameName string, slice uint64, field
 	}
 	return &pbuf.ImportValueRequest{
 		Index:     indexName,
-		Frame:     frameName,
+		Frame:     fieldName,
 		Slice:     slice,
 		Field:     fieldName,
 		ColumnIDs: columnIDs,
@@ -961,7 +948,7 @@ type ImportOptions struct {
 	batchSize             int
 	strategy              ImportWorkerStrategy
 	statusChan            chan<- ImportStatusUpdate
-	importRecordsFunction func(indexName string, frameName string, slice uint64, records []Record) error
+	importRecordsFunction func(indexName string, fieldName string, slice uint64, records []Record) error
 }
 
 func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
@@ -1021,7 +1008,7 @@ func OptImportStatusChannel(statusChan chan<- ImportStatusUpdate) ImportOption {
 	}
 }
 
-func importRecordsFunction(fun func(indexName string, frameName string, slice uint64, records []Record) error) ImportOption {
+func importRecordsFunction(fun func(indexName string, fieldName string, slice uint64, records []Record) error) ImportOption {
 	return func(options *ImportOptions) error {
 		options.importRecordsFunction = fun
 		return nil
@@ -1060,47 +1047,41 @@ type SchemaInfo struct {
 type StatusIndex struct {
 	Name    string        `json:"name"`
 	Options StatusOptions `json:"options"`
-	Frames  []StatusFrame `json:"frames"`
+	Fields  []StatusField `json:"frames"`
 	Slices  []uint64      `json:"slices"`
 }
 
-// StatusFrame contains frame information.
-type StatusFrame struct {
+// StatusField contains field information.
+type StatusField struct {
 	Name    string        `json:"name"`
 	Options StatusOptions `json:"options"`
 }
 
-// StatusOptions contains options for a frame or an index.
+// StatusOptions contains options for a field or an index.
 type StatusOptions struct {
-	CacheType   string        `json:"cacheType"`
-	CacheSize   uint          `json:"cacheSize"`
-	Fields      []StatusField `json:"fields"`
-	TimeQuantum string        `json:"timeQuantum"`
-}
-
-// StatusField contains a field in the status.
-type StatusField struct {
-	Name string
-	Type string
-	Max  int64
-	Min  int64
+	FieldType   FieldType `json:"type"`
+	CacheType   string    `json:"cacheType"`
+	CacheSize   uint      `json:"cacheSize"`
+	TimeQuantum string    `json:"timeQuantum"`
+	Min         int64     `json:"min"`
+	Max         int64     `json:"max"`
 }
 
 type exportReader struct {
 	client       *Client
 	sliceURIs    map[uint64]*URI
-	frame        *Field
+	field        *Field
 	body         []byte
 	bodyIndex    int
 	currentSlice uint64
 	sliceCount   uint64
 }
 
-func newExportReader(client *Client, sliceURIs map[uint64]*URI, frame *Field) *exportReader {
+func newExportReader(client *Client, sliceURIs map[uint64]*URI, field *Field) *exportReader {
 	return &exportReader{
 		client:     client,
 		sliceURIs:  sliceURIs,
-		frame:      frame,
+		field:      field,
 		sliceCount: uint64(len(sliceURIs)),
 	}
 }
@@ -1117,7 +1098,7 @@ func (r *exportReader) Read(p []byte) (n int, err error) {
 			"Accept": "text/csv",
 		}
 		path := fmt.Sprintf("/export?index=%s&frame=%s&slice=%d",
-			r.frame.index.Name(), r.frame.Name(), r.currentSlice)
+			r.field.index.Name(), r.field.Name(), r.currentSlice)
 		resp, err := r.client.doRequest(uri, "GET", path, headers, nil)
 		if err = anyError(resp, err); err != nil {
 			return 0, errors.Wrap(err, "doing export request")

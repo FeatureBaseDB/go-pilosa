@@ -56,9 +56,9 @@ func TestNewBitmapResultFromInternal(t *testing.T) {
 		{Key: "registered", BoolValue: true, Type: 3},
 		{Key: "height", FloatValue: 1.83, Type: 4},
 	}
-	bitmap := &pbuf.Bitmap{
-		Attrs: attrs,
-		Bits:  []uint64{5, 10},
+	bitmap := &pbuf.Row{
+		Attrs:   attrs,
+		Columns: []uint64{5, 10},
 	}
 	result, err := newBitmapResultFromInternal(bitmap)
 	if err != nil {
@@ -90,16 +90,16 @@ func TestNewQueryResponseFromInternal(t *testing.T) {
 		{Key: "registered", BoolValue: true, Type: 3},
 		{Key: "height", FloatValue: 1.83, Type: 4},
 	}
-	bitmap := &pbuf.Bitmap{
-		Attrs: attrs,
-		Bits:  []uint64{5, 10},
+	bitmap := &pbuf.Row{
+		Attrs:   attrs,
+		Columns: []uint64{5, 10},
 	}
 	pairs := []*pbuf.Pair{
 		{ID: 10, Count: 100},
 	}
 	response := &pbuf.QueryResponse{
 		Results: []*pbuf.QueryResult{
-			{Type: QueryResultTypeBitmap, Bitmap: bitmap},
+			{Type: QueryResultTypeBitmap, Row: bitmap},
 			{Type: QueryResultTypePairs, Pairs: pairs},
 		},
 		Err: "",
@@ -156,11 +156,11 @@ func TestNewQueryResponseFromInternalFailure(t *testing.T) {
 	attrs := []*pbuf.Attr{
 		{Key: "name", StringValue: "some string", Type: 99},
 	}
-	bitmap := &pbuf.Bitmap{
+	bitmap := &pbuf.Row{
 		Attrs: attrs,
 	}
 	response := &pbuf.QueryResponse{
-		Results: []*pbuf.QueryResult{{Type: QueryResultTypeBitmap, Bitmap: bitmap}},
+		Results: []*pbuf.QueryResult{{Type: QueryResultTypeBitmap, Row: bitmap}},
 	}
 	qr, err := newQueryResponseFromInternal(response)
 	if qr != nil && err == nil {
@@ -203,15 +203,15 @@ func TestMarshalResults(t *testing.T) {
 		{Key: "registered", BoolValue: true, Type: 3},
 		{Key: "height", FloatValue: 1.83, Type: 4},
 	}
-	bitmap := &pbuf.Bitmap{
-		Attrs: attrs,
-		Bits:  []uint64{5, 10},
+	bitmap := &pbuf.Row{
+		Attrs:   attrs,
+		Columns: []uint64{5, 10},
 	}
 	pairs := []*pbuf.Pair{
 		{ID: 10, Count: 100},
 	}
 	pbufResults := []*pbuf.QueryResult{
-		{Type: QueryResultTypeBitmap, Bitmap: bitmap},
+		{Type: QueryResultTypeBitmap, Row: bitmap},
 		{Type: QueryResultTypePairs, Pairs: pairs},
 	}
 	resultJSONStrings := make([]string, len(pbufResults))

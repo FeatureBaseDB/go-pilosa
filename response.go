@@ -130,7 +130,7 @@ func newQueryResultFromInternal(result *pbuf.QueryResult) (QueryResult, error) {
 	case QueryResultTypeNil:
 		return NilResult{}, nil
 	case QueryResultTypeBitmap:
-		return newBitmapResultFromInternal(result.Bitmap)
+		return newBitmapResultFromInternal(result.Row)
 	case QueryResultTypePairs:
 		return countItemsFromInternal(result.Pairs), nil
 	case QueryResultTypeValCount:
@@ -184,14 +184,14 @@ type BitmapResult struct {
 	Keys       []string               `json:"keys"`
 }
 
-func newBitmapResultFromInternal(bitmap *pbuf.Bitmap) (*BitmapResult, error) {
+func newBitmapResultFromInternal(bitmap *pbuf.Row) (*BitmapResult, error) {
 	attrs, err := convertInternalAttrsToMap(bitmap.Attrs)
 	if err != nil {
 		return nil, err
 	}
 	result := &BitmapResult{
 		Attributes: attrs,
-		Bits:       bitmap.Bits,
+		Bits:       bitmap.Columns,
 		Keys:       bitmap.Keys,
 	}
 	return result, nil

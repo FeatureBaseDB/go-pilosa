@@ -1224,7 +1224,7 @@ func TestImportNodeFails(t *testing.T) {
 		RowIDs:     []uint64{},
 		Timestamps: []int64{},
 		Index:      "foo",
-		Frame:      "bar",
+		Field:      "bar",
 		Slice:      0,
 	}
 	err := client.importNode(uri, importRequest)

@@ -644,11 +644,11 @@ func newHTTPClient(options *ClientOptions) *http.Client {
 
 func makeRequestData(query string, options *QueryOptions) ([]byte, error) {
 	request := &pbuf.QueryRequest{
-		Query:        query,
-		Slices:       options.Slices,
-		ColumnAttrs:  options.Columns,
-		ExcludeAttrs: options.ExcludeAttrs,
-		ExcludeBits:  options.ExcludeBits,
+		Query:           query,
+		Slices:          options.Slices,
+		ColumnAttrs:     options.Columns,
+		ExcludeRowAttrs: options.ExcludeAttrs,
+		ExcludeColumns:  options.ExcludeBits,
 	}
 	r, err := proto.Marshal(request)
 	if err != nil {
@@ -669,7 +669,7 @@ func bitsToImportRequest(indexName string, fieldName string, slice uint64, bits 
 	}
 	return &pbuf.ImportRequest{
 		Index:      indexName,
-		Frame:      fieldName,
+		Field:      fieldName,
 		Slice:      slice,
 		RowIDs:     rowIDs,
 		ColumnIDs:  columnIDs,
@@ -687,9 +687,8 @@ func valsToImportRequest(indexName string, fieldName string, slice uint64, vals 
 	}
 	return &pbuf.ImportValueRequest{
 		Index:     indexName,
-		Frame:     fieldName,
-		Slice:     slice,
 		Field:     fieldName,
+		Slice:     slice,
 		ColumnIDs: columnIDs,
 		Values:    values,
 	}

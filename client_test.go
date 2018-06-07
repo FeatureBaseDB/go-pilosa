@@ -46,11 +46,11 @@ func TestQueryWithError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	frame, err := index.Field("foo", nil)
+	field, err := index.Field("foo", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	invalid := frame.FilterFieldTopN(12, frame.Bitmap(7), "$invalid$", 80, 81)
+	invalid := field.FilterFieldTopN(12, field.Row(7), "$invalid$", 80, 81)
 	_, err = client.Query(invalid, nil)
 	if err == nil {
 		t.Fatalf("Should have failed")

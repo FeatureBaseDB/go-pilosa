@@ -185,7 +185,7 @@ func (c *CSVIterator) NextRecord() (Record, error) {
 }
 
 // FieldValue represents the value for a column within a
-// range-encoded frame.
+// range-encoded field.
 type FieldValue struct {
 	ColumnID  uint64
 	ColumnKey string

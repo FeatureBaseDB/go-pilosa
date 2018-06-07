@@ -108,7 +108,7 @@ func TestCreateDefaultClient(t *testing.T) {
 
 func TestClientReturnsResponse(t *testing.T) {
 	client := getClient()
-	response, err := client.Query(testField.Bitmap(1), nil)
+	response, err := client.Query(testField.Row(1), nil)
 	if err != nil {
 		t.Fatalf("Error querying: %s", err)
 	}
@@ -131,11 +131,11 @@ func TestQueryWithSlices(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	response, err := client.Query(testField.Bitmap(1), Slices(0, 3))
+	response, err := client.Query(testField.Row(1), Slices(0, 3))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bits := response.Result().Bitmap().Bits; !reflect.DeepEqual(bits, []uint64{100, sliceWidth * 3}) {
+	if bits := response.Result().Row().Bits; !reflect.DeepEqual(bits, []uint64{100, sliceWidth * 3}) {
 		t.Fatalf("Unexpected results: %#v", bits)
 	}
 }
@@ -160,7 +160,7 @@ func TestQueryWithColumns(t *testing.T) {
 	if !reflect.DeepEqual(response.Column(), ColumnItem{}) {
 		t.Fatalf("No columns should be returned if it wasn't explicitly requested")
 	}
-	response, err = client.Query(testField.Bitmap(1), &QueryOptions{Columns: true})
+	response, err = client.Query(testField.Row(1), &QueryOptions{Columns: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,12 +197,12 @@ func TestSetRowAttrs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := client.Query(testField.Bitmap(1), &QueryOptions{Columns: true})
+	response, err := client.Query(testField.Row(1), &QueryOptions{Columns: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(targetAttrs, response.Result().Bitmap().Attributes) {
-		t.Fatalf("Bitmap attributes should be set")
+	if !reflect.DeepEqual(targetAttrs, response.Result().Row().Attributes) {
+		t.Fatalf("Row attributes should be set")
 	}
 }
 
@@ -222,7 +222,7 @@ func TestOrmCount(t *testing.T) {
 		countField.SetBit(15, 25),
 	)
 	client.Query(qry, nil)
-	response, err := client.Query(index.Count(countField.Bitmap(10)), nil)
+	response, err := client.Query(index.Count(countField.Row(10)), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,7 +248,7 @@ func TestIntersectReturns(t *testing.T) {
 		field.SetBit(3, 20),
 	)
 	client.Query(qry1, nil)
-	qry2 := index.Intersect(field.Bitmap(2), field.Bitmap(3))
+	qry2 := index.Intersect(field.Row(2), field.Row(3))
 	response, err := client.Query(qry2, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -256,7 +256,7 @@ func TestIntersectReturns(t *testing.T) {
 	if len(response.Results()) != 1 {
 		t.Fatal("There must be 1 result")
 	}
-	if !reflect.DeepEqual(response.Result().Bitmap().Bits, []uint64{10}) {
+	if !reflect.DeepEqual(response.Result().Row().Bits, []uint64{10}) {
 		t.Fatal("Returned bits must be: [10]")
 	}
 }
@@ -426,7 +426,7 @@ func TestErrorResponseNotRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	client, _ := NewClient(uri)
-	response, err := client.Query(testField.Bitmap(1), nil)
+	response, err := client.Query(testField.Row(1), nil)
 	if err == nil {
 		t.Fatalf("Got response: %v", response)
 	}
@@ -440,7 +440,7 @@ func TestResponseNotRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	client, _ := NewClient(uri)
-	response, err := client.Query(testField.Bitmap(1), nil)
+	response, err := client.Query(testField.Row(1), nil)
 	if err == nil {
 		t.Fatalf("Got response: %v", response)
 	}
@@ -612,9 +612,9 @@ func TestCSVImport(t *testing.T) {
 
 	target := []uint64{3, 1, 5}
 	bq := index.BatchQuery(
-		field.Bitmap(2),
-		field.Bitmap(7),
-		field.Bitmap(10),
+		field.Row(2),
+		field.Row(7),
+		field.Row(10),
 	)
 	response, err := client.Query(bq)
 	if err != nil {
@@ -624,7 +624,7 @@ func TestCSVImport(t *testing.T) {
 		t.Fatalf("Result count should be 3")
 	}
 	for i, result := range response.Results() {
-		br := result.Bitmap()
+		br := result.Row()
 		if target[i] != br.Bits[0] {
 			t.Fatalf("%d != %d", target[i], br.Bits[0])
 		}
@@ -844,7 +844,7 @@ func TestValueCSVImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err = client.Query(field.Sum(field.Bitmap(1)))
+	response, err = client.Query(field.Sum(field.Row(1)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1016,7 +1016,7 @@ func TestRangeField(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp, err := client.Query(field.Sum(field.Bitmap(1)))
+	resp, err := client.Query(field.Sum(field.Row(1)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1027,7 +1027,7 @@ func TestRangeField(t *testing.T) {
 		t.Fatalf("Count 2 != %d", resp.Result().Count())
 	}
 
-	resp, err = client.Query(field.Min(field.Bitmap(1)))
+	resp, err = client.Query(field.Min(field.Row(1)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1038,7 +1038,7 @@ func TestRangeField(t *testing.T) {
 		t.Fatalf("Count 2 != %d", resp.Result().Count())
 	}
 
-	resp, err = client.Query(field.Max(field.Bitmap(1)))
+	resp, err = client.Query(field.Max(field.Row(1)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1053,11 +1053,11 @@ func TestRangeField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(resp.Result().Bitmap().Bits) != 1 {
-		t.Fatalf("Count 1 != %d", len(resp.Result().Bitmap().Bits))
+	if len(resp.Result().Row().Bits) != 1 {
+		t.Fatalf("Count 1 != %d", len(resp.Result().Row().Bits))
 	}
-	if resp.Result().Bitmap().Bits[0] != 10 {
-		t.Fatalf("Bit 10 != %d", resp.Result().Bitmap().Bits[0])
+	if resp.Result().Row().Bits[0] != 10 {
+		t.Fatalf("Bit 10 != %d", resp.Result().Row().Bits[0])
 	}
 }
 
@@ -1080,26 +1080,26 @@ func TestExcludeAttrsBits(t *testing.T) {
 	}
 
 	// test exclude bits.
-	resp, err := client.Query(field.Bitmap(1), &QueryOptions{ExcludeBits: true})
+	resp, err := client.Query(field.Row(1), &QueryOptions{ExcludeBits: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(resp.Result().Bitmap().Bits) != 0 {
+	if len(resp.Result().Row().Bits) != 0 {
 		t.Fatalf("bits should be excluded")
 	}
-	if len(resp.Result().Bitmap().Attributes) != 1 {
+	if len(resp.Result().Row().Attributes) != 1 {
 		t.Fatalf("attributes should be included")
 	}
 
 	// test exclude attributes.
-	resp, err = client.Query(field.Bitmap(1), &QueryOptions{ExcludeAttrs: true})
+	resp, err = client.Query(field.Row(1), &QueryOptions{ExcludeAttrs: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(resp.Result().Bitmap().Bits) != 1 {
+	if len(resp.Result().Row().Bits) != 1 {
 		t.Fatalf("bits should be included")
 	}
-	if len(resp.Result().Bitmap().Attributes) != 0 {
+	if len(resp.Result().Row().Attributes) != 0 {
 		t.Fatalf("attributes should be excluded")
 	}
 }
@@ -1271,7 +1271,7 @@ func TestResponseWithInvalidType(t *testing.T) {
 	server := getMockServer(200, data, -1)
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	_, err = client.Query(testField.Bitmap(1), nil)
+	_, err = client.Query(testField.Row(1), nil)
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -1469,7 +1469,7 @@ func TestClientRace(t *testing.T) {
 		panic(err)
 	}
 	f := func() {
-		client.Query(testField.Bitmap(1))
+		client.Query(testField.Row(1))
 	}
 	for i := 0; i < 10; i++ {
 		go f()

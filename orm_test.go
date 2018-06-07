@@ -47,10 +47,10 @@ var sampleIndex = mustNewIndex(schema, "sample-index")
 var sampleField = mustNewField(sampleIndex, "sample-field")
 var projectIndex = mustNewIndex(schema, "project-index")
 var collabField = mustNewField(projectIndex, "collaboration")
-var b1 = sampleField.Bitmap(10)
-var b2 = sampleField.Bitmap(20)
-var b3 = sampleField.Bitmap(42)
-var b4 = collabField.Bitmap(2)
+var b1 = sampleField.Row(10)
+var b2 = sampleField.Row(20)
+var b3 = sampleField.Row(42)
+var b4 = collabField.Row(2)
 
 func TestSchemaDiff(t *testing.T) {
 	schema1 := NewSchema()
@@ -202,7 +202,7 @@ func TestNewFieldWithInvalidName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = index.Field("$$INVALIDFRAME$$")
+	_, err = index.Field("$$INVALIDFIELD$$")
 	if err == nil {
 		t.Fatal("Creating fields with invalid row labels should fail")
 	}
@@ -229,19 +229,19 @@ func TestFieldSetType(t *testing.T) {
 	}
 }
 
-func TestBitmap(t *testing.T) {
+func TestRow(t *testing.T) {
 	comparePQL(t,
 		"Bitmap(row=5, field='sample-field')",
-		sampleField.Bitmap(5))
+		sampleField.Row(5))
 	comparePQL(t,
 		"Bitmap(row=10, field='collaboration')",
-		collabField.Bitmap(10))
+		collabField.Row(10))
 }
 
-func TestBitmapK(t *testing.T) {
+func TestRowK(t *testing.T) {
 	comparePQL(t,
 		"Bitmap(row='myrow', field='sample-field')",
-		sampleField.BitmapK("myrow"))
+		sampleField.RowK("myrow"))
 }
 
 func TestSetBit(t *testing.T) {
@@ -363,10 +363,10 @@ func TestTopN(t *testing.T) {
 		sampleField.TopN(27))
 	comparePQL(t,
 		"TopN(Bitmap(row=3, field='collaboration'), field='sample-field', n=10)",
-		sampleField.BitmapTopN(10, collabField.Bitmap(3)))
+		sampleField.RowTopN(10, collabField.Row(3)))
 	comparePQL(t,
 		"TopN(Bitmap(row=7, field='collaboration'), field='sample-field', n=12, field='category', filters=[80,81])",
-		sampleField.FilterFieldTopN(12, collabField.Bitmap(7), "category", 80, 81))
+		sampleField.FilterFieldTopN(12, collabField.Row(7), "category", 80, 81))
 	comparePQL(t,
 		"TopN(field='sample-field', n=12, field='category', filters=[80,81])",
 		sampleField.FilterFieldTopN(12, nil, "category", 80, 81))
@@ -423,7 +423,7 @@ func TestFieldBetween(t *testing.T) {
 func TestFieldSum(t *testing.T) {
 	comparePQL(t,
 		"Sum(Bitmap(row=10, field='collaboration'), field='collaboration')",
-		collabField.Sum(collabField.Bitmap(10)))
+		collabField.Sum(collabField.Row(10)))
 	comparePQL(t,
 		"Sum(field='collaboration')",
 		collabField.Sum(nil))
@@ -436,21 +436,21 @@ func TestFieldBSetIntValue(t *testing.T) {
 }
 
 func TestFilterFieldTopNInvalidField(t *testing.T) {
-	q := sampleField.FilterFieldTopN(12, collabField.Bitmap(7), "$invalid$", 80, 81)
+	q := sampleField.FilterFieldTopN(12, collabField.Row(7), "$invalid$", 80, 81)
 	if q.Error() == nil {
 		t.Fatalf("should have failed")
 	}
 }
 
 func TestFilterFieldTopNInvalidValue(t *testing.T) {
-	q := sampleField.FilterFieldTopN(12, collabField.Bitmap(7), "category", 80, func() {})
+	q := sampleField.FilterFieldTopN(12, collabField.Row(7), "category", 80, func() {})
 	if q.Error() == nil {
 		t.Fatalf("should have failed")
 	}
 }
 
-func TestBitmapOperationInvalidArg(t *testing.T) {
-	invalid := sampleField.FilterFieldTopN(12, collabField.Bitmap(7), "$invalid$", 80, 81)
+func TestRowOperationInvalidArg(t *testing.T) {
+	invalid := sampleField.FilterFieldTopN(12, collabField.Row(7), "$invalid$", 80, 81)
 	// invalid argument in pos 1
 	q := sampleIndex.Union(invalid, b1)
 	if q.Error() == nil {
@@ -466,18 +466,18 @@ func TestBitmapOperationInvalidArg(t *testing.T) {
 	if q.Error() == nil {
 		t.Fatalf("should have failed")
 	}
-	// not enough bitmaps supplied
+	// not enough rows supplied
 	q = sampleIndex.Difference()
 	if q.Error() == nil {
 		t.Fatalf("should have failed")
 	}
-	// not enough bitmaps supplied
+	// not enough rows supplied
 	q = sampleIndex.Intersect()
 	if q.Error() == nil {
 		t.Fatalf("should have failed")
 	}
 
-	// not enough bitmaps supplied
+	// not enough rows supplied
 	q = sampleIndex.Xor(b1)
 	if q.Error() == nil {
 		t.Fatalf("should have failed")
@@ -551,8 +551,8 @@ func TestBatchQuery(t *testing.T) {
 	if q.Index() != sampleIndex {
 		t.Fatalf("The correct index should be assigned")
 	}
-	q.Add(sampleField.Bitmap(44))
-	q.Add(sampleField.Bitmap(10101))
+	q.Add(sampleField.Row(44))
+	q.Add(sampleField.Row(10101))
 	if q.Error() != nil {
 		t.Fatalf("Error should be nil")
 	}
@@ -561,14 +561,14 @@ func TestBatchQuery(t *testing.T) {
 
 func TestBatchQueryWithError(t *testing.T) {
 	q := sampleIndex.BatchQuery()
-	q.Add(sampleField.FilterFieldTopN(12, collabField.Bitmap(7), "$invalid$", 80, 81))
+	q.Add(sampleField.FilterFieldTopN(12, collabField.Row(7), "$invalid$", 80, 81))
 	if q.Error() == nil {
 		t.Fatalf("The error must be set")
 	}
 }
 
 func TestCount(t *testing.T) {
-	q := projectIndex.Count(collabField.Bitmap(42))
+	q := projectIndex.Count(collabField.Row(42))
 	comparePQL(t, "Count(Bitmap(row=42, field='collaboration'))", q)
 }
 

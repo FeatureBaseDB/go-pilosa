@@ -142,24 +142,24 @@ func (q PQLBaseQuery) Error() error {
 	return q.err
 }
 
-// PQLBitmapQuery is the return type for bitmap queries.
-type PQLBitmapQuery struct {
+// PQLRowQuery is the return type for row queries.
+type PQLRowQuery struct {
 	index *Index
 	pql   string
 	err   error
 }
 
 // Index returns the index for this query/
-func (q *PQLBitmapQuery) Index() *Index {
+func (q *PQLRowQuery) Index() *Index {
 	return q.index
 }
 
-func (q *PQLBitmapQuery) serialize() string {
+func (q *PQLRowQuery) serialize() string {
 	return q.pql
 }
 
 // Error returns the error or nil for this query.
-func (q PQLBitmapQuery) Error() error {
+func (q PQLRowQuery) Error() error {
 	return q.err
 }
 
@@ -202,9 +202,9 @@ func (q *PQLBatchQuery) Add(query PQLQuery) {
 	q.queries = append(q.queries, query.serialize())
 }
 
-// NewPQLBitmapQuery creates a new PqlBitmapQuery.
-func NewPQLBitmapQuery(pql string, index *Index, err error) *PQLBitmapQuery {
-	return &PQLBitmapQuery{
+// NewPQLRowQuery creates a new PqlRowQuery.
+func NewPQLRowQuery(pql string, index *Index, err error) *PQLRowQuery {
+	return &PQLRowQuery{
 		index: index,
 		pql:   pql,
 		err:   err,
@@ -298,41 +298,41 @@ func (idx *Index) RawQuery(query string) *PQLBaseQuery {
 }
 
 // Union creates a Union query.
-// Union performs a logical OR on the results of each BITMAP_CALL query passed to it.
-func (idx *Index) Union(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
-	return idx.bitmapOperation("Union", bitmaps...)
+// Union performs a logical OR on the results of each ROW_CALL query passed to it.
+func (idx *Index) Union(rows ...*PQLRowQuery) *PQLRowQuery {
+	return idx.rowOperation("Union", rows...)
 }
 
 // Intersect creates an Intersect query.
-// Intersect performs a logical AND on the results of each BITMAP_CALL query passed to it.
-func (idx *Index) Intersect(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
-	if len(bitmaps) < 1 {
-		return NewPQLBitmapQuery("", idx, NewError("Intersect operation requires at least 1 bitmap"))
+// Intersect performs a logical AND on the results of each ROW_CALL query passed to it.
+func (idx *Index) Intersect(rows ...*PQLRowQuery) *PQLRowQuery {
+	if len(rows) < 1 {
+		return NewPQLRowQuery("", idx, NewError("Intersect operation requires at least 1 row"))
 	}
-	return idx.bitmapOperation("Intersect", bitmaps...)
+	return idx.rowOperation("Intersect", rows...)
 }
 
 // Difference creates an Intersect query.
-// Difference returns all of the bits from the first BITMAP_CALL argument passed to it, without the bits from each subsequent BITMAP_CALL.
-func (idx *Index) Difference(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
-	if len(bitmaps) < 1 {
-		return NewPQLBitmapQuery("", idx, NewError("Difference operation requires at least 1 bitmap"))
+// Difference returns all of the bits from the first ROW_CALL argument passed to it, without the bits from each subsequent ROW_CALL.
+func (idx *Index) Difference(rows ...*PQLRowQuery) *PQLRowQuery {
+	if len(rows) < 1 {
+		return NewPQLRowQuery("", idx, NewError("Difference operation requires at least 1 row"))
 	}
-	return idx.bitmapOperation("Difference", bitmaps...)
+	return idx.rowOperation("Difference", rows...)
 }
 
 // Xor creates an Xor query.
-func (idx *Index) Xor(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
-	if len(bitmaps) < 2 {
-		return NewPQLBitmapQuery("", idx, NewError("Xor operation requires at least 2 bitmaps"))
+func (idx *Index) Xor(rows ...*PQLRowQuery) *PQLRowQuery {
+	if len(rows) < 2 {
+		return NewPQLRowQuery("", idx, NewError("Xor operation requires at least 2 rows"))
 	}
-	return idx.bitmapOperation("Xor", bitmaps...)
+	return idx.rowOperation("Xor", rows...)
 }
 
 // Count creates a Count query.
-// Returns the number of set bits in the BITMAP_CALL passed in.
-func (idx *Index) Count(bitmap *PQLBitmapQuery) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("Count(%s)", bitmap.serialize()), idx, nil)
+// Returns the number of set bits in the ROW_CALL passed in.
+func (idx *Index) Count(row *PQLRowQuery) *PQLBaseQuery {
+	return NewPQLBaseQuery(fmt.Sprintf("Count(%s)", row.serialize()), idx, nil)
 }
 
 // SetColumnAttrs creates a SetColumnAttrs query.
@@ -347,16 +347,16 @@ func (idx *Index) SetColumnAttrs(columnID uint64, attrs map[string]interface{}) 
 		columnID, attrsString), idx, nil)
 }
 
-func (idx *Index) bitmapOperation(name string, bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
+func (idx *Index) rowOperation(name string, rows ...*PQLRowQuery) *PQLRowQuery {
 	var err error
-	args := make([]string, 0, len(bitmaps))
-	for _, bitmap := range bitmaps {
-		if err = bitmap.Error(); err != nil {
-			return NewPQLBitmapQuery("", idx, err)
+	args := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if err = row.Error(); err != nil {
+			return NewPQLRowQuery("", idx, err)
 		}
-		args = append(args, bitmap.serialize())
+		args = append(args, row.serialize())
 	}
-	return NewPQLBitmapQuery(fmt.Sprintf("%s(%s)", name, strings.Join(args, ", ")), idx, nil)
+	return NewPQLRowQuery(fmt.Sprintf("%s(%s)", name, strings.Join(args, ", ")), idx, nil)
 }
 
 // FieldInfo represents schema information for a field.
@@ -496,18 +496,18 @@ func (f *Field) copy() *Field {
 	return field
 }
 
-// Bitmap creates a bitmap query.
-// Bitmap retrieves the indices of all the set bits in a row or column based on whether the row label or column label is given in the query.
+// Row creates a Bitmap query.
+// Row retrieves the indices of all the set bits in a row or column based on whether the row label or column label is given in the query.
 // It also retrieves any attributes set on that row or column.
-func (f *Field) Bitmap(rowID uint64) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("Bitmap(row=%d, field='%s')",
+func (f *Field) Row(rowID uint64) *PQLRowQuery {
+	return NewPQLRowQuery(fmt.Sprintf("Bitmap(row=%d, field='%s')",
 		rowID, f.name), f.index, nil)
 }
 
-// BitmapK creates a Bitmap query using a string key instead of an integer
+// RowK creates a Bitmap query using a string key instead of an integer
 // rowID. This will only work against a Pilosa Enterprise server.
-func (f *Field) BitmapK(rowKey string) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("Bitmap(row='%s', field='%s')",
+func (f *Field) RowK(rowKey string) *PQLRowQuery {
+	return NewPQLRowQuery(fmt.Sprintf("Bitmap(row='%s', field='%s')",
 		rowKey, f.name), f.index, nil)
 }
 
@@ -556,51 +556,51 @@ func (f *Field) ClearBitK(rowKey string, columnKey string) *PQLBaseQuery {
 }
 
 // TopN creates a TopN query with the given item count.
-// Returns the id and count of the top n bitmaps (by count of bits) in the field.
-func (f *Field) TopN(n uint64) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("TopN(field='%s', n=%d)", f.name, n), f.index, nil)
+// Returns the id and count of the top n rows (by count of bits) in the field.
+func (f *Field) TopN(n uint64) *PQLRowQuery {
+	return NewPQLRowQuery(fmt.Sprintf("TopN(field='%s', n=%d)", f.name, n), f.index, nil)
 }
 
-// BitmapTopN creates a TopN query with the given item count and bitmap.
-// This variant supports customizing the bitmap query.
-func (f *Field) BitmapTopN(n uint64, bitmap *PQLBitmapQuery) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, field='%s', n=%d)",
-		bitmap.serialize(), f.name, n), f.index, nil)
+// RowTopN creates a TopN query with the given item count and row.
+// This variant supports customizing the row query.
+func (f *Field) RowTopN(n uint64, row *PQLRowQuery) *PQLRowQuery {
+	return NewPQLRowQuery(fmt.Sprintf("TopN(%s, field='%s', n=%d)",
+		row.serialize(), f.name, n), f.index, nil)
 }
 
-// FilterFieldTopN creates a TopN query with the given item count, bitmap, field and the filter for that field
-// The field and filters arguments work together to only return Bitmaps which have the attribute specified by field with one of the values specified in filters.
-func (f *Field) FilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, values ...interface{}) *PQLBitmapQuery {
-	return f.filterFieldTopN(n, bitmap, field, values...)
+// FilterFieldTopN creates a TopN query with the given item count, row, field and the filter for that field
+// The field and filters arguments work together to only return Rows which have the attribute specified by field with one of the values specified in filters.
+func (f *Field) FilterFieldTopN(n uint64, row *PQLRowQuery, field string, values ...interface{}) *PQLRowQuery {
+	return f.filterFieldTopN(n, row, field, values...)
 }
 
-func (f *Field) filterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, values ...interface{}) *PQLBitmapQuery {
+func (f *Field) filterFieldTopN(n uint64, row *PQLRowQuery, field string, values ...interface{}) *PQLRowQuery {
 	if err := validateLabel(field); err != nil {
-		return NewPQLBitmapQuery("", f.index, err)
+		return NewPQLRowQuery("", f.index, err)
 	}
 	b, err := json.Marshal(values)
 	if err != nil {
-		return NewPQLBitmapQuery("", f.index, err)
+		return NewPQLRowQuery("", f.index, err)
 	}
-	if bitmap == nil {
-		return NewPQLBitmapQuery(fmt.Sprintf("TopN(field='%s', n=%d, field='%s', filters=%s)",
+	if row == nil {
+		return NewPQLRowQuery(fmt.Sprintf("TopN(field='%s', n=%d, field='%s', filters=%s)",
 			f.name, n, field, string(b)), f.index, nil)
 	}
-	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, field='%s', n=%d, field='%s', filters=%s)",
-		bitmap.serialize(), f.name, n, field, string(b)), f.index, nil)
+	return NewPQLRowQuery(fmt.Sprintf("TopN(%s, field='%s', n=%d, field='%s', filters=%s)",
+		row.serialize(), f.name, n, field, string(b)), f.index, nil)
 }
 
 // Range creates a Range query.
-// Similar to Bitmap, but only returns bits which were set with timestamps between the given start and end timestamps.
-func (f *Field) Range(rowID uint64, start time.Time, end time.Time) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("Range(row=%d, field='%s', start='%s', end='%s')",
+// Similar to Row, but only returns bits which were set with timestamps between the given start and end timestamps.
+func (f *Field) Range(rowID uint64, start time.Time, end time.Time) *PQLRowQuery {
+	return NewPQLRowQuery(fmt.Sprintf("Range(row=%d, field='%s', start='%s', end='%s')",
 		rowID, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
 }
 
 // RangeK creates a Range query using a string row key. This will only work
 // against a Pilosa Enterprise server.
-func (f *Field) RangeK(rowKey string, start time.Time, end time.Time) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("Range(row='%s', field='%s', start='%s', end='%s')",
+func (f *Field) RangeK(rowKey string, start time.Time, end time.Time) *PQLRowQuery {
+	return NewPQLRowQuery(fmt.Sprintf("Range(row='%s', field='%s', start='%s', end='%s')",
 		rowKey, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
 }
 
@@ -684,60 +684,60 @@ const (
 )
 
 // LT creates a less than query.
-func (field *Field) LT(n int) *PQLBitmapQuery {
+func (field *Field) LT(n int) *PQLRowQuery {
 	return field.binaryOperation("<", n)
 }
 
 // LTE creates a less than or equal query.
-func (field *Field) LTE(n int) *PQLBitmapQuery {
+func (field *Field) LTE(n int) *PQLRowQuery {
 	return field.binaryOperation("<=", n)
 }
 
 // GT creates a greater than query.
-func (field *Field) GT(n int) *PQLBitmapQuery {
+func (field *Field) GT(n int) *PQLRowQuery {
 	return field.binaryOperation(">", n)
 }
 
 // GTE creates a greater than or equal query.
-func (field *Field) GTE(n int) *PQLBitmapQuery {
+func (field *Field) GTE(n int) *PQLRowQuery {
 	return field.binaryOperation(">=", n)
 }
 
 // Equals creates an equals query.
-func (field *Field) Equals(n int) *PQLBitmapQuery {
+func (field *Field) Equals(n int) *PQLRowQuery {
 	return field.binaryOperation("==", n)
 }
 
 // NotEquals creates a not equals query.
-func (field *Field) NotEquals(n int) *PQLBitmapQuery {
+func (field *Field) NotEquals(n int) *PQLRowQuery {
 	return field.binaryOperation("!=", n)
 }
 
 // NotNull creates a not equal to null query.
-func (field *Field) NotNull() *PQLBitmapQuery {
+func (field *Field) NotNull() *PQLRowQuery {
 	qry := fmt.Sprintf("Range(%s != null)", field.name)
-	return NewPQLBitmapQuery(qry, field.index, nil)
+	return NewPQLRowQuery(qry, field.index, nil)
 }
 
 // Between creates a between query.
-func (field *Field) Between(a int, b int) *PQLBitmapQuery {
+func (field *Field) Between(a int, b int) *PQLRowQuery {
 	qry := fmt.Sprintf("Range(%s >< [%d,%d])", field.name, a, b)
-	return NewPQLBitmapQuery(qry, field.index, nil)
+	return NewPQLRowQuery(qry, field.index, nil)
 }
 
 // Sum creates a sum query.
-func (field *Field) Sum(bitmap *PQLBitmapQuery) *PQLBaseQuery {
-	return field.valQuery("Sum", bitmap)
+func (field *Field) Sum(row *PQLRowQuery) *PQLBaseQuery {
+	return field.valQuery("Sum", row)
 }
 
 // Min creates a min query.
-func (field *Field) Min(bitmap *PQLBitmapQuery) *PQLBaseQuery {
-	return field.valQuery("Min", bitmap)
+func (field *Field) Min(row *PQLRowQuery) *PQLBaseQuery {
+	return field.valQuery("Min", row)
 }
 
 // Max creates a min query.
-func (field *Field) Max(bitmap *PQLBitmapQuery) *PQLBaseQuery {
-	return field.valQuery("Max", bitmap)
+func (field *Field) Max(row *PQLRowQuery) *PQLBaseQuery {
+	return field.valQuery("Max", row)
 }
 
 // SetIntValue creates a SetValue query.
@@ -753,17 +753,17 @@ func (field *Field) SetIntValueK(columnKey string, value int) *PQLBaseQuery {
 	return NewPQLBaseQuery(qry, field.index, nil)
 }
 
-func (field *Field) binaryOperation(op string, n int) *PQLBitmapQuery {
+func (field *Field) binaryOperation(op string, n int) *PQLRowQuery {
 	qry := fmt.Sprintf("Range(%s %s %d)", field.name, op, n)
-	return NewPQLBitmapQuery(qry, field.index, nil)
+	return NewPQLRowQuery(qry, field.index, nil)
 }
 
-func (field *Field) valQuery(op string, bitmap *PQLBitmapQuery) *PQLBaseQuery {
-	bitmapStr := ""
-	if bitmap != nil {
-		bitmapStr = fmt.Sprintf("%s, ", bitmap.serialize())
+func (field *Field) valQuery(op string, row *PQLRowQuery) *PQLBaseQuery {
+	rowStr := ""
+	if row != nil {
+		rowStr = fmt.Sprintf("%s, ", row.serialize())
 	}
-	qry := fmt.Sprintf("%s(%sfield='%s')", op, bitmapStr, field.name)
+	qry := fmt.Sprintf("%s(%sfield='%s')", op, rowStr, field.name)
 	return NewPQLBaseQuery(qry, field.index, nil)
 }
 

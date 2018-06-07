@@ -38,7 +38,7 @@ import (
 
 const (
 	maxIndexName = 64
-	maxFrameName = 64
+	maxFieldName = 64
 	maxLabel     = 64
 	maxKey       = 64
 )
@@ -55,7 +55,7 @@ func ValidIndexName(name string) bool {
 
 // ValidFieldName returns true if the given field name is valid, otherwise false.
 func ValidFieldName(name string) bool {
-	return len(name) <= maxFrameName && fieldNameRegex.Match([]byte(name))
+	return len(name) <= maxFieldName && fieldNameRegex.Match([]byte(name))
 }
 
 // ValidLabel returns true if the given label is valid, otherwise false.

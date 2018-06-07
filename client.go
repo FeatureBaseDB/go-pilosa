@@ -39,7 +39,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -724,26 +723,12 @@ func OptClientSocketTimeout(timeout time.Duration) ClientOption {
 	}
 }
 
-// SocketTimeout is the maximum idle socket time in nanoseconds
-// *DEPRECATED* Use OptClientSocketTimeout instead.
-func SocketTimeout(timeout time.Duration) ClientOption {
-	log.Println("The SocketTimeout client option is deprecated and will be removed.")
-	return OptClientSocketTimeout(timeout)
-}
-
 // OptClientConnectTimeout is the maximum time to connect in nanoseconds.
 func OptClientConnectTimeout(timeout time.Duration) ClientOption {
 	return func(options *ClientOptions) error {
 		options.ConnectTimeout = timeout
 		return nil
 	}
-}
-
-// ConnectTimeout is the maximum time to connect in nanoseconds.
-// *DEPRECATED* Use OptClientConnectTimeout instead.
-func ConnectTimeout(timeout time.Duration) ClientOption {
-	log.Println("The ConnectTimeout client option is deprecated and will be removed.")
-	return OptClientConnectTimeout(timeout)
 }
 
 // OptPoolSizePerRoute is the maximum number of active connections in the pool to a host.
@@ -754,13 +739,6 @@ func OptClientPoolSizePerRoute(size int) ClientOption {
 	}
 }
 
-// PoolSizePerRoute is the maximum number of active connections in the pool to a host.
-// *DEPRECATED* Use OptClientPoolSizePerRoute instead.
-func PoolSizePerRoute(size int) ClientOption {
-	log.Println("The PoolSizePerRoute client option is deprecated and will be removed.")
-	return OptClientPoolSizePerRoute(size)
-}
-
 // OptClientTotalPoolSize is the maximum number of connections in the pool.
 func OptClientTotalPoolSize(size int) ClientOption {
 	return func(options *ClientOptions) error {
@@ -769,26 +747,12 @@ func OptClientTotalPoolSize(size int) ClientOption {
 	}
 }
 
-// TotalPoolSize is the maximum number of connections in the pool.
-// *DEPRECATED* Use OptClientTotalPoolSize instead.
-func TotalPoolSize(size int) ClientOption {
-	log.Println("The TotalPoolSize client option is deprecated and will be removed.")
-	return OptClientTotalPoolSize(size)
-}
-
 // OptClientTLSConfig contains the TLS configuration.
 func OptClientTLSConfig(config *tls.Config) ClientOption {
 	return func(options *ClientOptions) error {
 		options.TLSConfig = config
 		return nil
 	}
-}
-
-// TLSConfig contains the TLS configuration.
-// *DEPRECATED* Use OptClientTLSConfig instead.
-func TLSConfig(config *tls.Config) ClientOption {
-	log.Println("The TLSConfig client option is deprecated and will be removed.")
-	return OptClientTLSConfig(config)
 }
 
 type versionInfo struct {
@@ -866,26 +830,12 @@ func OptQueryColumnAttrs(enable bool) QueryOption {
 	}
 }
 
-// ColumnAttrs enables returning column attributes in the result.
-// *DEPRECATED* Use OptQueryColumnAttrs instead.
-func ColumnAttrs(enable bool) QueryOption {
-	log.Println("The ColumnAttrs query option is deprecated and will be removed.")
-	return OptQueryColumnAttrs(enable)
-}
-
 // OptQuerySlices restricts the set of slices on which a query operates.
 func OptQuerySlices(slices ...uint64) QueryOption {
 	return func(options *QueryOptions) error {
 		options.Slices = append(options.Slices, slices...)
 		return nil
 	}
-}
-
-// Slices restricts the set of slices on which a query operates.
-// *DEPRECATED* Use OptQuerySlices instead.
-func Slices(slices ...uint64) QueryOption {
-	log.Println("The Slices query option is deprecated and will be removed.")
-	return OptQuerySlices(slices...)
 }
 
 // OptQueryExcludeAttrs enables discarding attributes from a result,
@@ -896,42 +846,10 @@ func OptQueryExcludeAttrs(enable bool) QueryOption {
 	}
 }
 
-// ExcludeAttrs enables discarding attributes from a result,
-// *DEPRECATED* Use OptQueryExcludeAttrs instead.
-func ExcludeAttrs(enable bool) QueryOption {
-	log.Println("The ExcludeAttrs query option is deprecated and will be removed.")
-	return OptQueryExcludeAttrs(enable)
-}
-
 // OptQueryExcludeBits enables discarding bits from a result,
 func OptQueryExcludeBits(enable bool) QueryOption {
 	return func(options *QueryOptions) error {
 		options.ExcludeBits = enable
-		return nil
-	}
-}
-
-// ExcludeBits enables discarding bits from a result,
-// *DEPRECATED* Use OptQueryExcludeBits instead.
-func ExcludeBits(enable bool) QueryOption {
-	log.Println("The ExcludeBits query option is deprecated and will be removed.")
-	return OptQueryExcludeBits(enable)
-}
-
-// SkipVersionCheck disables version checking
-// *DEPRECATED*
-func SkipVersionCheck() ClientOption {
-	return func(options *ClientOptions) error {
-		log.Println("The SkipVersionCheck client option is deprecated and will be removed - it has no effect and should be removed from your code")
-		return nil
-	}
-}
-
-// LegacyMode enables legacy mode
-// *DEPRECATED*
-func LegacyMode(enable bool) ClientOption {
-	return func(options *ClientOptions) error {
-		log.Println("The LegacyMode client option is deprecated and will be removed - it has no effect and should be removed from your code")
 		return nil
 	}
 }

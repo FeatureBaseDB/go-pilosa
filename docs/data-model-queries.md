@@ -121,8 +121,6 @@ Frame:
 * `FilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, values ...interface{}) *PQLBitmapQuery`
 * `Range(rowID uint64, start time.Time, end time.Time) *PQLBitmapQuery`
 * `SetRowAttrs(rowID uint64, attrs map[string]interface{}) *PQLBaseQuery`
-* (**deprecated**) `Sum(bitmap *PQLBitmapQuery, field string) *PQLBaseQuery`
-* (**deprecated**) `SetIntFieldValue(columnID uint64, field string, value int) *PQLBaseQuery`
 
 Field:
 

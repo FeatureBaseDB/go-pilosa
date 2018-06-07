@@ -131,7 +131,7 @@ func TestQueryWithSlices(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	response, err := client.Query(testField.Row(1), Slices(0, 3))
+	response, err := client.Query(testField.Row(1), OptQuerySlices(0, 3))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1464,7 +1464,7 @@ func TestClientRace(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	client, err := NewClient(uri, TLSConfig(&tls.Config{InsecureSkipVerify: true}))
+	client, err := NewClient(uri, OptClientTLSConfig(&tls.Config{InsecureSkipVerify: true}))
 	if err != nil {
 		panic(err)
 	}

@@ -573,7 +573,7 @@ func TestInvalidSchemaInvalidField(t *testing.T) {
 		{
 			"indexes": [{
 				"name": "myindex",
-				"frames": [{
+				"fields": [{
 					"name": "**INVALID**"
 				}]
 			}]
@@ -851,6 +851,17 @@ func TestValueCSVImport(t *testing.T) {
 	target := int64(8)
 	if target != response.Result().Value() {
 		t.Fatalf("%d != %d", target, response.Result().Value())
+	}
+}
+
+func TestValueCSVImportFailure(t *testing.T) {
+	server := getMockServer(404, []byte("sorry, not found"), -1)
+	defer server.Close()
+	client, _ := NewClient(server.URL)
+	uri := URIFromAddress(server.URL)
+	err := client.importValueNode(uri, nil)
+	if err == nil {
+		t.Fatal("should have failed")
 	}
 }
 

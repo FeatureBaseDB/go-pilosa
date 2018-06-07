@@ -186,7 +186,7 @@ func (c *Client) CreateIndex(index *Index) error {
 // CreateField creates a field on the server using the given Field struct.
 func (c *Client) CreateField(field *Field) error {
 	data := []byte(field.options.String())
-	path := fmt.Sprintf("/index/%s/frame/%s", field.index.name, field.name)
+	path := fmt.Sprintf("/index/%s/field/%s", field.index.name, field.name)
 	response, _, err := c.httpRequest("POST", path, data, nil)
 	if err != nil {
 		if response != nil && response.StatusCode == 409 {
@@ -225,7 +225,7 @@ func (c *Client) DeleteIndex(index *Index) error {
 
 // DeleteField deletes a field on the server.
 func (c *Client) DeleteField(field *Field) error {
-	path := fmt.Sprintf("/index/%s/frame/%s", field.index.name, field.name)
+	path := fmt.Sprintf("/index/%s/field/%s", field.index.name, field.name)
 	_, _, err := c.httpRequest("DELETE", path, nil, nil)
 	return err
 }
@@ -417,10 +417,14 @@ func (c *Client) importNode(uri *URI, request *pbuf.ImportRequest) error {
 func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest) error {
 	data, _ := proto.Marshal(request)
 	// request.Marshal never returns an error
-	_, err := c.doRequest(uri, "POST", "/import-value", defaultProtobufHeaders(), bytes.NewReader(data))
+	resp, err := c.doRequest(uri, "POST", "/import-value", defaultProtobufHeaders(), bytes.NewReader(data))
 	if err != nil {
 		return errors.Wrap(err, "doing /import-value request")
 	}
+	if err = anyError(resp, err); err != nil {
+		return errors.Wrap(err, "doing import request")
+	}
+	defer resp.Body.Close()
 
 	return nil
 }
@@ -1047,7 +1051,7 @@ type SchemaInfo struct {
 type StatusIndex struct {
 	Name    string        `json:"name"`
 	Options StatusOptions `json:"options"`
-	Fields  []StatusField `json:"frames"`
+	Fields  []StatusField `json:"fields"`
 	Slices  []uint64      `json:"slices"`
 }
 
@@ -1097,7 +1101,7 @@ func (r *exportReader) Read(p []byte) (n int, err error) {
 		headers := map[string]string{
 			"Accept": "text/csv",
 		}
-		path := fmt.Sprintf("/export?index=%s&frame=%s&slice=%d",
+		path := fmt.Sprintf("/export?index=%s&field=%s&slice=%d",
 			r.field.index.Name(), r.field.Name(), r.currentSlice)
 		resp, err := r.client.doRequest(uri, "GET", path, headers, nil)
 		if err = anyError(resp, err); err != nil {

@@ -500,71 +500,71 @@ func (f *Field) copy() *Field {
 // Bitmap retrieves the indices of all the set bits in a row or column based on whether the row label or column label is given in the query.
 // It also retrieves any attributes set on that row or column.
 func (f *Field) Bitmap(rowID uint64) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("Bitmap(row=%d, frame='%s')",
+	return NewPQLBitmapQuery(fmt.Sprintf("Bitmap(row=%d, field='%s')",
 		rowID, f.name), f.index, nil)
 }
 
 // BitmapK creates a Bitmap query using a string key instead of an integer
 // rowID. This will only work against a Pilosa Enterprise server.
 func (f *Field) BitmapK(rowKey string) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("Bitmap(row='%s', frame='%s')",
+	return NewPQLBitmapQuery(fmt.Sprintf("Bitmap(row='%s', field='%s')",
 		rowKey, f.name), f.index, nil)
 }
 
 // SetBit creates a SetBit query.
-// SetBit, assigns a value of 1 to a bit in the binary matrix, thus associating the given row in the given frame with the given column.
+// SetBit, assigns a value of 1 to a bit in the binary matrix, thus associating the given row in the given field with the given column.
 func (f *Field) SetBit(rowID uint64, columnID uint64) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("SetBit(row=%d, frame='%s', col=%d)",
+	return NewPQLBaseQuery(fmt.Sprintf("SetBit(row=%d, field='%s', col=%d)",
 		rowID, f.name, columnID), f.index, nil)
 }
 
 // SetBitK creates a SetBit query using string row and column keys. This will
 // only work against a Pilosa Enterprise server.
 func (f *Field) SetBitK(rowKey string, columnKey string) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("SetBit(row='%s', frame='%s', col='%s')",
+	return NewPQLBaseQuery(fmt.Sprintf("SetBit(row='%s', field='%s', col='%s')",
 		rowKey, f.name, columnKey), f.index, nil)
 }
 
 // SetBitTimestamp creates a SetBit query with timestamp.
 // SetBit, assigns a value of 1 to a bit in the binary matrix,
-// thus associating the given row in the given frame with the given column.
+// thus associating the given row in the given field with the given column.
 func (f *Field) SetBitTimestamp(rowID uint64, columnID uint64, timestamp time.Time) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("SetBit(row=%d, frame='%s', col=%d, timestamp='%s')",
+	return NewPQLBaseQuery(fmt.Sprintf("SetBit(row=%d, field='%s', col=%d, timestamp='%s')",
 		rowID, f.name, columnID, timestamp.Format(timeFormat)),
 		f.index, nil)
 }
 
 // SetBitTimestampK creates a SetBitK query with timestamp.
 func (f *Field) SetBitTimestampK(rowKey string, columnKey string, timestamp time.Time) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("SetBit(row='%s', frame='%s', col='%s', timestamp='%s')",
+	return NewPQLBaseQuery(fmt.Sprintf("SetBit(row='%s', field='%s', col='%s', timestamp='%s')",
 		rowKey, f.name, columnKey, timestamp.Format(timeFormat)),
 		f.index, nil)
 }
 
 // ClearBit creates a ClearBit query.
-// ClearBit, assigns a value of 0 to a bit in the binary matrix, thus disassociating the given row in the given frame from the given column.
+// ClearBit, assigns a value of 0 to a bit in the binary matrix, thus disassociating the given row in the given field from the given column.
 func (f *Field) ClearBit(rowID uint64, columnID uint64) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("ClearBit(row=%d, frame='%s', col=%d)",
+	return NewPQLBaseQuery(fmt.Sprintf("ClearBit(row=%d, field='%s', col=%d)",
 		rowID, f.name, columnID), f.index, nil)
 }
 
 // ClearBitK creates a ClearBit query using string row and column keys. This
 // will only work against a Pilosa Enterprise server.
 func (f *Field) ClearBitK(rowKey string, columnKey string) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("ClearBit(row='%s', frame='%s', col='%s')",
+	return NewPQLBaseQuery(fmt.Sprintf("ClearBit(row='%s', field='%s', col='%s')",
 		rowKey, f.name, columnKey), f.index, nil)
 }
 
 // TopN creates a TopN query with the given item count.
-// Returns the id and count of the top n bitmaps (by count of bits) in the frame.
+// Returns the id and count of the top n bitmaps (by count of bits) in the field.
 func (f *Field) TopN(n uint64) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("TopN(frame='%s', n=%d)", f.name, n), f.index, nil)
+	return NewPQLBitmapQuery(fmt.Sprintf("TopN(field='%s', n=%d)", f.name, n), f.index, nil)
 }
 
 // BitmapTopN creates a TopN query with the given item count and bitmap.
 // This variant supports customizing the bitmap query.
 func (f *Field) BitmapTopN(n uint64, bitmap *PQLBitmapQuery) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d)",
+	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, field='%s', n=%d)",
 		bitmap.serialize(), f.name, n), f.index, nil)
 }
 
@@ -583,36 +583,36 @@ func (f *Field) filterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, 
 		return NewPQLBitmapQuery("", f.index, err)
 	}
 	if bitmap == nil {
-		return NewPQLBitmapQuery(fmt.Sprintf("TopN(frame='%s', n=%d, field='%s', filters=%s)",
+		return NewPQLBitmapQuery(fmt.Sprintf("TopN(field='%s', n=%d, field='%s', filters=%s)",
 			f.name, n, field, string(b)), f.index, nil)
 	}
-	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d, field='%s', filters=%s)",
+	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, field='%s', n=%d, field='%s', filters=%s)",
 		bitmap.serialize(), f.name, n, field, string(b)), f.index, nil)
 }
 
 // Range creates a Range query.
 // Similar to Bitmap, but only returns bits which were set with timestamps between the given start and end timestamps.
 func (f *Field) Range(rowID uint64, start time.Time, end time.Time) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("Range(row=%d, frame='%s', start='%s', end='%s')",
+	return NewPQLBitmapQuery(fmt.Sprintf("Range(row=%d, field='%s', start='%s', end='%s')",
 		rowID, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
 }
 
 // RangeK creates a Range query using a string row key. This will only work
 // against a Pilosa Enterprise server.
 func (f *Field) RangeK(rowKey string, start time.Time, end time.Time) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("Range(row='%s', frame='%s', start='%s', end='%s')",
+	return NewPQLBitmapQuery(fmt.Sprintf("Range(row='%s', field='%s', start='%s', end='%s')",
 		rowKey, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
 }
 
 // SetRowAttrs creates a SetRowAttrs query.
-// SetRowAttrs associates arbitrary key/value pairs with a row in a frame.
+// SetRowAttrs associates arbitrary key/value pairs with a row in a field.
 // Following types are accepted: integer, float, string and boolean types.
 func (f *Field) SetRowAttrs(rowID uint64, attrs map[string]interface{}) *PQLBaseQuery {
 	attrsString, err := createAttributesString(attrs)
 	if err != nil {
 		return NewPQLBaseQuery("", f.index, err)
 	}
-	return NewPQLBaseQuery(fmt.Sprintf("SetRowAttrs(row=%d, frame='%s', %s)",
+	return NewPQLBaseQuery(fmt.Sprintf("SetRowAttrs(row=%d, field='%s', %s)",
 		rowID, f.name, attrsString), f.index, nil)
 }
 
@@ -623,7 +623,7 @@ func (f *Field) SetRowAttrsK(rowKey string, attrs map[string]interface{}) *PQLBa
 	if err != nil {
 		return NewPQLBaseQuery("", f.index, err)
 	}
-	return NewPQLBaseQuery(fmt.Sprintf("SetRowAttrs(row='%s', frame='%s', %s)",
+	return NewPQLBaseQuery(fmt.Sprintf("SetRowAttrs(row='%s', field='%s', %s)",
 		rowKey, f.name, attrsString), f.index, nil)
 }
 

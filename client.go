@@ -332,7 +332,7 @@ func (c *Client) ImportIntField(field *Field, iterator RecordIterator, options .
 	return c.ImportField(field, iterator, newOptions...)
 }
 
-func (c *Client) importBits(indexName string, fieldName string, slice uint64, bits []Record) error {
+func (c *Client) importBits(indexName string, fieldName string, slice uint64, records []Record) error {
 	nodes, err := c.fetchFragmentNodes(indexName, slice)
 	if err != nil {
 		return errors.Wrap(err, "fetching fragment nodes")
@@ -346,7 +346,7 @@ func (c *Client) importBits(indexName string, fieldName string, slice uint64, bi
 			port:   node.Port,
 		}
 		eg.Go(func() error {
-			return c.importNode(uri, bitsToImportRequest(indexName, fieldName, slice, bits))
+			return c.importNode(uri, bitsToImportRequest(indexName, fieldName, slice, records))
 		})
 	}
 	err = eg.Wait()

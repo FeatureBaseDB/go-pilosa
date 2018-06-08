@@ -171,9 +171,9 @@ func (q PQLRowQuery) Error() error {
 // 	index, err := NewIndex("repository")
 // 	stargazer, err := index.Field("stargazer")
 // 	query := repo.BatchQuery(
-// 		stargazer.Bitmap(5),
-//		stargazer.Bitmap(15),
-//		repo.Union(stargazer.Bitmap(20), stargazer.Bitmap(25)))
+// 		stargazer.Row(5),
+//		stargazer.Row(15),
+//		repo.Union(stargazer.Row(20), stargazer.Row(25)))
 type PQLBatchQuery struct {
 	index   *Index
 	queries []string
@@ -496,7 +496,7 @@ func (f *Field) copy() *Field {
 	return field
 }
 
-// Row creates a Bitmap query.
+// Row creates a Row query.
 // Row retrieves the indices of all the set columns in a row.
 // It also retrieves any attributes set on that row or column.
 func (f *Field) Row(rowID uint64) *PQLRowQuery {
@@ -504,7 +504,7 @@ func (f *Field) Row(rowID uint64) *PQLRowQuery {
 		rowID, f.name), f.index, nil)
 }
 
-// RowK creates a Bitmap query using a string key instead of an integer
+// RowK creates a Row query using a string key instead of an integer
 // rowID. This will only work against a Pilosa Enterprise server.
 func (f *Field) RowK(rowKey string) *PQLRowQuery {
 	return NewPQLRowQuery(fmt.Sprintf("Bitmap(row='%s', field='%s')",

@@ -141,12 +141,12 @@ func ClientOptionErr(int) ClientOption {
 
 func TestQueryOptions(t *testing.T) {
 	targets := []*QueryOptions{
-		{Columns: true},
-		{Columns: false},
-		{ExcludeAttrs: true},
-		{ExcludeAttrs: false},
-		{ExcludeBits: true},
-		{ExcludeBits: false},
+		{ColumnAttrs: true},
+		{ColumnAttrs: false},
+		{ExcludeRowAttrs: true},
+		{ExcludeRowAttrs: false},
+		{ExcludeColumns: true},
+		{ExcludeColumns: false},
 	}
 
 	optionsList := [][]interface{}{
@@ -154,8 +154,8 @@ func TestQueryOptions(t *testing.T) {
 		{OptQueryColumnAttrs(false)},
 		{OptQueryExcludeAttrs(true)},
 		{OptQueryExcludeAttrs(false)},
-		{OptQueryExcludeBits(true)},
-		{OptQueryExcludeBits(false)},
+		{OptQueryExcludeColumns(true)},
+		{OptQueryExcludeColumns(false)},
 	}
 
 	for i := 0; i < len(targets); i++ {
@@ -171,15 +171,15 @@ func TestQueryOptions(t *testing.T) {
 	}
 
 	target := &QueryOptions{
-		Columns:      true,
-		ExcludeAttrs: true,
-		ExcludeBits:  true,
+		ColumnAttrs:     true,
+		ExcludeRowAttrs: true,
+		ExcludeColumns:  true,
 	}
 	options := &QueryOptions{}
 	options.addOptions(&QueryOptions{
-		Columns:      true,
-		ExcludeAttrs: true,
-		ExcludeBits:  true,
+		ColumnAttrs:     true,
+		ExcludeRowAttrs: true,
+		ExcludeColumns:  true,
 	})
 	if !reflect.DeepEqual(target, options) {
 		t.Fatalf("%v != %v", target, options)

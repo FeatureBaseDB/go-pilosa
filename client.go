@@ -428,7 +428,7 @@ func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest) err
 	return nil
 }
 
-// ExportField exports bits for a field.
+// ExportField exports columns for a field.
 func (c *Client) ExportField(field *Field) (RecordIterator, error) {
 	var slicesMax map[string]uint64
 	var err error
@@ -645,9 +645,9 @@ func makeRequestData(query string, options *QueryOptions) ([]byte, error) {
 	request := &pbuf.QueryRequest{
 		Query:           query,
 		Slices:          options.Slices,
-		ColumnAttrs:     options.Columns,
-		ExcludeRowAttrs: options.ExcludeAttrs,
-		ExcludeColumns:  options.ExcludeBits,
+		ColumnAttrs:     options.ColumnAttrs,
+		ExcludeRowAttrs: options.ExcludeRowAttrs,
+		ExcludeColumns:  options.ExcludeColumns,
 	}
 	r, err := proto.Marshal(request)
 	if err != nil {
@@ -656,11 +656,11 @@ func makeRequestData(query string, options *QueryOptions) ([]byte, error) {
 	return r, nil
 }
 
-func bitsToImportRequest(indexName string, fieldName string, slice uint64, bits []Record) *pbuf.ImportRequest {
-	rowIDs := make([]uint64, 0, len(bits))
-	columnIDs := make([]uint64, 0, len(bits))
-	timestamps := make([]int64, 0, len(bits))
-	for _, record := range bits {
+func bitsToImportRequest(indexName string, fieldName string, slice uint64, records []Record) *pbuf.ImportRequest {
+	rowIDs := make([]uint64, 0, len(records))
+	columnIDs := make([]uint64, 0, len(records))
+	timestamps := make([]int64, 0, len(records))
+	for _, record := range records {
 		bit := record.(Bit)
 		rowIDs = append(rowIDs, bit.RowID)
 		columnIDs = append(columnIDs, bit.ColumnID)
@@ -786,12 +786,12 @@ func (co *ClientOptions) withDefaults() (updated *ClientOptions) {
 type QueryOptions struct {
 	// Slices restricts query to a subset of slices. Queries all slices if nil.
 	Slices []uint64
-	// Columns enables returning columns in the query response.
-	Columns bool
-	// ExcludeAttrs inhibits returning attributes
-	ExcludeAttrs bool
-	// ExcludeBits inhibits returning bits
-	ExcludeBits bool
+	// ColumnAttrs enables returning columns in the query response.
+	ColumnAttrs bool
+	// ExcludeRowAttrs inhibits returning attributes
+	ExcludeRowAttrs bool
+	// ExcludeColumns inhibits returning columns
+	ExcludeColumns bool
 }
 
 func (qo *QueryOptions) addOptions(options ...interface{}) error {
@@ -825,7 +825,7 @@ type QueryOption func(options *QueryOptions) error
 // OptQueryColumnAttrs enables returning column attributes in the result.
 func OptQueryColumnAttrs(enable bool) QueryOption {
 	return func(options *QueryOptions) error {
-		options.Columns = enable
+		options.ColumnAttrs = enable
 		return nil
 	}
 }
@@ -841,15 +841,15 @@ func OptQuerySlices(slices ...uint64) QueryOption {
 // OptQueryExcludeAttrs enables discarding attributes from a result,
 func OptQueryExcludeAttrs(enable bool) QueryOption {
 	return func(options *QueryOptions) error {
-		options.ExcludeAttrs = enable
+		options.ExcludeRowAttrs = enable
 		return nil
 	}
 }
 
-// OptQueryExcludeBits enables discarding bits from a result,
-func OptQueryExcludeBits(enable bool) QueryOption {
+// OptQueryExcludeColumns enables discarding columns from a result,
+func OptQueryExcludeColumns(enable bool) QueryOption {
 	return func(options *QueryOptions) error {
-		options.ExcludeBits = enable
+		options.ExcludeColumns = enable
 		return nil
 	}
 }

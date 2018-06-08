@@ -313,7 +313,7 @@ func (idx *Index) Intersect(rows ...*PQLRowQuery) *PQLRowQuery {
 }
 
 // Difference creates an Intersect query.
-// Difference returns all of the bits from the first ROW_CALL argument passed to it, without the bits from each subsequent ROW_CALL.
+// Difference returns all of the columns from the first ROW_CALL argument passed to it, without the columns from each subsequent ROW_CALL.
 func (idx *Index) Difference(rows ...*PQLRowQuery) *PQLRowQuery {
 	if len(rows) < 1 {
 		return NewPQLRowQuery("", idx, NewError("Difference operation requires at least 1 row"))
@@ -330,7 +330,7 @@ func (idx *Index) Xor(rows ...*PQLRowQuery) *PQLRowQuery {
 }
 
 // Count creates a Count query.
-// Returns the number of set bits in the ROW_CALL passed in.
+// Returns the number of set columns in the ROW_CALL passed in.
 func (idx *Index) Count(row *PQLRowQuery) *PQLBaseQuery {
 	return NewPQLBaseQuery(fmt.Sprintf("Count(%s)", row.serialize()), idx, nil)
 }
@@ -497,7 +497,7 @@ func (f *Field) copy() *Field {
 }
 
 // Row creates a Bitmap query.
-// Row retrieves the indices of all the set bits in a row or column based on whether the row label or column label is given in the query.
+// Row retrieves the indices of all the set columns in a row.
 // It also retrieves any attributes set on that row or column.
 func (f *Field) Row(rowID uint64) *PQLRowQuery {
 	return NewPQLRowQuery(fmt.Sprintf("Bitmap(row=%d, field='%s')",
@@ -556,7 +556,7 @@ func (f *Field) ClearBitK(rowKey string, columnKey string) *PQLBaseQuery {
 }
 
 // TopN creates a TopN query with the given item count.
-// Returns the id and count of the top n rows (by count of bits) in the field.
+// Returns the id and count of the top n rows (by count of columns) in the field.
 func (f *Field) TopN(n uint64) *PQLRowQuery {
 	return NewPQLRowQuery(fmt.Sprintf("TopN(field='%s', n=%d)", f.name, n), f.index, nil)
 }
@@ -591,7 +591,7 @@ func (f *Field) filterFieldTopN(n uint64, row *PQLRowQuery, field string, values
 }
 
 // Range creates a Range query.
-// Similar to Row, but only returns bits which were set with timestamps between the given start and end timestamps.
+// Similar to Row, but only returns columns which were set with timestamps between the given start and end timestamps.
 func (f *Field) Range(rowID uint64, start time.Time, end time.Time) *PQLRowQuery {
 	return NewPQLRowQuery(fmt.Sprintf("Range(row=%d, field='%s', start='%s', end='%s')",
 		rowID, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)

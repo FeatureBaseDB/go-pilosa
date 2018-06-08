@@ -180,7 +180,7 @@ func (TopNResult) Changed() bool                   { return false }
 // RowResult represents a result from Row, Union, Intersect, Difference and Range PQL calls.
 type RowResult struct {
 	Attributes map[string]interface{} `json:"attrs"`
-	Bits       []uint64               `json:"bits"`
+	Columns    []uint64               `json:"columns"`
 	Keys       []string               `json:"keys"`
 }
 
@@ -191,7 +191,7 @@ func newRowResultFromInternal(row *pbuf.Row) (*RowResult, error) {
 	}
 	result := &RowResult{
 		Attributes: attrs,
-		Bits:       row.Columns,
+		Columns:    row.Columns,
 		Keys:       row.Keys,
 	}
 	return result, nil
@@ -205,9 +205,9 @@ func (RowResult) Value() int64                  { return 0 }
 func (RowResult) Changed() bool                 { return false }
 
 func (b RowResult) MarshalJSON() ([]byte, error) {
-	bits := b.Bits
-	if bits == nil {
-		bits = []uint64{}
+	columns := b.Columns
+	if columns == nil {
+		columns = []uint64{}
 	}
 	keys := b.Keys
 	if keys == nil {
@@ -215,11 +215,11 @@ func (b RowResult) MarshalJSON() ([]byte, error) {
 	}
 	return json.Marshal(struct {
 		Attributes map[string]interface{} `json:"attrs"`
-		Bits       []uint64               `json:"bits"`
+		Columns    []uint64               `json:"columns"`
 		Keys       []string               `json:"keys"`
 	}{
 		Attributes: b.Attributes,
-		Bits:       bits,
+		Columns:    columns,
 		Keys:       keys,
 	})
 }

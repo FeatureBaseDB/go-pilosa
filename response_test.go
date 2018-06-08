@@ -49,7 +49,7 @@ func TestNewRowResultFromInternal(t *testing.T) {
 		"registered": true,
 		"height":     1.83,
 	}
-	targetBits := []uint64{5, 10}
+	targetColumns := []uint64{5, 10}
 	attrs := []*pbuf.Attr{
 		{Key: "name", StringValue: "some string", Type: 1},
 		{Key: "age", IntValue: 95, Type: 2},
@@ -68,7 +68,7 @@ func TestNewRowResultFromInternal(t *testing.T) {
 	if !reflect.DeepEqual(targetAttrs, result.Attributes) {
 		t.Fatal()
 	}
-	if !reflect.DeepEqual(targetBits, result.Bits) {
+	if !reflect.DeepEqual(targetColumns, result.Columns) {
 		t.Fatal()
 	}
 }
@@ -80,7 +80,7 @@ func TestNewQueryResponseFromInternal(t *testing.T) {
 		"registered": true,
 		"height":     1.83,
 	}
-	targetBits := []uint64{5, 10}
+	targetColumns := []uint64{5, 10}
 	targetCountItems := []CountResultItem{
 		{ID: 10, Count: 100},
 	}
@@ -125,8 +125,8 @@ func TestNewQueryResponseFromInternal(t *testing.T) {
 	if !reflect.DeepEqual(targetAttrs, results[0].Row().Attributes) {
 		t.Fatalf("The row result should contain the attributes")
 	}
-	if !reflect.DeepEqual(targetBits, results[0].Row().Bits) {
-		t.Fatalf("The row result should contain the bits")
+	if !reflect.DeepEqual(targetColumns, results[0].Row().Columns) {
+		t.Fatalf("The row result should contain the columns")
 	}
 	if !reflect.DeepEqual(targetCountItems, results[1].CountItems()) {
 		t.Fatalf("The response should include count items")
@@ -227,7 +227,7 @@ func TestMarshalResults(t *testing.T) {
 		resultJSONStrings[i] = string(b)
 	}
 	targetJSON := []string{
-		`{"attrs":{"age":95,"height":1.83,"name":"some string","registered":true},"bits":[5,10],"keys":[]}`,
+		`{"attrs":{"age":95,"height":1.83,"name":"some string","registered":true},"columns":[5,10],"keys":[]}`,
 		`[{"id":10,"count":100}]`,
 	}
 	for i := range targetJSON {
@@ -257,17 +257,17 @@ func TestTopNResult(t *testing.T) {
 
 func TestRowResult(t *testing.T) {
 	result := RowResult{
-		Bits: []uint64{1, 2, 3},
+		Columns: []uint64{1, 2, 3},
 	}
 	targetBmp := RowResult{
-		Bits: []uint64{1, 2, 3},
+		Columns: []uint64{1, 2, 3},
 	}
 	expectResult(t, result, QueryResultTypeRow, targetBmp, nil, 0, 0, false)
 }
 
-func TestRowResultNilBits(t *testing.T) {
+func TestRowResultNilColumns(t *testing.T) {
 	result := RowResult{
-		Bits: nil,
+		Columns: nil,
 	}
 	_, err := result.MarshalJSON()
 	if err != nil {

@@ -135,8 +135,8 @@ func TestQueryWithSlices(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bits := response.Result().Row().Bits; !reflect.DeepEqual(bits, []uint64{100, sliceWidth * 3}) {
-		t.Fatalf("Unexpected results: %#v", bits)
+	if columns := response.Result().Row().Columns; !reflect.DeepEqual(columns, []uint64{100, sliceWidth * 3}) {
+		t.Fatalf("Unexpected results: %#v", columns)
 	}
 }
 
@@ -160,7 +160,7 @@ func TestQueryWithColumns(t *testing.T) {
 	if !reflect.DeepEqual(response.Column(), ColumnItem{}) {
 		t.Fatalf("No columns should be returned if it wasn't explicitly requested")
 	}
-	response, err = client.Query(testField.Row(1), &QueryOptions{Columns: true})
+	response, err = client.Query(testField.Row(1), &QueryOptions{ColumnAttrs: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +197,7 @@ func TestSetRowAttrs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := client.Query(testField.Row(1), &QueryOptions{Columns: true})
+	response, err := client.Query(testField.Row(1), &QueryOptions{ColumnAttrs: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,8 +256,8 @@ func TestIntersectReturns(t *testing.T) {
 	if len(response.Results()) != 1 {
 		t.Fatal("There must be 1 result")
 	}
-	if !reflect.DeepEqual(response.Result().Row().Bits, []uint64{10}) {
-		t.Fatal("Returned bits must be: [10]")
+	if !reflect.DeepEqual(response.Result().Row().Columns, []uint64{10}) {
+		t.Fatal("Returned columns must be: [10]")
 	}
 }
 
@@ -625,8 +625,8 @@ func TestCSVImport(t *testing.T) {
 	}
 	for i, result := range response.Results() {
 		br := result.Row()
-		if target[i] != br.Bits[0] {
-			t.Fatalf("%d != %d", target[i], br.Bits[0])
+		if target[i] != br.Columns[0] {
+			t.Fatalf("%d != %d", target[i], br.Columns[0])
 		}
 	}
 }
@@ -639,7 +639,7 @@ type BitGenerator struct {
 }
 
 func (gen *BitGenerator) NextRecord() (Record, error) {
-	bit := Bit{RowID: gen.rowIndex, ColumnID: gen.colIndex}
+	column := Bit{RowID: gen.rowIndex, ColumnID: gen.colIndex}
 	if gen.rowIndex >= gen.numRows {
 		return Bit{}, io.EOF
 	}
@@ -648,10 +648,10 @@ func (gen *BitGenerator) NextRecord() (Record, error) {
 		gen.colIndex = 0
 		gen.rowIndex += 1
 	}
-	return bit, nil
+	return column, nil
 }
 
-// GivenBitGenerator iterates over the set of bits provided in New().
+// GivenBitGenerator iterates over the set of columns provided in New().
 // This is being used because Goveralls would run out of memory
 // when providing BitGenerator with a large number of columns (3 * sliceWidth).
 type GivenBitGenerator struct {
@@ -753,8 +753,8 @@ func TestImportWithBatchSizeExpectingZero(t *testing.T) {
 	}
 }
 
-func failingImportBits(indexName string, fieldName string, slice uint64, bits []Record) error {
-	if len(bits) > 0 {
+func failingImportBits(indexName string, fieldName string, slice uint64, records []Record) error {
+	if len(records) > 0 {
 		return errors.New("some error")
 	}
 	return nil
@@ -885,27 +885,27 @@ func TestCSVExport(t *testing.T) {
 		{RowID: 1, ColumnID: 10},
 		{RowID: 2, ColumnID: 1048577},
 	}
-	bits := []Record{}
+	columns := []Record{}
 	iterator, err := client.ExportField(field)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for {
-		bit, err := iterator.NextRecord()
+		column, err := iterator.NextRecord()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
 			t.Fatal(err)
 		}
-		bits = append(bits, bit)
+		columns = append(columns, column)
 	}
-	if len(bits) != len(target) {
-		t.Fatalf("There should be %d bits", len(target))
+	if len(columns) != len(target) {
+		t.Fatalf("There should be %d columns", len(target))
 	}
 	for i := range target {
-		if !reflect.DeepEqual(target[i], bits[i]) {
-			t.Fatalf("%v != %v", target, bits)
+		if !reflect.DeepEqual(target[i], columns[i]) {
+			t.Fatalf("%v != %v", target, columns)
 		}
 	}
 }
@@ -1053,17 +1053,17 @@ func TestRangeField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(resp.Result().Row().Bits) != 1 {
-		t.Fatalf("Count 1 != %d", len(resp.Result().Row().Bits))
+	if len(resp.Result().Row().Columns) != 1 {
+		t.Fatalf("Count 1 != %d", len(resp.Result().Row().Columns))
 	}
-	if resp.Result().Row().Bits[0] != 10 {
-		t.Fatalf("Bit 10 != %d", resp.Result().Row().Bits[0])
+	if resp.Result().Row().Columns[0] != 10 {
+		t.Fatalf("Bit 10 != %d", resp.Result().Row().Columns[0])
 	}
 }
 
-func TestExcludeAttrsBits(t *testing.T) {
+func TestExcludeAttrsColumns(t *testing.T) {
 	client := getClient()
-	field, _ := index.Field("excludebitsattrsfield")
+	field, _ := index.Field("excludecolumnsattrsfield")
 	err := client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
@@ -1079,25 +1079,25 @@ func TestExcludeAttrsBits(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// test exclude bits.
-	resp, err := client.Query(field.Row(1), &QueryOptions{ExcludeBits: true})
+	// test exclude columns.
+	resp, err := client.Query(field.Row(1), &QueryOptions{ExcludeColumns: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(resp.Result().Row().Bits) != 0 {
-		t.Fatalf("bits should be excluded")
+	if len(resp.Result().Row().Columns) != 0 {
+		t.Fatalf("columns should be excluded")
 	}
 	if len(resp.Result().Row().Attributes) != 1 {
 		t.Fatalf("attributes should be included")
 	}
 
 	// test exclude attributes.
-	resp, err = client.Query(field.Row(1), &QueryOptions{ExcludeAttrs: true})
+	resp, err = client.Query(field.Row(1), &QueryOptions{ExcludeRowAttrs: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(resp.Result().Row().Bits) != 1 {
-		t.Fatalf("bits should be included")
+	if len(resp.Result().Row().Columns) != 1 {
+		t.Fatalf("columns should be included")
 	}
 	if len(resp.Result().Row().Attributes) != 0 {
 		t.Fatalf("attributes should be excluded")
@@ -1130,13 +1130,13 @@ func TestImportValueIteratorError(t *testing.T) {
 	}
 }
 
-func TestImportFailsOnImportBitsError(t *testing.T) {
+func TestImportFailsOnImportColumnsError(t *testing.T) {
 	server := getMockServer(500, []byte{}, 0)
 	defer server.Close()
 	client, _ := NewClient(server.URL)
 	err := client.importBits("foo", "bar", 0, []Record{})
 	if err == nil {
-		t.Fatalf("importBits should fail when fetch fragment nodes fails")
+		t.Fatalf("importColumns should fail when fetch fragment nodes fails")
 	}
 }
 
@@ -1162,7 +1162,7 @@ func TestImportFieldFailsIfImportBitsFails(t *testing.T) {
 	}
 	err = client.ImportField(field, iterator)
 	if err == nil {
-		t.Fatalf("ImportField should fail if importBits fails")
+		t.Fatalf("ImportField should fail if importColumns fails")
 	}
 }
 
@@ -1182,14 +1182,14 @@ func TestImportIntFieldFailsIfImportValuesFails(t *testing.T) {
 	}
 }
 
-func TestImportBitsFailInvalidNodeAddress(t *testing.T) {
+func TestImportColumnsFailInvalidNodeAddress(t *testing.T) {
 	data := []byte(`[{"host":"10101:","internalHost":"doesn'tmatter"}]`)
 	server := getMockServer(200, data, len(data))
 	defer server.Close()
 	client, _ := NewClient(server.URL)
 	err := client.importBits("foo", "bar", 0, []Record{})
 	if err == nil {
-		t.Fatalf("importBits should fail on invalid node host")
+		t.Fatalf("importColumns should fail on invalid node host")
 	}
 }
 

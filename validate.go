@@ -38,13 +38,13 @@ import (
 
 const (
 	maxIndexName = 64
-	maxFrameName = 64
+	maxFieldName = 64
 	maxLabel     = 64
 	maxKey       = 64
 )
 
 var indexNameRegex = regexp.MustCompile("^[a-z][a-z0-9_-]*$")
-var frameNameRegex = regexp.MustCompile("^[a-z][a-z0-9_-]*$")
+var fieldNameRegex = regexp.MustCompile("^[a-z][a-z0-9_-]*$")
 var labelRegex = regexp.MustCompile("^[a-zA-Z][a-zA-Z0-9_-]*$")
 var keyRegex = regexp.MustCompile("^[A-Za-z0-9_{}+/=.~%:-]*$")
 
@@ -53,9 +53,9 @@ func ValidIndexName(name string) bool {
 	return len(name) <= maxIndexName && indexNameRegex.Match([]byte(name))
 }
 
-// ValidFrameName returns true if the given frame name is valid, otherwise false.
-func ValidFrameName(name string) bool {
-	return len(name) <= maxFrameName && frameNameRegex.Match([]byte(name))
+// ValidFieldName returns true if the given field name is valid, otherwise false.
+func ValidFieldName(name string) bool {
+	return len(name) <= maxFieldName && fieldNameRegex.Match([]byte(name))
 }
 
 // ValidLabel returns true if the given label is valid, otherwise false.
@@ -75,11 +75,11 @@ func validateIndexName(name string) error {
 	return ErrInvalidIndexName
 }
 
-func validateFrameName(name string) error {
-	if ValidFrameName(name) {
+func validateFieldName(name string) error {
+	if ValidFieldName(name) {
 		return nil
 	}
-	return ErrInvalidFrameName
+	return ErrInvalidFieldName
 }
 
 func validateLabel(label string) error {

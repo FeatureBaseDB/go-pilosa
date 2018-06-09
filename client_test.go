@@ -46,11 +46,11 @@ func TestQueryWithError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	frame, err := index.Frame("foo", nil)
+	field, err := index.Field("foo", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	invalid := frame.FilterFieldTopN(12, frame.Bitmap(7), "$invalid$", 80, 81)
+	invalid := field.FilterFieldTopN(12, field.Row(7), "$invalid$", 80, 81)
 	_, err = client.Query(invalid, nil)
 	if err == nil {
 		t.Fatalf("Should have failed")
@@ -66,11 +66,11 @@ func TestClientOptions(t *testing.T) {
 		{TLSConfig: &tls.Config{InsecureSkipVerify: true}},
 	}
 	optionsList := [][]ClientOption{
-		{SocketTimeout(10)},
-		{ConnectTimeout(5)},
-		{PoolSizePerRoute(7)},
-		{TotalPoolSize(17)},
-		{TLSConfig(&tls.Config{InsecureSkipVerify: true})},
+		{OptClientSocketTimeout(10)},
+		{OptClientConnectTimeout(5)},
+		{OptClientPoolSizePerRoute(7)},
+		{OptClientTotalPoolSize(17)},
+		{OptClientTLSConfig(&tls.Config{InsecureSkipVerify: true})},
 	}
 
 	for i := 0; i < len(targets); i++ {
@@ -133,14 +133,6 @@ func TestNewClientWithInvalidAddr(t *testing.T) {
 	}
 }
 
-func TestDeprecatedClientOptions(t *testing.T) {
-	// The code below is only for coverage
-	_, err := NewClient("https://does.not.exist:12345", SkipVersionCheck(), LegacyMode(true))
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
 func ClientOptionErr(int) ClientOption {
 	return func(*ClientOptions) error {
 		return errors.New("Some error")
@@ -149,21 +141,21 @@ func ClientOptionErr(int) ClientOption {
 
 func TestQueryOptions(t *testing.T) {
 	targets := []*QueryOptions{
-		{Columns: true},
-		{Columns: false},
-		{ExcludeAttrs: true},
-		{ExcludeAttrs: false},
-		{ExcludeBits: true},
-		{ExcludeBits: false},
+		{ColumnAttrs: true},
+		{ColumnAttrs: false},
+		{ExcludeRowAttrs: true},
+		{ExcludeRowAttrs: false},
+		{ExcludeColumns: true},
+		{ExcludeColumns: false},
 	}
 
 	optionsList := [][]interface{}{
-		{ColumnAttrs(true)},
-		{ColumnAttrs(false)},
-		{ExcludeAttrs(true)},
-		{ExcludeAttrs(false)},
-		{ExcludeBits(true)},
-		{ExcludeBits(false)},
+		{OptQueryColumnAttrs(true)},
+		{OptQueryColumnAttrs(false)},
+		{OptQueryExcludeAttrs(true)},
+		{OptQueryExcludeAttrs(false)},
+		{OptQueryExcludeColumns(true)},
+		{OptQueryExcludeColumns(false)},
 	}
 
 	for i := 0; i < len(targets); i++ {
@@ -179,15 +171,15 @@ func TestQueryOptions(t *testing.T) {
 	}
 
 	target := &QueryOptions{
-		Columns:      true,
-		ExcludeAttrs: true,
-		ExcludeBits:  true,
+		ColumnAttrs:     true,
+		ExcludeRowAttrs: true,
+		ExcludeColumns:  true,
 	}
 	options := &QueryOptions{}
 	options.addOptions(&QueryOptions{
-		Columns:      true,
-		ExcludeAttrs: true,
-		ExcludeBits:  true,
+		ColumnAttrs:     true,
+		ExcludeRowAttrs: true,
+		ExcludeColumns:  true,
 	})
 	if !reflect.DeepEqual(target, options) {
 		t.Fatalf("%v != %v", target, options)
@@ -200,11 +192,11 @@ func TestQueryOptionsWithError(t *testing.T) {
 	if err == nil {
 		t.Fatalf("should have failed")
 	}
-	err = options.addOptions(ColumnAttrs(true), nil)
+	err = options.addOptions(OptQueryColumnAttrs(true), nil)
 	if err == nil {
 		t.Fatalf("should have failed")
 	}
-	err = options.addOptions(ColumnAttrs(true), &QueryOptions{})
+	err = options.addOptions(OptQueryColumnAttrs(true), &QueryOptions{})
 	if err == nil {
 		t.Fatalf("should have failed")
 	}

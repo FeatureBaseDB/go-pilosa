@@ -37,7 +37,6 @@ package pilosa
 import (
 	"bytes"
 	"crypto/tls"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -55,7 +54,7 @@ import (
 )
 
 var index *Index
-var testFrame *Frame
+var testField *Field
 
 func TestMain(m *testing.M) {
 	var err error
@@ -63,7 +62,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	testFrame, err = index.Frame("test-frame")
+	testField, err = index.Field("test-field")
 	if err != nil {
 		panic(err)
 	}
@@ -80,13 +79,9 @@ func Setup() {
 	if err != nil {
 		panic(err)
 	}
-	err = client.EnsureFrame(testFrame)
+	err = client.EnsureField(testField)
 	if err != nil {
 		panic(err)
-	}
-	err = client.CreateIntField(testFrame, "testfield", 0, 1000)
-	if err != nil {
-		panic(errors.Wrap(err, "creating int field"))
 	}
 }
 
@@ -113,7 +108,7 @@ func TestCreateDefaultClient(t *testing.T) {
 
 func TestClientReturnsResponse(t *testing.T) {
 	client := getClient()
-	response, err := client.Query(testFrame.Bitmap(1), nil)
+	response, err := client.Query(testField.Row(1), nil)
 	if err != nil {
 		t.Fatalf("Error querying: %s", err)
 	}
@@ -126,22 +121,22 @@ func TestQueryWithSlices(t *testing.T) {
 	Reset()
 	const sliceWidth = 1048576
 	client := getClient()
-	if _, err := client.Query(testFrame.SetBit(1, 100)); err != nil {
+	if _, err := client.Query(testField.SetBit(1, 100)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := client.Query(testFrame.SetBit(1, sliceWidth)); err != nil {
+	if _, err := client.Query(testField.SetBit(1, sliceWidth)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := client.Query(testFrame.SetBit(1, sliceWidth*3)); err != nil {
+	if _, err := client.Query(testField.SetBit(1, sliceWidth*3)); err != nil {
 		t.Fatal(err)
 	}
 
-	response, err := client.Query(testFrame.Bitmap(1), Slices(0, 3))
+	response, err := client.Query(testField.Row(1), OptQuerySlices(0, 3))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bits := response.Result().Bitmap().Bits; !reflect.DeepEqual(bits, []uint64{100, sliceWidth * 3}) {
-		t.Fatalf("Unexpected results: %#v", bits)
+	if columns := response.Result().Row().Columns; !reflect.DeepEqual(columns, []uint64{100, sliceWidth * 3}) {
+		t.Fatalf("Unexpected results: %#v", columns)
 	}
 }
 
@@ -154,7 +149,7 @@ func TestQueryWithColumns(t *testing.T) {
 		"registered": true,
 		"height":     1.83,
 	}
-	_, err := client.Query(testFrame.SetBit(1, 100), nil)
+	_, err := client.Query(testField.SetBit(1, 100), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +160,7 @@ func TestQueryWithColumns(t *testing.T) {
 	if !reflect.DeepEqual(response.Column(), ColumnItem{}) {
 		t.Fatalf("No columns should be returned if it wasn't explicitly requested")
 	}
-	response, err = client.Query(testFrame.Bitmap(1), &QueryOptions{Columns: true})
+	response, err = client.Query(testField.Row(1), &QueryOptions{ColumnAttrs: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,40 +189,40 @@ func TestSetRowAttrs(t *testing.T) {
 		"registered": true,
 		"height":     1.83,
 	}
-	_, err := client.Query(testFrame.SetBit(1, 100), nil)
+	_, err := client.Query(testField.SetBit(1, 100), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = client.Query(testFrame.SetRowAttrs(1, targetAttrs), nil)
+	_, err = client.Query(testField.SetRowAttrs(1, targetAttrs), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := client.Query(testFrame.Bitmap(1), &QueryOptions{Columns: true})
+	response, err := client.Query(testField.Row(1), &QueryOptions{ColumnAttrs: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(targetAttrs, response.Result().Bitmap().Attributes) {
-		t.Fatalf("Bitmap attributes should be set")
+	if !reflect.DeepEqual(targetAttrs, response.Result().Row().Attributes) {
+		t.Fatalf("Row attributes should be set")
 	}
 }
 
 func TestOrmCount(t *testing.T) {
 	client := getClient()
-	countFrame, err := index.Frame("count-test", nil)
+	countField, err := index.Field("count-test", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.EnsureFrame(countFrame)
+	err = client.EnsureField(countField)
 	if err != nil {
 		t.Fatal(err)
 	}
 	qry := index.BatchQuery(
-		countFrame.SetBit(10, 20),
-		countFrame.SetBit(10, 21),
-		countFrame.SetBit(15, 25),
+		countField.SetBit(10, 20),
+		countField.SetBit(10, 21),
+		countField.SetBit(15, 25),
 	)
 	client.Query(qry, nil)
-	response, err := client.Query(index.Count(countFrame.Bitmap(10)), nil)
+	response, err := client.Query(index.Count(countField.Row(10)), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,22 +233,22 @@ func TestOrmCount(t *testing.T) {
 
 func TestIntersectReturns(t *testing.T) {
 	client := getClient()
-	frame, err := index.Frame("segments")
+	field, err := index.Field("segments")
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.EnsureFrame(frame)
+	err = client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
 	}
 	qry1 := index.BatchQuery(
-		frame.SetBit(2, 10),
-		frame.SetBit(2, 15),
-		frame.SetBit(3, 10),
-		frame.SetBit(3, 20),
+		field.SetBit(2, 10),
+		field.SetBit(2, 15),
+		field.SetBit(3, 10),
+		field.SetBit(3, 20),
 	)
 	client.Query(qry1, nil)
-	qry2 := index.Intersect(frame.Bitmap(2), frame.Bitmap(3))
+	qry2 := index.Intersect(field.Row(2), field.Row(3))
 	response, err := client.Query(qry2, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -261,32 +256,32 @@ func TestIntersectReturns(t *testing.T) {
 	if len(response.Results()) != 1 {
 		t.Fatal("There must be 1 result")
 	}
-	if !reflect.DeepEqual(response.Result().Bitmap().Bits, []uint64{10}) {
-		t.Fatal("Returned bits must be: [10]")
+	if !reflect.DeepEqual(response.Result().Row().Columns, []uint64{10}) {
+		t.Fatal("Returned columns must be: [10]")
 	}
 }
 
 func TestTopNReturns(t *testing.T) {
 	client := getClient()
-	frame, err := index.Frame("topn_test", nil)
+	field, err := index.Field("topn_test", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.EnsureFrame(frame)
+	err = client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
 	}
 	qry := index.BatchQuery(
-		frame.SetBit(10, 5),
-		frame.SetBit(10, 10),
-		frame.SetBit(10, 15),
-		frame.SetBit(20, 5),
-		frame.SetBit(30, 5),
+		field.SetBit(10, 5),
+		field.SetBit(10, 10),
+		field.SetBit(10, 15),
+		field.SetBit(20, 5),
+		field.SetBit(30, 5),
 	)
 	client.Query(qry, nil)
 	// XXX: The following is required to make this test pass. See: https://github.com/pilosa/pilosa/issues/625
 	client.HttpRequest("POST", "/recalculate-caches", nil, nil)
-	response, err := client.Query(frame.TopN(2), nil)
+	response, err := client.Query(field.TopN(2), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -303,22 +298,22 @@ func TestTopNReturns(t *testing.T) {
 	}
 }
 
-func TestCreateDeleteIndexFrame(t *testing.T) {
+func TestCreateDeleteIndexField(t *testing.T) {
 	client := getClient()
 	index1, err := NewIndex("to-be-deleted")
 	if err != nil {
 		panic(err)
 	}
-	frame1, err := index1.Frame("foo")
+	field1, err := index1.Field("foo")
 	err = client.CreateIndex(index1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.CreateFrame(frame1)
+	err = client.CreateField(field1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.DeleteFrame(frame1)
+	err = client.DeleteField(field1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -336,22 +331,21 @@ func TestEnsureIndexExists(t *testing.T) {
 	}
 }
 
-func TestEnsureFrameExists(t *testing.T) {
+func TestEnsureFieldExists(t *testing.T) {
 	client := getClient()
-	err := client.EnsureFrame(testFrame)
+	err := client.EnsureField(testField)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestCreateFrameWithTimeQuantum(t *testing.T) {
+func TestCreateFieldWithTimeQuantum(t *testing.T) {
 	client := getClient()
-	options := &FrameOptions{TimeQuantum: TimeQuantumYear}
-	frame, err := index.Frame("frame-with-timequantum", options)
+	field, err := index.Field("field-with-timequantum", OptFieldTime(TimeQuantumYear))
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.CreateFrame(frame)
+	err = client.CreateField(field)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -365,9 +359,9 @@ func TestErrorCreatingIndex(t *testing.T) {
 	}
 }
 
-func TestErrorCreatingFrame(t *testing.T) {
+func TestErrorCreatingField(t *testing.T) {
 	client := getClient()
-	err := client.CreateFrame(testFrame)
+	err := client.CreateField(testField)
 	if err == nil {
 		t.Fatal()
 	}
@@ -432,7 +426,7 @@ func TestErrorResponseNotRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	client, _ := NewClient(uri)
-	response, err := client.Query(testFrame.Bitmap(1), nil)
+	response, err := client.Query(testField.Row(1), nil)
 	if err == nil {
 		t.Fatalf("Got response: %v", response)
 	}
@@ -446,7 +440,7 @@ func TestResponseNotRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	client, _ := NewClient(uri)
-	response, err := client.Query(testFrame.Bitmap(1), nil)
+	response, err := client.Query(testField.Row(1), nil)
 	if err == nil {
 		t.Fatalf("Got response: %v", response)
 	}
@@ -471,12 +465,11 @@ func TestSchema(t *testing.T) {
 	if len(schema.indexes) < 1 {
 		t.Fatalf("There should be at least 1 index in the schema")
 	}
-	f, err := index.Frame("schema-test-frame",
+	f, err := index.Field("schema-test-field",
 		CacheTypeLRU,
-		CacheSize(9999),
-		TimeQuantumYearMonthDay,
+		OptFieldCacheSize(9999),
 	)
-	err = client.EnsureFrame(f)
+	err = client.EnsureField(f)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -484,19 +477,16 @@ func TestSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f = schema.indexes[index.Name()].frames["schema-test-frame"]
+	f = schema.indexes[index.Name()].fields["schema-test-field"]
 	if f == nil {
-		t.Fatal("Frame should not be nil")
+		t.Fatal("Field should not be nil")
 	}
 	opt := f.options
-	if opt.CacheType != CacheTypeLRU {
-		t.Fatalf("cache type %s != %s", CacheTypeLRU, opt.CacheType)
+	if opt.cacheType != CacheTypeLRU {
+		t.Fatalf("cache type %s != %s", CacheTypeLRU, opt.cacheType)
 	}
-	if opt.CacheSize != 9999 {
-		t.Fatalf("cache size 9999 != %d", opt.CacheSize)
-	}
-	if opt.TimeQuantum != TimeQuantumYearMonthDay {
-		t.Fatalf("time quantum %s != %s", string(TimeQuantumYearMonthDay), string(opt.TimeQuantum))
+	if opt.cacheSize != 9999 {
+		t.Fatalf("cache size 9999 != %d", opt.cacheSize)
 	}
 }
 
@@ -507,17 +497,17 @@ func TestSync(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	remoteFrame, _ := remoteIndex.Frame("remote-frame-1")
-	err = client.EnsureFrame(remoteFrame)
+	remoteField, _ := remoteIndex.Field("remote-field-1")
+	err = client.EnsureField(remoteField)
 	if err != nil {
 		t.Fatal(err)
 	}
 	schema1 := NewSchema()
 	index11, _ := schema1.Index("diff-index1")
-	index11.Frame("frame1-1")
-	index11.Frame("frame1-2")
+	index11.Field("field1-1")
+	index11.Field("field1-2")
 	index12, _ := schema1.Index("diff-index2")
-	index12.Frame("frame2-1")
+	index12.Field("field2-1")
 	schema1.Index(remoteIndex.Name())
 
 	err = client.SyncSchema(schema1)
@@ -578,12 +568,12 @@ func TestInvalidSchemaInvalidIndex(t *testing.T) {
 	}
 }
 
-func TestInvalidSchemaInvalidFrame(t *testing.T) {
+func TestInvalidSchemaInvalidField(t *testing.T) {
 	data := []byte(`
 		{
 			"indexes": [{
 				"name": "myindex",
-				"frames": [{
+				"fields": [{
 					"name": "**INVALID**"
 				}]
 			}]
@@ -605,26 +595,26 @@ func TestCSVImport(t *testing.T) {
 		2,3
 		7,1`
 	iterator := NewCSVBitIterator(strings.NewReader(text))
-	frame, err := index.Frame("importframe")
+	field, err := index.Field("importfield")
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.EnsureFrame(frame)
+	err = client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// TODO: This test doesn't actually use batch or time import strategy because it falls through to the
 	// "remaining records" part of import_manager.recordImportWorker. These functional options are misleading.
-	err = client.ImportFrame(frame, iterator, OptImportBatchSize(10), OptImportThreadCount(1), OptImportTimeout(400*time.Millisecond))
+	err = client.ImportField(field, iterator, OptImportBatchSize(10), OptImportThreadCount(1), OptImportTimeout(400*time.Millisecond))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	target := []uint64{3, 1, 5}
 	bq := index.BatchQuery(
-		frame.Bitmap(2),
-		frame.Bitmap(7),
-		frame.Bitmap(10),
+		field.Row(2),
+		field.Row(7),
+		field.Row(10),
 	)
 	response, err := client.Query(bq)
 	if err != nil {
@@ -634,9 +624,9 @@ func TestCSVImport(t *testing.T) {
 		t.Fatalf("Result count should be 3")
 	}
 	for i, result := range response.Results() {
-		br := result.Bitmap()
-		if target[i] != br.Bits[0] {
-			t.Fatalf("%d != %d", target[i], br.Bits[0])
+		br := result.Row()
+		if target[i] != br.Columns[0] {
+			t.Fatalf("%d != %d", target[i], br.Columns[0])
 		}
 	}
 }
@@ -649,7 +639,7 @@ type BitGenerator struct {
 }
 
 func (gen *BitGenerator) NextRecord() (Record, error) {
-	bit := Bit{RowID: gen.rowIndex, ColumnID: gen.colIndex}
+	column := Bit{RowID: gen.rowIndex, ColumnID: gen.colIndex}
 	if gen.rowIndex >= gen.numRows {
 		return Bit{}, io.EOF
 	}
@@ -658,10 +648,10 @@ func (gen *BitGenerator) NextRecord() (Record, error) {
 		gen.colIndex = 0
 		gen.rowIndex += 1
 	}
-	return bit, nil
+	return column, nil
 }
 
-// GivenBitGenerator iterates over the set of bits provided in New().
+// GivenBitGenerator iterates over the set of columns provided in New().
 // This is being used because Goveralls would run out of memory
 // when providing BitGenerator with a large number of columns (3 * sliceWidth).
 type GivenBitGenerator struct {
@@ -688,16 +678,16 @@ func NewGivenBitGenerator(recs []Record) *GivenBitGenerator {
 func TestImportWithTimeout(t *testing.T) {
 	client := getClient()
 	iterator := &BitGenerator{numRows: 100, numColumns: 1000}
-	frame, err := index.Frame("importframe-timeout")
+	field, err := index.Field("importfield-timeout")
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.EnsureFrame(frame)
+	err = client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
 	}
 	statusChan := make(chan ImportStatusUpdate, 10000)
-	err = client.ImportFrame(frame, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(8), OptImportStrategy(TimeoutImport), OptImportTimeout(10*time.Millisecond), OptImportBatchSize(1000))
+	err = client.ImportField(field, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(8), OptImportStrategy(TimeoutImport), OptImportTimeout(10*time.Millisecond), OptImportBatchSize(1000))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -706,16 +696,16 @@ func TestImportWithTimeout(t *testing.T) {
 func TestImportWithBatchSize(t *testing.T) {
 	client := getClient()
 	iterator := &BitGenerator{numRows: 10, numColumns: 1000}
-	frame, err := index.Frame("importframe-batchsize")
+	field, err := index.Field("importfield-batchsize")
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.EnsureFrame(frame)
+	err = client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
 	}
 	statusChan := make(chan ImportStatusUpdate, 10)
-	err = client.ImportFrame(frame, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(BatchImport), OptImportBatchSize(1000))
+	err = client.ImportField(field, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(BatchImport), OptImportBatchSize(1000))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -748,23 +738,23 @@ func TestImportWithBatchSizeExpectingZero(t *testing.T) {
 		},
 	)
 
-	frame, err := index.Frame("importframe-batchsize-zero")
+	field, err := index.Field("importfield-batchsize-zero")
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.EnsureFrame(frame)
+	err = client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
 	}
 	statusChan := make(chan ImportStatusUpdate, 10)
-	err = client.ImportFrame(frame, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(BatchImport), OptImportBatchSize(6))
+	err = client.ImportField(field, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(BatchImport), OptImportBatchSize(6))
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-func failingImportBits(indexName string, frameName string, slice uint64, bits []Record) error {
-	if len(bits) > 0 {
+func failingImportBits(indexName string, fieldName string, slice uint64, records []Record) error {
+	if len(records) > 0 {
 		return errors.New("some error")
 	}
 	return nil
@@ -773,16 +763,16 @@ func failingImportBits(indexName string, frameName string, slice uint64, bits []
 func TestImportWithTimeoutFails(t *testing.T) {
 	client := getClient()
 	iterator := &BitGenerator{numRows: 10, numColumns: 1000}
-	frame, err := index.Frame("importframe-timeout")
+	field, err := index.Field("importfield-timeout")
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.EnsureFrame(frame)
+	err = client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
 	}
 	statusChan := make(chan ImportStatusUpdate, 10)
-	err = client.ImportFrame(frame, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(TimeoutImport), OptImportTimeout(1*time.Millisecond), importRecordsFunction(failingImportBits))
+	err = client.ImportField(field, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(TimeoutImport), OptImportTimeout(1*time.Millisecond), importRecordsFunction(failingImportBits))
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -791,16 +781,16 @@ func TestImportWithTimeoutFails(t *testing.T) {
 func TestImportWithBatchSizeFails(t *testing.T) {
 	client := getClient()
 	iterator := &BitGenerator{numRows: 10, numColumns: 1000}
-	frame, err := index.Frame("importframe-batchsize")
+	field, err := index.Field("importfield-batchsize")
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.EnsureFrame(frame)
+	err = client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
 	}
 	statusChan := make(chan ImportStatusUpdate, 10)
-	err = client.ImportFrame(frame, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(BatchImport), OptImportBatchSize(1000), importRecordsFunction(failingImportBits))
+	err = client.ImportField(field, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(BatchImport), OptImportBatchSize(1000), importRecordsFunction(failingImportBits))
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -817,15 +807,15 @@ func TestErrorReturningImportOption(t *testing.T) {
 		2,3
 		7,1`
 	iterator := NewCSVBitIterator(strings.NewReader(text))
-	frame, err := index.Frame("importframe")
+	field, err := index.Field("importfield")
 	if err != nil {
 		t.Fatal(err)
 	}
 	client := getClient()
 	optionErr := errors.New("ERR")
-	err = client.ImportFrame(frame, iterator, ErrorImportOption(optionErr))
+	err = client.ImportField(field, iterator, ErrorImportOption(optionErr))
 	if err != optionErr {
-		t.Fatal("ImportFrame should fail if an import option fails")
+		t.Fatal("ImportField should fail if an import option fails")
 	}
 }
 
@@ -834,29 +824,27 @@ func TestValueCSVImport(t *testing.T) {
 	text := `10,7
 		7,1`
 	iterator := NewCSVValueIterator(strings.NewReader(text))
-	frameOptions := &FrameOptions{}
-	frameOptions.AddIntField("foo", 0, 100)
-	frame, err := index.Frame("importvalueframe", frameOptions)
+	field, err := index.Field("importvaluefield", OptFieldInt(0, 100))
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.EnsureFrame(frame)
+	err = client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
 	}
 	bq := index.BatchQuery(
-		frame.SetBit(1, 10),
-		frame.SetBit(1, 7),
+		field.SetBit(1, 10),
+		field.SetBit(1, 7),
 	)
-	response, err := client.Query(bq, nil)
+	response, err := client.Query(bq)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportValueFrame(frame, "foo", iterator, OptImportBatchSize(10))
+	err = client.ImportIntField(field, iterator, OptImportBatchSize(10))
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err = client.Query(frame.Sum(frame.Bitmap(1), "foo"), nil)
+	response, err = client.Query(field.Sum(field.Row(1)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -866,17 +854,28 @@ func TestValueCSVImport(t *testing.T) {
 	}
 }
 
+func TestValueCSVImportFailure(t *testing.T) {
+	server := getMockServer(404, []byte("sorry, not found"), -1)
+	defer server.Close()
+	client, _ := NewClient(server.URL)
+	uri := URIFromAddress(server.URL)
+	err := client.importValueNode(uri, nil)
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
 func TestCSVExport(t *testing.T) {
 	client := getClient()
-	frame, err := index.Frame("exportframe", nil)
+	field, err := index.Field("exportfield")
 	if err != nil {
 		t.Fatal(err)
 	}
-	client.EnsureFrame(frame)
+	client.EnsureField(field)
 	_, err = client.Query(index.BatchQuery(
-		frame.SetBit(1, 1),
-		frame.SetBit(1, 10),
-		frame.SetBit(2, 1048577),
+		field.SetBit(1, 1),
+		field.SetBit(1, 10),
+		field.SetBit(2, 1048577),
 	), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -886,27 +885,27 @@ func TestCSVExport(t *testing.T) {
 		{RowID: 1, ColumnID: 10},
 		{RowID: 2, ColumnID: 1048577},
 	}
-	bits := []Record{}
-	iterator, err := client.ExportFrame(frame)
+	columns := []Record{}
+	iterator, err := client.ExportField(field)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for {
-		bit, err := iterator.NextRecord()
+		column, err := iterator.NextRecord()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
 			t.Fatal(err)
 		}
-		bits = append(bits, bit)
+		columns = append(columns, column)
 	}
-	if len(bits) != len(target) {
-		t.Fatalf("There should be %d bits", len(target))
+	if len(columns) != len(target) {
+		t.Fatalf("There should be %d columns", len(target))
 	}
 	for i := range target {
-		if !reflect.DeepEqual(target[i], bits[i]) {
-			t.Fatalf("%v != %v", target, bits)
+		if !reflect.DeepEqual(target[i], columns[i]) {
+			t.Fatalf("%v != %v", target, columns)
 		}
 	}
 }
@@ -915,11 +914,11 @@ func TestCSVExportFailure(t *testing.T) {
 	server := getMockServer(404, []byte("sorry, not found"), -1)
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	frame, err := index.Frame("exportframe", nil)
+	field, err := index.Field("exportfield", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = client.ExportFrame(frame)
+	_, err = client.ExportField(field)
 	if err == nil {
 		t.Fatal("should have failed")
 	}
@@ -932,7 +931,7 @@ func TestExportReaderFailure(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	frame, err := index.Frame("exportframe", nil)
+	field, err := index.Field("exportfield", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -940,7 +939,7 @@ func TestExportReaderFailure(t *testing.T) {
 		0: uri,
 	}
 	client, _ := NewClient(uri)
-	reader := newExportReader(client, sliceURIs, frame)
+	reader := newExportReader(client, sliceURIs, field)
 	buf := make([]byte, 1000)
 	_, err = reader.Read(buf)
 	if err == nil {
@@ -955,13 +954,13 @@ func TestExportReaderReadBodyFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	frame, err := index.Frame("exportframe", nil)
+	field, err := index.Field("exportfield", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	sliceURIs := map[uint64]*URI{0: uri}
 	client, _ := NewClient(uri)
-	reader := newExportReader(client, sliceURIs, frame)
+	reader := newExportReader(client, sliceURIs, field)
 	buf := make([]byte, 1000)
 	_, err = reader.Read(buf)
 	if err == nil {
@@ -999,29 +998,25 @@ func TestFetchStatus(t *testing.T) {
 	}
 }
 
-func TestRangeFrame(t *testing.T) {
+func TestRangeField(t *testing.T) {
 	client := getClient()
-	options := &FrameOptions{}
-	options.AddIntField("foo", 10, 20)
-	frame, _ := index.Frame("rangeframe", options)
-	err := client.EnsureFrame(frame)
+	field, _ := index.Field("rangefield", OptFieldInt(10, 20))
+	err := client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	foo := frame.Field("foo")
-
 	_, err = client.Query(index.BatchQuery(
-		frame.SetBit(1, 10),
-		frame.SetBit(1, 100),
-		foo.SetIntValue(10, 11),
-		foo.SetIntValue(100, 15),
+		field.SetBit(1, 10),
+		field.SetBit(1, 100),
+		field.SetIntValue(10, 11),
+		field.SetIntValue(100, 15),
 	), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	resp, err := client.Query(foo.Sum(frame.Bitmap(1)), nil)
+	resp, err := client.Query(field.Sum(field.Row(1)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1032,7 +1027,7 @@ func TestRangeFrame(t *testing.T) {
 		t.Fatalf("Count 2 != %d", resp.Result().Count())
 	}
 
-	resp, err = client.Query(foo.Min(frame.Bitmap(1)), nil)
+	resp, err = client.Query(field.Min(field.Row(1)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1043,7 +1038,7 @@ func TestRangeFrame(t *testing.T) {
 		t.Fatalf("Count 2 != %d", resp.Result().Count())
 	}
 
-	resp, err = client.Query(foo.Max(frame.Bitmap(1)), nil)
+	resp, err = client.Query(field.Max(field.Row(1)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1054,69 +1049,22 @@ func TestRangeFrame(t *testing.T) {
 		t.Fatalf("Count 2 != %d", resp.Result().Count())
 	}
 
-	resp, err = client.Query(foo.LT(15), nil)
+	resp, err = client.Query(field.LT(15))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(resp.Result().Bitmap().Bits) != 1 {
-		t.Fatalf("Count 1 != %d", len(resp.Result().Bitmap().Bits))
+	if len(resp.Result().Row().Columns) != 1 {
+		t.Fatalf("Count 1 != %d", len(resp.Result().Row().Columns))
 	}
-	if resp.Result().Bitmap().Bits[0] != 10 {
-		t.Fatalf("Bit 10 != %d", resp.Result().Bitmap().Bits[0])
+	if resp.Result().Row().Columns[0] != 10 {
+		t.Fatalf("Bit 10 != %d", resp.Result().Row().Columns[0])
 	}
 }
 
-func TestCreateIntField(t *testing.T) {
+func TestExcludeAttrsColumns(t *testing.T) {
 	client := getClient()
-	frame, _ := index.Frame("rangeframe-addfield")
-	err := client.EnsureFrame(frame)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.CreateIntField(frame, "foo", 10, 20)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = client.Query(index.BatchQuery(
-		frame.SetBit(1, 10),
-		frame.SetBit(1, 100),
-		frame.SetIntFieldValue(10, "foo", 11),
-		frame.SetIntFieldValue(100, "foo", 15),
-	), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp, err := client.Query(frame.Sum(frame.Bitmap(1), "foo"), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resp.Result().Value() != 26 {
-		t.Fatalf("Sum 26 != %d", resp.Result().Value())
-	}
-	if resp.Result().Count() != 2 {
-		t.Fatalf("Count 2 != %d", resp.Result().Count())
-	}
-}
-
-func TestDeleteField(t *testing.T) {
-	client := getClient()
-	options := &FrameOptions{}
-	options.AddIntField("foo", 10, 20)
-	frame, _ := index.Frame("rangeframe-deletefield", options)
-	err := client.EnsureFrame(frame)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.DeleteField(frame, "foo")
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestExcludeAttrsBits(t *testing.T) {
-	client := getClient()
-	frame, _ := index.Frame("excludebitsattrsframe", nil)
-	err := client.EnsureFrame(frame)
+	field, _ := index.Field("excludecolumnsattrsfield")
+	err := client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1124,71 +1072,71 @@ func TestExcludeAttrsBits(t *testing.T) {
 		"foo": "bar",
 	}
 	_, err = client.Query(index.BatchQuery(
-		frame.SetBit(1, 100),
-		frame.SetRowAttrs(1, attrs),
+		field.SetBit(1, 100),
+		field.SetRowAttrs(1, attrs),
 	), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// test exclude bits.
-	resp, err := client.Query(frame.Bitmap(1), &QueryOptions{ExcludeBits: true})
+	// test exclude columns.
+	resp, err := client.Query(field.Row(1), &QueryOptions{ExcludeColumns: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(resp.Result().Bitmap().Bits) != 0 {
-		t.Fatalf("bits should be excluded")
+	if len(resp.Result().Row().Columns) != 0 {
+		t.Fatalf("columns should be excluded")
 	}
-	if len(resp.Result().Bitmap().Attributes) != 1 {
+	if len(resp.Result().Row().Attributes) != 1 {
 		t.Fatalf("attributes should be included")
 	}
 
 	// test exclude attributes.
-	resp, err = client.Query(frame.Bitmap(1), &QueryOptions{ExcludeAttrs: true})
+	resp, err = client.Query(field.Row(1), &QueryOptions{ExcludeRowAttrs: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(resp.Result().Bitmap().Bits) != 1 {
-		t.Fatalf("bits should be included")
+	if len(resp.Result().Row().Columns) != 1 {
+		t.Fatalf("columns should be included")
 	}
-	if len(resp.Result().Bitmap().Attributes) != 0 {
+	if len(resp.Result().Row().Attributes) != 0 {
 		t.Fatalf("attributes should be excluded")
 	}
 }
 
 func TestImportBitIteratorError(t *testing.T) {
 	client := getClient()
-	frame, err := index.Frame("not-important", nil)
+	field, err := index.Field("not-important", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	iterator := NewCSVBitIterator(&BrokenReader{})
-	err = client.ImportFrame(frame, iterator)
+	err = client.ImportField(field, iterator)
 	if err == nil {
-		t.Fatalf("import frame should fail with broken reader")
+		t.Fatalf("import field should fail with broken reader")
 	}
 }
 
 func TestImportValueIteratorError(t *testing.T) {
 	client := getClient()
-	frame, err := index.Frame("not-important", nil)
+	field, err := index.Field("not-important", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	iterator := NewCSVValueIterator(&BrokenReader{})
-	err = client.ImportValueFrame(frame, "foo", iterator, OptImportBatchSize(100))
+	err = client.ImportIntField(field, iterator, OptImportBatchSize(100))
 	if err == nil {
-		t.Fatalf("import value frame should fail with broken reader")
+		t.Fatalf("import value field should fail with broken reader")
 	}
 }
 
-func TestImportFailsOnImportBitsError(t *testing.T) {
+func TestImportFailsOnImportColumnsError(t *testing.T) {
 	server := getMockServer(500, []byte{}, 0)
 	defer server.Close()
 	client, _ := NewClient(server.URL)
 	err := client.importBits("foo", "bar", 0, []Record{})
 	if err == nil {
-		t.Fatalf("importBits should fail when fetch fragment nodes fails")
+		t.Fatalf("importColumns should fail when fetch fragment nodes fails")
 	}
 }
 
@@ -1196,52 +1144,52 @@ func TestValueImportFailsOnImportValueError(t *testing.T) {
 	server := getMockServer(500, []byte{}, 0)
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	err := client.importValues("foo", "bar", 0, "foo", nil)
+	err := client.importValues("foo", "bar", 0, nil)
 	if err == nil {
 		t.Fatalf("importValues should fail when fetch fragment nodes fails")
 	}
 }
 
-func TestImportFrameFailsIfImportBitsFails(t *testing.T) {
+func TestImportFieldFailsIfImportBitsFails(t *testing.T) {
 	data := []byte(`[{"host":"non-existing-domain:9999","internalHost":"10101"}]`)
 	server := getMockServer(200, data, len(data))
 	defer server.Close()
 	client, _ := NewClient(server.URL)
 	iterator := NewCSVBitIterator(strings.NewReader("10,7"))
-	frame, err := index.Frame("importframe", nil)
+	field, err := index.Field("importfield", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportFrame(frame, iterator)
+	err = client.ImportField(field, iterator)
 	if err == nil {
-		t.Fatalf("ImportFrame should fail if importBits fails")
+		t.Fatalf("ImportField should fail if importColumns fails")
 	}
 }
 
-func TestImportValueFrameFailsIfImportValuesFails(t *testing.T) {
+func TestImportIntFieldFailsIfImportValuesFails(t *testing.T) {
 	data := []byte(`[{"host":"non-existing-domain:9999","internalHost":"10101"}]`)
 	server := getMockServer(200, data, len(data))
 	defer server.Close()
 	client, _ := NewClient(server.URL)
 	iterator := NewCSVValueIterator(strings.NewReader("10,7"))
-	frame, err := index.Frame("importframe", nil)
+	field, err := index.Field("importfield", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportValueFrame(frame, "foo", iterator, OptImportBatchSize(10))
+	err = client.ImportIntField(field, iterator, OptImportBatchSize(10))
 	if err == nil {
-		t.Fatalf("ImportValueFrame should fail if importValues fails")
+		t.Fatalf("ImportIntField should fail if importValues fails")
 	}
 }
 
-func TestImportBitsFailInvalidNodeAddress(t *testing.T) {
+func TestImportColumnsFailInvalidNodeAddress(t *testing.T) {
 	data := []byte(`[{"host":"10101:","internalHost":"doesn'tmatter"}]`)
 	server := getMockServer(200, data, len(data))
 	defer server.Close()
 	client, _ := NewClient(server.URL)
 	err := client.importBits("foo", "bar", 0, []Record{})
 	if err == nil {
-		t.Fatalf("importBits should fail on invalid node host")
+		t.Fatalf("importColumns should fail on invalid node host")
 	}
 }
 
@@ -1250,7 +1198,7 @@ func TestImportValuesFailInvalidNodeAddress(t *testing.T) {
 	server := getMockServer(200, data, len(data))
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	err := client.importValues("foo", "bar", 0, "foo", nil)
+	err := client.importValues("foo", "bar", 0, nil)
 	if err == nil {
 		t.Fatalf("importValues should fail on invalid node host")
 	}
@@ -1276,7 +1224,7 @@ func TestImportNodeFails(t *testing.T) {
 		RowIDs:     []uint64{},
 		Timestamps: []int64{},
 		Index:      "foo",
-		Frame:      "bar",
+		Field:      "bar",
 		Slice:      0,
 	}
 	err := client.importNode(uri, importRequest)
@@ -1323,7 +1271,7 @@ func TestResponseWithInvalidType(t *testing.T) {
 	server := getMockServer(200, data, -1)
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	_, err = client.Query(testFrame.Bitmap(1), nil)
+	_, err = client.Query(testField.Row(1), nil)
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -1344,28 +1292,6 @@ func TestStatusUnmarshalFails(t *testing.T) {
 	defer server.Close()
 	client, _ := NewClient(server.URL)
 	_, err := client.Status()
-	if err == nil {
-		t.Fatalf("Should have failed")
-	}
-}
-
-func TestCreateIntFieldFails(t *testing.T) {
-	server := getMockServer(404, nil, 0)
-	defer server.Close()
-	client, _ := NewClient(server.URL)
-	frame, _ := index.Frame("rangeframe-addfield", nil)
-	err := client.CreateIntField(frame, "foo", 10, 20)
-	if err == nil {
-		t.Fatalf("Should have failed")
-	}
-}
-
-func TestDeleteFieldFails(t *testing.T) {
-	server := getMockServer(404, nil, 0)
-	defer server.Close()
-	client, _ := NewClient(server.URL)
-	frame, _ := index.Frame("rangeframe-deletefield", nil)
-	err := client.DeleteField(frame, "foo")
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -1405,36 +1331,6 @@ func TestHttpRequest(t *testing.T) {
 	}
 }
 
-func TestInvalidFieldInStatus(t *testing.T) {
-	responseMap := map[string]interface{}{
-		"indexes": []map[string]interface{}{{
-			"name": "sample-index",
-			"frames": []map[string]interface{}{{
-				"name": "foo",
-				"options": map[string]interface{}{
-					"fields": []map[string]interface{}{{
-						"name": "$$invalid",
-						"type": "int",
-						"min":  0,
-						"max":  100,
-					}},
-				}},
-			}},
-		},
-	}
-	response, err := json.Marshal(responseMap)
-	if err != nil {
-		t.Fatal(err)
-	}
-	server := getMockServer(200, response, -1)
-	defer server.Close()
-	client, _ := NewClient(server.URL)
-	_, err = client.Schema()
-	if err == nil {
-		t.Fatalf("should have failed")
-	}
-}
-
 func TestSyncSchemaCantCreateIndex(t *testing.T) {
 	server := getMockServer(404, nil, 0)
 	defer server.Close()
@@ -1447,13 +1343,13 @@ func TestSyncSchemaCantCreateIndex(t *testing.T) {
 	}
 }
 
-func TestSyncSchemaCantCreateFrame(t *testing.T) {
+func TestSyncSchemaCantCreateField(t *testing.T) {
 	server := getMockServer(404, nil, 0)
 	defer server.Close()
 	client, _ := NewClient(server.URL)
 	schema = NewSchema()
 	index, _ := schema.Index("foo")
-	index.Frame("fooframe")
+	index.Field("foofield")
 	serverSchema := NewSchema()
 	serverSchema.Index("foo")
 	err := client.syncSchema(schema, serverSchema)
@@ -1462,7 +1358,7 @@ func TestSyncSchemaCantCreateFrame(t *testing.T) {
 	}
 }
 
-func TestExportFrameFailure(t *testing.T) {
+func TestExportFieldFailure(t *testing.T) {
 	paths := map[string]mockResponseItem{
 		"/status": {
 			content:       []byte(`{"state":"NORMAL","nodes":[{"scheme":"http","host":"localhost","port":10101}]}`),
@@ -1478,21 +1374,21 @@ func TestExportFrameFailure(t *testing.T) {
 	server := getMockPathServer(paths)
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	_, err := client.ExportFrame(testFrame)
+	_, err := client.ExportField(testField)
 	if err == nil {
 		t.Fatal("should have failed")
 	}
 	statusItem := paths["/status"]
 	statusItem.statusCode = 200
 	paths["/status"] = statusItem
-	_, err = client.ExportFrame(testFrame)
+	_, err = client.ExportField(testField)
 	if err == nil {
 		t.Fatal("should have failed")
 	}
 	statusItem = paths["/slices/max"]
 	statusItem.statusCode = 200
 	paths["/slices/max"] = statusItem
-	_, err = client.ExportFrame(testFrame)
+	_, err = client.ExportField(testField)
 	if err == nil {
 		t.Fatal("should have failed")
 	}
@@ -1568,21 +1464,21 @@ func TestClientRace(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	client, err := NewClient(uri, TLSConfig(&tls.Config{InsecureSkipVerify: true}))
+	client, err := NewClient(uri, OptClientTLSConfig(&tls.Config{InsecureSkipVerify: true}))
 	if err != nil {
 		panic(err)
 	}
 	f := func() {
-		client.Query(testFrame.Bitmap(1))
+		client.Query(testField.Row(1))
 	}
 	for i := 0; i < 10; i++ {
 		go f()
 	}
 }
 
-func TestImportFrameWithoutImportFunFails(t *testing.T) {
+func TestImportFieldWithoutImportFunFails(t *testing.T) {
 	client := DefaultClient()
-	err := client.ImportFrame(nil, nil, importRecordsFunction(nil))
+	err := client.ImportField(nil, nil, importRecordsFunction(nil))
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}

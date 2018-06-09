@@ -47,19 +47,19 @@ func TestCSVBitIterator(t *testing.T) {
 		5,20,683793300
 		3,41,683793385`)
 	iterator := pilosa.NewCSVBitIterator(reader)
-	bits := []pilosa.Record{}
+	columns := []pilosa.Record{}
 	for {
-		bit, err := iterator.NextRecord()
+		column, err := iterator.NextRecord()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
 			t.Fatal(err)
 		}
-		bits = append(bits, bit)
+		columns = append(columns, column)
 	}
-	if len(bits) != 3 {
-		t.Fatalf("There should be 3 bits")
+	if len(columns) != 3 {
+		t.Fatalf("There should be 3 columns")
 	}
 	target := []pilosa.Bit{
 		{RowID: 1, ColumnID: 10, Timestamp: 683793200},
@@ -67,8 +67,8 @@ func TestCSVBitIterator(t *testing.T) {
 		{RowID: 3, ColumnID: 41, Timestamp: 683793385},
 	}
 	for i := range target {
-		if !reflect.DeepEqual(target[i], bits[i]) {
-			t.Fatalf("%v != %v", target[i], bits[i])
+		if !reflect.DeepEqual(target[i], columns[i]) {
+			t.Fatalf("%v != %v", target[i], columns[i])
 		}
 	}
 }
@@ -79,28 +79,28 @@ func TestCSVBitIteratorWithTimestampFormat(t *testing.T) {
 		5,20,1991-09-02T09:35
 		3,41,1991-09-02T09:36`)
 	iterator := pilosa.NewCSVBitIteratorWithTimestampFormat(reader, format)
-	bits := []pilosa.Record{}
+	records := []pilosa.Record{}
 	for {
-		bit, err := iterator.NextRecord()
+		record, err := iterator.NextRecord()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
 			t.Fatal(err)
 		}
-		bits = append(bits, bit)
+		records = append(records, record)
 	}
 	target := []pilosa.Bit{
 		{RowID: 1, ColumnID: 10, Timestamp: 683803980},
 		{RowID: 5, ColumnID: 20, Timestamp: 683804100},
 		{RowID: 3, ColumnID: 41, Timestamp: 683804160},
 	}
-	if len(bits) != len(target) {
-		t.Fatalf("There should be %d bits", len(target))
+	if len(records) != len(target) {
+		t.Fatalf("There should be %d columns", len(target))
 	}
 	for i := range target {
-		if !reflect.DeepEqual(target[i], bits[i]) {
-			t.Fatalf("%v != %v", target[i], bits[i])
+		if !reflect.DeepEqual(target[i], records[i]) {
+			t.Fatalf("%v != %v", target[i], records[i])
 		}
 	}
 }
@@ -207,7 +207,7 @@ func (r BrokenReader) Read(p []byte) (n int, err error) {
 	return 0, errors.New("broken reader")
 }
 
-func TestBitSlice(t *testing.T) {
+func TestColumnSlice(t *testing.T) {
 	a := pilosa.Bit{RowID: 15, ColumnID: 55, Timestamp: 100101}
 	target := uint64(0)
 	if a.Slice(100) != target {

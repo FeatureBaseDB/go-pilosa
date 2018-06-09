@@ -94,13 +94,13 @@ err := client.SyncSchema(schema)
 You can send queries to a Pilosa server using the `Query` function of the `Client` struct:
 
 ```go
-response, err := client.Query(frame.Bitmap(5));
+response, err := client.Query(frame.Row(5));
 ```
 
 `Query` accepts zero or more options:
 
 ```go
-response, err := client.Query(frame.Bitmap(5), pilosa.ColumnAttrs(true), pilosa.ExcludeBits(true))
+response, err := client.Query(frame.Row(5), pilosa.ColumnAttrs(true), pilosa.ExcludeColumns(true))
 ```
 
 ## Server Response
@@ -110,7 +110,7 @@ When a query is sent to a Pilosa server, the server either fulfills the query or
 A `QueryResponse` struct may contain zero or more results of `QueryResult` type. You can access all results using the `Results` function of `QueryResponse` (which returns a list of `QueryResult` objects), or you can use the `Result` method (which returns either the first result or `nil` if there are no results):
 
 ```go
-response, err := client.Query(frame.Bitmap(5))
+response, err := client.Query(frame.Row(5))
 if err != nil {
     // Act on the error
 }
@@ -143,16 +143,16 @@ for _, column = range response.Columns() {
 
 `QueryResult` objects contain:
 
-* `Bitmap()` function to retrieve a bitmap result,
+* `Row()` function to retrieve a row result,
 * `CountItems()` function to retrieve column count per row ID entries returned from `TopN` queries,
 * `Count()` function to retrieve the number of rows per the given row ID returned from `Count` queries.
 * `Value()` function to retrieve the result of `Min`, `Max` or `Sum` queries.
 * `Changed()` function returns whether a `SetBit` or `ClearBit` query changed a bit.
 
 ```go
-bitmap := result.Bitmap()
-bits := bitmap.Bits
-attributes := bitmap.Attributes
+row := result.Row()
+columns := row.Columns
+attributes := row.Attributes
 
 countItems := result.CountItems()
 

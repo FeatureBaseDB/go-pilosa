@@ -18,7 +18,7 @@ func newRecordImportManager(client *Client) *recordImportManager {
 	}
 }
 
-func (rim recordImportManager) Run(frame *Frame, iterator RecordIterator, options ImportOptions) error {
+func (rim recordImportManager) Run(field *Field, iterator RecordIterator, options ImportOptions) error {
 	sliceWidth := options.sliceWidth
 	threadCount := uint64(options.threadCount)
 	recordChans := make([]chan Record, threadCount)
@@ -32,7 +32,7 @@ func (rim recordImportManager) Run(frame *Frame, iterator RecordIterator, option
 	for i := range recordChans {
 		recordChans[i] = make(chan Record, options.batchSize)
 		errChans[i] = make(chan error)
-		go recordImportWorker(i, rim.client, frame, recordChans[i], errChans[i], statusChan, options)
+		go recordImportWorker(i, rim.client, field, recordChans[i], errChans[i], statusChan, options)
 	}
 
 	var record Record
@@ -63,7 +63,7 @@ func (rim recordImportManager) Run(frame *Frame, iterator RecordIterator, option
 		}
 	}
 
-	// TODO: Closing this channel will panic if the frame has multiple fields.
+	// TODO: Closing this channel will panic if the field has multiple fields.
 	if statusChan != nil {
 		close(statusChan)
 	}
@@ -79,16 +79,16 @@ func (rim recordImportManager) Run(frame *Frame, iterator RecordIterator, option
 	return nil
 }
 
-func recordImportWorker(id int, client *Client, frame *Frame, recordChan <-chan Record, errChan chan<- error, statusChan chan<- ImportStatusUpdate, options ImportOptions) {
+func recordImportWorker(id int, client *Client, field *Field, recordChan <-chan Record, errChan chan<- error, statusChan chan<- ImportStatusUpdate, options ImportOptions) {
 	batchForSlice := map[uint64][]Record{}
-	frameName := frame.Name()
-	indexName := frame.index.Name()
+	fieldName := field.Name()
+	indexName := field.index.Name()
 	importFun := options.importRecordsFunction
 
 	importRecords := func(slice uint64, records []Record) error {
 		tic := time.Now()
 		sort.Sort(recordSort(records))
-		err := importFun(indexName, frameName, slice, records)
+		err := importFun(indexName, fieldName, slice, records)
 		if err != nil {
 			return err
 		}

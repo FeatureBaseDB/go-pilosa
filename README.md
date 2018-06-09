@@ -8,7 +8,7 @@
 
 <img src="https://www.pilosa.com/img/speed_sloth.svg" style="float: right" align="right" height="301">
 
-Go client for Pilosa high performance distributed bitmap index.
+Go client for Pilosa high performance distributed index.
 
 ## What's New?
 
@@ -49,37 +49,37 @@ schema, err := client.Schema()
 // Create an Index object
 myindex, err := schema.Index("myindex")
 
-// Create a Frame object
-myframe, err := myindex.Frame("myframe")
+// Create a Field object
+myframe, err := myindex.Field("myfield")
 
-// make sure the index and frame exists on the server
+// make sure the index and the field exists on the server
 err = client.SyncSchema(schema)
 
 // Send a SetBit query. PilosaException is thrown if execution of the query fails.
-response, err := client.Query(myframe.SetBit(5, 42))
+response, err := client.Query(myfield.SetBit(5, 42))
 
-// Send a Bitmap query. PilosaException is thrown if execution of the query fails.
-response, err = client.Query(myframe.Bitmap(5))
+// Send a Row query. PilosaException is thrown if execution of the query fails.
+response, err = client.Query(myframe.Row(5))
 
 // Get the result
 result := response.Result()
 // Act on the result
 if result != nil {
-    bits := result.Bitmap().Bits
-    fmt.Println("Got bits: ", bits)
+    bits := result.Row().Columns
+    fmt.Println("Got columns: ", columns)
 }
 
 // You can batch queries to improve throughput
 response, err = client.Query(myindex.BatchQuery(
-    myframe.Bitmap(5),
-    myframe.Bitmap(10)))
+    myframe.Row(5),
+    myframe.Row(10)))
 if err != nil {
     fmt.Println(err)
 }
 
 for _, result := range response.Results() {
     // Act on the result
-    fmt.Println(result.Bitmap().Bits)
+    fmt.Println(result.Row().Bits)
 }
 ```
 

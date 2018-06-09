@@ -34,9 +34,7 @@ package pilosa
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"log"
 	"sort"
 	"strings"
 	"time"
@@ -89,16 +87,16 @@ func (s *Schema) diff(other *Schema) *Schema {
 			// if the index doesn't exist in the other schema, simply copy it
 			result.indexes[indexName] = index.copy()
 		} else {
-			// the index exists in the other schema; check the frames
+			// the index exists in the other schema; check the fields
 			resultIndex, _ := NewIndex(indexName)
-			for frameName, frame := range index.frames {
-				if _, ok := otherIndex.frames[frameName]; !ok {
-					// the frame doesn't exist in the other schema, copy it
-					resultIndex.frames[frameName] = frame.copy()
+			for fieldName, field := range index.fields {
+				if _, ok := otherIndex.fields[fieldName]; !ok {
+					// the field doesn't exist in the other schema, copy it
+					resultIndex.fields[fieldName] = field.copy()
 				}
 			}
 			// check whether we modified result index
-			if len(resultIndex.frames) > 0 {
+			if len(resultIndex.fields) > 0 {
 				// if so, move it to the result
 				result.indexes[indexName] = resultIndex
 			}
@@ -144,24 +142,24 @@ func (q PQLBaseQuery) Error() error {
 	return q.err
 }
 
-// PQLBitmapQuery is the return type for bitmap queries.
-type PQLBitmapQuery struct {
+// PQLRowQuery is the return type for row queries.
+type PQLRowQuery struct {
 	index *Index
 	pql   string
 	err   error
 }
 
 // Index returns the index for this query/
-func (q *PQLBitmapQuery) Index() *Index {
+func (q *PQLRowQuery) Index() *Index {
 	return q.index
 }
 
-func (q *PQLBitmapQuery) serialize() string {
+func (q *PQLRowQuery) serialize() string {
 	return q.pql
 }
 
 // Error returns the error or nil for this query.
-func (q PQLBitmapQuery) Error() error {
+func (q PQLRowQuery) Error() error {
 	return q.err
 }
 
@@ -170,12 +168,12 @@ func (q PQLBitmapQuery) Error() error {
 //
 // Usage:
 //
-// 	index, err := NewIndex("repository", nil)
-// 	stargazer, err := index.Frame("stargazer", nil)
+// 	index, err := NewIndex("repository")
+// 	stargazer, err := index.Field("stargazer")
 // 	query := repo.BatchQuery(
-// 		stargazer.Bitmap(5),
-//		stargazer.Bitmap(15),
-//		repo.Union(stargazer.Bitmap(20), stargazer.Bitmap(25)))
+// 		stargazer.Row(5),
+//		stargazer.Row(15),
+//		repo.Union(stargazer.Row(20), stargazer.Row(25)))
 type PQLBatchQuery struct {
 	index   *Index
 	queries []string
@@ -204,9 +202,9 @@ func (q *PQLBatchQuery) Add(query PQLQuery) {
 	q.queries = append(q.queries, query.serialize())
 }
 
-// NewPQLBitmapQuery creates a new PqlBitmapQuery.
-func NewPQLBitmapQuery(pql string, index *Index, err error) *PQLBitmapQuery {
-	return &PQLBitmapQuery{
+// NewPQLRowQuery creates a new PqlRowQuery.
+func NewPQLRowQuery(pql string, index *Index, err error) *PQLRowQuery {
+	return &PQLRowQuery{
 		index: index,
 		pql:   pql,
 		err:   err,
@@ -217,7 +215,7 @@ func NewPQLBitmapQuery(pql string, index *Index, err error) *PQLBitmapQuery {
 // You cannot perform cross-index queries. Column-level attributes are global to the Index.
 type Index struct {
 	name   string
-	frames map[string]*Frame
+	fields map[string]*Field
 }
 
 func (idx *Index) String() string {
@@ -231,27 +229,27 @@ func NewIndex(name string) (*Index, error) {
 	}
 	return &Index{
 		name:   name,
-		frames: map[string]*Frame{},
+		fields: map[string]*Field{},
 	}, nil
 }
 
-// Frames return a copy of the frames in this index
-func (idx *Index) Frames() map[string]*Frame {
-	result := make(map[string]*Frame)
-	for k, v := range idx.frames {
+// Fields return a copy of the fields in this index
+func (idx *Index) Fields() map[string]*Field {
+	result := make(map[string]*Field)
+	for k, v := range idx.fields {
 		result[k] = v.copy()
 	}
 	return result
 }
 
 func (idx *Index) copy() *Index {
-	frames := make(map[string]*Frame)
-	for name, f := range idx.frames {
-		frames[name] = f.copy()
+	fields := make(map[string]*Field)
+	for name, f := range idx.fields {
+		fields[name] = f.copy()
 	}
 	index := &Index{
 		name:   idx.name,
-		frames: frames,
+		fields: fields,
 	}
 	return index
 }
@@ -261,24 +259,24 @@ func (idx *Index) Name() string {
 	return idx.name
 }
 
-// Frame creates a frame struct with the specified name and defaults.
-func (idx *Index) Frame(name string, options ...interface{}) (*Frame, error) {
-	if frame, ok := idx.frames[name]; ok {
-		return frame, nil
+// Field creates a Field struct with the specified name and defaults.
+func (idx *Index) Field(name string, options ...interface{}) (*Field, error) {
+	if field, ok := idx.fields[name]; ok {
+		return field, nil
 	}
-	if err := validateFrameName(name); err != nil {
+	if err := validateFieldName(name); err != nil {
 		return nil, err
 	}
-	frameOptions := &FrameOptions{}
-	err := frameOptions.addOptions(options...)
+	fieldOptions := &FieldOptions{}
+	err := fieldOptions.addOptions(options...)
 	if err != nil {
 		return nil, err
 	}
-	frameOptions = frameOptions.withDefaults()
-	frame := newFrame(name, idx)
-	frame.options = frameOptions
-	idx.frames[name] = frame
-	return frame, nil
+	fieldOptions = fieldOptions.withDefaults()
+	field := newField(name, idx)
+	field.options = fieldOptions
+	idx.fields[name] = field
+	return field, nil
 }
 
 // BatchQuery creates a batch query with the given queries.
@@ -300,41 +298,41 @@ func (idx *Index) RawQuery(query string) *PQLBaseQuery {
 }
 
 // Union creates a Union query.
-// Union performs a logical OR on the results of each BITMAP_CALL query passed to it.
-func (idx *Index) Union(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
-	return idx.bitmapOperation("Union", bitmaps...)
+// Union performs a logical OR on the results of each ROW_CALL query passed to it.
+func (idx *Index) Union(rows ...*PQLRowQuery) *PQLRowQuery {
+	return idx.rowOperation("Union", rows...)
 }
 
 // Intersect creates an Intersect query.
-// Intersect performs a logical AND on the results of each BITMAP_CALL query passed to it.
-func (idx *Index) Intersect(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
-	if len(bitmaps) < 1 {
-		return NewPQLBitmapQuery("", idx, NewError("Intersect operation requires at least 1 bitmap"))
+// Intersect performs a logical AND on the results of each ROW_CALL query passed to it.
+func (idx *Index) Intersect(rows ...*PQLRowQuery) *PQLRowQuery {
+	if len(rows) < 1 {
+		return NewPQLRowQuery("", idx, NewError("Intersect operation requires at least 1 row"))
 	}
-	return idx.bitmapOperation("Intersect", bitmaps...)
+	return idx.rowOperation("Intersect", rows...)
 }
 
 // Difference creates an Intersect query.
-// Difference returns all of the bits from the first BITMAP_CALL argument passed to it, without the bits from each subsequent BITMAP_CALL.
-func (idx *Index) Difference(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
-	if len(bitmaps) < 1 {
-		return NewPQLBitmapQuery("", idx, NewError("Difference operation requires at least 1 bitmap"))
+// Difference returns all of the columns from the first ROW_CALL argument passed to it, without the columns from each subsequent ROW_CALL.
+func (idx *Index) Difference(rows ...*PQLRowQuery) *PQLRowQuery {
+	if len(rows) < 1 {
+		return NewPQLRowQuery("", idx, NewError("Difference operation requires at least 1 row"))
 	}
-	return idx.bitmapOperation("Difference", bitmaps...)
+	return idx.rowOperation("Difference", rows...)
 }
 
 // Xor creates an Xor query.
-func (idx *Index) Xor(bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
-	if len(bitmaps) < 2 {
-		return NewPQLBitmapQuery("", idx, NewError("Xor operation requires at least 2 bitmaps"))
+func (idx *Index) Xor(rows ...*PQLRowQuery) *PQLRowQuery {
+	if len(rows) < 2 {
+		return NewPQLRowQuery("", idx, NewError("Xor operation requires at least 2 rows"))
 	}
-	return idx.bitmapOperation("Xor", bitmaps...)
+	return idx.rowOperation("Xor", rows...)
 }
 
 // Count creates a Count query.
-// Returns the number of set bits in the BITMAP_CALL passed in.
-func (idx *Index) Count(bitmap *PQLBitmapQuery) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("Count(%s)", bitmap.serialize()), idx, nil)
+// Returns the number of set columns in the ROW_CALL passed in.
+func (idx *Index) Count(row *PQLRowQuery) *PQLBaseQuery {
+	return NewPQLBaseQuery(fmt.Sprintf("Count(%s)", row.serialize()), idx, nil)
 }
 
 // SetColumnAttrs creates a SetColumnAttrs query.
@@ -349,340 +347,284 @@ func (idx *Index) SetColumnAttrs(columnID uint64, attrs map[string]interface{}) 
 		columnID, attrsString), idx, nil)
 }
 
-func (idx *Index) bitmapOperation(name string, bitmaps ...*PQLBitmapQuery) *PQLBitmapQuery {
+func (idx *Index) rowOperation(name string, rows ...*PQLRowQuery) *PQLRowQuery {
 	var err error
-	args := make([]string, 0, len(bitmaps))
-	for _, bitmap := range bitmaps {
-		if err = bitmap.Error(); err != nil {
-			return NewPQLBitmapQuery("", idx, err)
+	args := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if err = row.Error(); err != nil {
+			return NewPQLRowQuery("", idx, err)
 		}
-		args = append(args, bitmap.serialize())
+		args = append(args, row.serialize())
 	}
-	return NewPQLBitmapQuery(fmt.Sprintf("%s(%s)", name, strings.Join(args, ", ")), idx, nil)
+	return NewPQLRowQuery(fmt.Sprintf("%s(%s)", name, strings.Join(args, ", ")), idx, nil)
 }
 
-// FrameInfo represents schema information for a frame.
-type FrameInfo struct {
+// FieldInfo represents schema information for a field.
+type FieldInfo struct {
 	Name string `json:"name"`
 }
 
-// FrameOptions contains options to customize Frame objects and frame queries.
-// *DEPRECATED* `RowLabel` field is deprecated and will be removed in a future release.
-type FrameOptions struct {
-	TimeQuantum TimeQuantum
-	CacheType   CacheType
-	CacheSize   uint
-	fields      map[string]rangeField
+// FieldOptions contains options to customize Field objects and field queries.
+type FieldOptions struct {
+	fieldType   FieldType
+	timeQuantum TimeQuantum
+	cacheType   CacheType
+	cacheSize   uint
+	min         int64
+	max         int64
 }
 
-func (fo *FrameOptions) withDefaults() (updated *FrameOptions) {
+func (fo *FieldOptions) withDefaults() (updated *FieldOptions) {
 	// copy options so the original is not updated
-	updated = &FrameOptions{}
+	updated = &FieldOptions{}
 	*updated = *fo
-	// impose defaults
-	if updated.fields == nil {
-		updated.fields = map[string]rangeField{}
-	}
 	return
 }
 
-func (fo FrameOptions) String() string {
+func (fo FieldOptions) String() string {
 	mopt := map[string]interface{}{}
-	if fo.TimeQuantum != TimeQuantumNone {
-		mopt["timeQuantum"] = string(fo.TimeQuantum)
+
+	switch fo.fieldType {
+	case FieldTypeInt:
+		mopt["min"] = fo.min
+		mopt["max"] = fo.max
+	case FieldTypeTime:
+		mopt["timeQuantum"] = string(fo.timeQuantum)
 	}
-	if fo.CacheType != CacheTypeDefault {
-		mopt["cacheType"] = string(fo.CacheType)
+
+	if fo.fieldType != FieldTypeDefault {
+		mopt["type"] = string(fo.fieldType)
 	}
-	if fo.CacheSize != 0 {
-		mopt["cacheSize"] = fo.CacheSize
+	if fo.cacheType != CacheTypeDefault {
+		mopt["cacheType"] = string(fo.cacheType)
 	}
-	if len(fo.fields) > 0 {
-		fields := make([]rangeField, 0, len(fo.fields))
-		for _, field := range fo.fields {
-			fields = append(fields, field)
-		}
-		mopt["fields"] = fields
+	if fo.cacheSize != 0 {
+		mopt["cacheSize"] = fo.cacheSize
 	}
-	return fmt.Sprintf(`{"options": %s}`, encodeMap(mopt))
+	return fmt.Sprintf(`{"options":%s}`, encodeMap(mopt))
 }
 
-// AddIntField adds an integer field to the frame options
-func (fo *FrameOptions) AddIntField(name string, min int, max int) error {
-	field, err := newIntRangeField(name, min, max)
-	if err != nil {
-		return err
-	}
-	if fo.fields == nil {
-		fo.fields = map[string]rangeField{}
-	}
-	fo.fields[name] = field
-	return nil
-}
-
-func (fo *FrameOptions) addOptions(options ...interface{}) error {
+func (fo *FieldOptions) addOptions(options ...interface{}) error {
 	for i, option := range options {
 		switch o := option.(type) {
 		case nil:
 			if i != 0 {
-				return ErrInvalidFrameOption
+				return ErrInvalidFieldOption
 			}
 			continue
-		case *FrameOptions:
+		case *FieldOptions:
 			if i != 0 {
-				return ErrInvalidFrameOption
+				return ErrInvalidFieldOption
 			}
 			*fo = *o
-		case FrameOption:
+		case FieldOption:
 			err := o(fo)
 			if err != nil {
 				return err
 			}
+		case FieldType:
+			fo.fieldType = o
 		case TimeQuantum:
-			fo.TimeQuantum = o
+			fo.timeQuantum = o
 		case CacheType:
-			fo.CacheType = o
+			fo.cacheType = o
 		default:
-			return ErrInvalidFrameOption
+			return ErrInvalidFieldOption
 		}
 	}
 	return nil
 }
 
-// FrameOption is used to pass an option to index.Frame function.
-type FrameOption func(options *FrameOptions) error
+// FieldOption is used to pass an option to index.Field function.
+type FieldOption func(options *FieldOptions) error
 
-// OptFrameCacheSize sets the cache size.
-func OptFrameCacheSize(size uint) FrameOption {
-	return func(options *FrameOptions) error {
-		options.CacheSize = size
+// OptFieldCacheSize sets the cache size.
+func OptFieldCacheSize(size uint) FieldOption {
+	return func(options *FieldOptions) error {
+		options.cacheSize = size
 		return nil
 	}
 }
 
-// CacheSize sets the cache size.
-// *DEPRECATED* Use OptFrameCacheSize instead.
-func CacheSize(size uint) FrameOption {
-	log.Println("The CacheSize frame option is deprecated and will be removed.")
-	return OptFrameCacheSize(size)
-}
-
-// OptFrameIntField adds an integer field to the frame.
-func OptFrameIntField(name string, min int, max int) FrameOption {
-	return func(options *FrameOptions) error {
-		return options.AddIntField(name, min, max)
+// OptFieldInt adds an integer field.
+func OptFieldInt(min int64, max int64) FieldOption {
+	return func(options *FieldOptions) error {
+		options.fieldType = FieldTypeInt
+		options.min = min
+		options.max = max
+		return nil
 	}
 }
 
-// IntField adds an integer field to the frame.
-// *DEPRECATED* Use OptFrameIntField instead.
-func IntField(name string, min int, max int) FrameOption {
-	log.Println("The IntField frame option is deprecated and will be removed.")
-	return OptFrameIntField(name, min, max)
+func OptFieldTime(quantum TimeQuantum) FieldOption {
+	return func(options *FieldOptions) error {
+		options.fieldType = FieldTypeTime
+		options.timeQuantum = quantum
+		return nil
+	}
 }
 
-// Frame structs are used to segment and define different functional characteristics within your entire index.
-// You can think of a Frame as a table-like data partition within your Index.
-// Row-level attributes are namespaced at the Frame level.
-type Frame struct {
+// Field structs are used to segment and define different functional characteristics within your entire index.
+// You can think of a Field as a table-like data partition within your Index.
+// Row-level attributes are namespaced at the Field level.
+type Field struct {
 	name    string
 	index   *Index
-	options *FrameOptions
-	fields  map[string]*RangeField
+	options *FieldOptions
 }
 
-func (f *Frame) String() string {
+func (f *Field) String() string {
 	return fmt.Sprintf("%#v", f)
 }
 
-func newFrame(name string, index *Index) *Frame {
-	return &Frame{
+func newField(name string, index *Index) *Field {
+	return &Field{
 		name:    name,
 		index:   index,
-		options: &FrameOptions{},
-		fields:  make(map[string]*RangeField),
+		options: &FieldOptions{},
 	}
 }
 
-// Name returns the name of the frame
-func (f *Frame) Name() string {
+// Name returns the name of the field
+func (f *Field) Name() string {
 	return f.name
 }
 
-func (f *Frame) copy() *Frame {
-	frame := newFrame(f.name, f.index)
-	*frame.options = *f.options
-	frame.fields = make(map[string]*RangeField)
-	for k, v := range f.fields {
-		frame.fields[k] = v
-	}
-	return frame
+func (f *Field) copy() *Field {
+	field := newField(f.name, f.index)
+	*field.options = *f.options
+	return field
 }
 
-// Bitmap creates a bitmap query.
-// Bitmap retrieves the indices of all the set bits in a row or column based on whether the row label or column label is given in the query.
+// Row creates a Row query.
+// Row retrieves the indices of all the set columns in a row.
 // It also retrieves any attributes set on that row or column.
-func (f *Frame) Bitmap(rowID uint64) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("Bitmap(row=%d, frame='%s')",
+func (f *Field) Row(rowID uint64) *PQLRowQuery {
+	return NewPQLRowQuery(fmt.Sprintf("Bitmap(row=%d, field='%s')",
 		rowID, f.name), f.index, nil)
 }
 
-// BitmapK creates a Bitmap query using a string key instead of an integer
+// RowK creates a Row query using a string key instead of an integer
 // rowID. This will only work against a Pilosa Enterprise server.
-func (f *Frame) BitmapK(rowKey string) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("Bitmap(row='%s', frame='%s')",
+func (f *Field) RowK(rowKey string) *PQLRowQuery {
+	return NewPQLRowQuery(fmt.Sprintf("Bitmap(row='%s', field='%s')",
 		rowKey, f.name), f.index, nil)
 }
 
 // SetBit creates a SetBit query.
-// SetBit, assigns a value of 1 to a bit in the binary matrix, thus associating the given row in the given frame with the given column.
-func (f *Frame) SetBit(rowID uint64, columnID uint64) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("SetBit(row=%d, frame='%s', col=%d)",
+// SetBit, assigns a value of 1 to a bit in the binary matrix, thus associating the given row in the given field with the given column.
+func (f *Field) SetBit(rowID uint64, columnID uint64) *PQLBaseQuery {
+	return NewPQLBaseQuery(fmt.Sprintf("SetBit(row=%d, field='%s', col=%d)",
 		rowID, f.name, columnID), f.index, nil)
 }
 
 // SetBitK creates a SetBit query using string row and column keys. This will
 // only work against a Pilosa Enterprise server.
-func (f *Frame) SetBitK(rowKey string, columnKey string) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("SetBit(row='%s', frame='%s', col='%s')",
+func (f *Field) SetBitK(rowKey string, columnKey string) *PQLBaseQuery {
+	return NewPQLBaseQuery(fmt.Sprintf("SetBit(row='%s', field='%s', col='%s')",
 		rowKey, f.name, columnKey), f.index, nil)
 }
 
 // SetBitTimestamp creates a SetBit query with timestamp.
 // SetBit, assigns a value of 1 to a bit in the binary matrix,
-// thus associating the given row in the given frame with the given column.
-func (f *Frame) SetBitTimestamp(rowID uint64, columnID uint64, timestamp time.Time) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("SetBit(row=%d, frame='%s', col=%d, timestamp='%s')",
+// thus associating the given row in the given field with the given column.
+func (f *Field) SetBitTimestamp(rowID uint64, columnID uint64, timestamp time.Time) *PQLBaseQuery {
+	return NewPQLBaseQuery(fmt.Sprintf("SetBit(row=%d, field='%s', col=%d, timestamp='%s')",
 		rowID, f.name, columnID, timestamp.Format(timeFormat)),
 		f.index, nil)
 }
 
 // SetBitTimestampK creates a SetBitK query with timestamp.
-func (f *Frame) SetBitTimestampK(rowKey string, columnKey string, timestamp time.Time) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("SetBit(row='%s', frame='%s', col='%s', timestamp='%s')",
+func (f *Field) SetBitTimestampK(rowKey string, columnKey string, timestamp time.Time) *PQLBaseQuery {
+	return NewPQLBaseQuery(fmt.Sprintf("SetBit(row='%s', field='%s', col='%s', timestamp='%s')",
 		rowKey, f.name, columnKey, timestamp.Format(timeFormat)),
 		f.index, nil)
 }
 
 // ClearBit creates a ClearBit query.
-// ClearBit, assigns a value of 0 to a bit in the binary matrix, thus disassociating the given row in the given frame from the given column.
-func (f *Frame) ClearBit(rowID uint64, columnID uint64) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("ClearBit(row=%d, frame='%s', col=%d)",
+// ClearBit, assigns a value of 0 to a bit in the binary matrix, thus disassociating the given row in the given field from the given column.
+func (f *Field) ClearBit(rowID uint64, columnID uint64) *PQLBaseQuery {
+	return NewPQLBaseQuery(fmt.Sprintf("ClearBit(row=%d, field='%s', col=%d)",
 		rowID, f.name, columnID), f.index, nil)
 }
 
 // ClearBitK creates a ClearBit query using string row and column keys. This
 // will only work against a Pilosa Enterprise server.
-func (f *Frame) ClearBitK(rowKey string, columnKey string) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("ClearBit(row='%s', frame='%s', col='%s')",
+func (f *Field) ClearBitK(rowKey string, columnKey string) *PQLBaseQuery {
+	return NewPQLBaseQuery(fmt.Sprintf("ClearBit(row='%s', field='%s', col='%s')",
 		rowKey, f.name, columnKey), f.index, nil)
 }
 
 // TopN creates a TopN query with the given item count.
-// Returns the id and count of the top n bitmaps (by count of bits) in the frame.
-func (f *Frame) TopN(n uint64) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("TopN(frame='%s', n=%d)", f.name, n), f.index, nil)
+// Returns the id and count of the top n rows (by count of columns) in the field.
+func (f *Field) TopN(n uint64) *PQLRowQuery {
+	return NewPQLRowQuery(fmt.Sprintf("TopN(field='%s', n=%d)", f.name, n), f.index, nil)
 }
 
-// BitmapTopN creates a TopN query with the given item count and bitmap.
-// This variant supports customizing the bitmap query.
-func (f *Frame) BitmapTopN(n uint64, bitmap *PQLBitmapQuery) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d)",
-		bitmap.serialize(), f.name, n), f.index, nil)
+// RowTopN creates a TopN query with the given item count and row.
+// This variant supports customizing the row query.
+func (f *Field) RowTopN(n uint64, row *PQLRowQuery) *PQLRowQuery {
+	return NewPQLRowQuery(fmt.Sprintf("TopN(%s, field='%s', n=%d)",
+		row.serialize(), f.name, n), f.index, nil)
 }
 
-// FilterFieldTopN creates a TopN query with the given item count, bitmap, field and the filter for that field
-// The field and filters arguments work together to only return Bitmaps which have the attribute specified by field with one of the values specified in filters.
-func (f *Frame) FilterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, values ...interface{}) *PQLBitmapQuery {
-	return f.filterFieldTopN(n, bitmap, field, values...)
+// FilterFieldTopN creates a TopN query with the given item count, row, field and the filter for that field
+// The field and filters arguments work together to only return Rows which have the attribute specified by field with one of the values specified in filters.
+func (f *Field) FilterFieldTopN(n uint64, row *PQLRowQuery, field string, values ...interface{}) *PQLRowQuery {
+	return f.filterFieldTopN(n, row, field, values...)
 }
 
-func (f *Frame) filterFieldTopN(n uint64, bitmap *PQLBitmapQuery, field string, values ...interface{}) *PQLBitmapQuery {
+func (f *Field) filterFieldTopN(n uint64, row *PQLRowQuery, field string, values ...interface{}) *PQLRowQuery {
 	if err := validateLabel(field); err != nil {
-		return NewPQLBitmapQuery("", f.index, err)
+		return NewPQLRowQuery("", f.index, err)
 	}
 	b, err := json.Marshal(values)
 	if err != nil {
-		return NewPQLBitmapQuery("", f.index, err)
+		return NewPQLRowQuery("", f.index, err)
 	}
-	if bitmap == nil {
-		return NewPQLBitmapQuery(fmt.Sprintf("TopN(frame='%s', n=%d, field='%s', filters=%s)",
+	if row == nil {
+		return NewPQLRowQuery(fmt.Sprintf("TopN(field='%s', n=%d, field='%s', filters=%s)",
 			f.name, n, field, string(b)), f.index, nil)
 	}
-	return NewPQLBitmapQuery(fmt.Sprintf("TopN(%s, frame='%s', n=%d, field='%s', filters=%s)",
-		bitmap.serialize(), f.name, n, field, string(b)), f.index, nil)
+	return NewPQLRowQuery(fmt.Sprintf("TopN(%s, field='%s', n=%d, field='%s', filters=%s)",
+		row.serialize(), f.name, n, field, string(b)), f.index, nil)
 }
 
 // Range creates a Range query.
-// Similar to Bitmap, but only returns bits which were set with timestamps between the given start and end timestamps.
-func (f *Frame) Range(rowID uint64, start time.Time, end time.Time) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("Range(row=%d, frame='%s', start='%s', end='%s')",
+// Similar to Row, but only returns columns which were set with timestamps between the given start and end timestamps.
+func (f *Field) Range(rowID uint64, start time.Time, end time.Time) *PQLRowQuery {
+	return NewPQLRowQuery(fmt.Sprintf("Range(row=%d, field='%s', start='%s', end='%s')",
 		rowID, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
 }
 
 // RangeK creates a Range query using a string row key. This will only work
 // against a Pilosa Enterprise server.
-func (f *Frame) RangeK(rowKey string, start time.Time, end time.Time) *PQLBitmapQuery {
-	return NewPQLBitmapQuery(fmt.Sprintf("Range(row='%s', frame='%s', start='%s', end='%s')",
+func (f *Field) RangeK(rowKey string, start time.Time, end time.Time) *PQLRowQuery {
+	return NewPQLRowQuery(fmt.Sprintf("Range(row='%s', field='%s', start='%s', end='%s')",
 		rowKey, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
 }
 
 // SetRowAttrs creates a SetRowAttrs query.
-// SetRowAttrs associates arbitrary key/value pairs with a row in a frame.
+// SetRowAttrs associates arbitrary key/value pairs with a row in a field.
 // Following types are accepted: integer, float, string and boolean types.
-func (f *Frame) SetRowAttrs(rowID uint64, attrs map[string]interface{}) *PQLBaseQuery {
+func (f *Field) SetRowAttrs(rowID uint64, attrs map[string]interface{}) *PQLBaseQuery {
 	attrsString, err := createAttributesString(attrs)
 	if err != nil {
 		return NewPQLBaseQuery("", f.index, err)
 	}
-	return NewPQLBaseQuery(fmt.Sprintf("SetRowAttrs(row=%d, frame='%s', %s)",
+	return NewPQLBaseQuery(fmt.Sprintf("SetRowAttrs(row=%d, field='%s', %s)",
 		rowID, f.name, attrsString), f.index, nil)
 }
 
 // SetRowAttrsK creates a SetRowAttrs query using a string row key. This will
 // only work against a Pilosa Enterprise server.
-func (f *Frame) SetRowAttrsK(rowKey string, attrs map[string]interface{}) *PQLBaseQuery {
+func (f *Field) SetRowAttrsK(rowKey string, attrs map[string]interface{}) *PQLBaseQuery {
 	attrsString, err := createAttributesString(attrs)
 	if err != nil {
 		return NewPQLBaseQuery("", f.index, err)
 	}
-	return NewPQLBaseQuery(fmt.Sprintf("SetRowAttrs(row='%s', frame='%s', %s)",
+	return NewPQLBaseQuery(fmt.Sprintf("SetRowAttrs(row='%s', field='%s', %s)",
 		rowKey, f.name, attrsString), f.index, nil)
-}
-
-// Sum creates a Sum query.
-// The corresponding frame should include the field in its options.
-// *DEPRECATED* Use `field.Sum(bitmap)` instead.
-func (f *Frame) Sum(bitmap *PQLBitmapQuery, field string) *PQLBaseQuery {
-	return f.Field(field).Sum(bitmap)
-}
-
-// SetIntFieldValue creates a SetFieldValue query.
-// *DEPRECATED* Use `frame.SetIntValue(columnID, value)` instead.
-func (f *Frame) SetIntFieldValue(columnID uint64, field string, value int) *PQLBaseQuery {
-	return f.Field(field).SetIntValue(columnID, value)
-}
-
-// Field returns a field to operate on.
-func (f *Frame) Field(name string) *RangeField {
-	field := f.fields[name]
-	if field == nil {
-		field = newRangeField(f, name)
-		// do not cache fields with error
-		if field.err == nil {
-			f.fields[name] = field
-		}
-	}
-	return field
-}
-
-// Fields return a copy of the fields in this frame
-func (f *Frame) Fields() map[string]*RangeField {
-	result := make(map[string]*RangeField)
-	for k, v := range f.fields {
-		result[k] = v
-	}
-	return result
 }
 
 func createAttributesString(attrs map[string]interface{}) (string, error) {
@@ -702,7 +644,17 @@ func createAttributesString(attrs map[string]interface{}) (string, error) {
 	return strings.Join(attrsList, ", "), nil
 }
 
-// TimeQuantum type represents valid time quantum values for frames having support for that.
+// FieldType
+type FieldType string
+
+const (
+	FieldTypeDefault FieldType = ""
+	FieldTypeSet     FieldType = "set"
+	FieldTypeInt     FieldType = "int"
+	FieldTypeTime    FieldType = "time"
+)
+
+// TimeQuantum type represents valid time quantum values time fields.
 type TimeQuantum string
 
 // TimeQuantum constants
@@ -720,7 +672,7 @@ const (
 	TimeQuantumYearMonthDayHour TimeQuantum = "YMDH"
 )
 
-// CacheType represents cache type for a frame
+// CacheType represents cache type for a field
 type CacheType string
 
 // CacheType constants
@@ -728,130 +680,91 @@ const (
 	CacheTypeDefault CacheType = ""
 	CacheTypeLRU     CacheType = "lru"
 	CacheTypeRanked  CacheType = "ranked"
+	CacheTypeNone    CacheType = "none"
 )
 
-// rangeField represents a single field.
-// TODO: rename.
-type rangeField map[string]interface{}
-
-func newIntRangeField(name string, min int, max int) (rangeField, error) {
-	err := validateLabel(name)
-	if err != nil {
-		return nil, err
-	}
-	if max <= min {
-		return nil, errors.New("Max should be greater than min for int fields")
-	}
-	return map[string]interface{}{
-		"name": name,
-		"type": "int",
-		"min":  min,
-		"max":  max,
-	}, nil
-}
-
-// RangeField enables writing queries for range encoded fields.
-type RangeField struct {
-	frame *Frame
-	name  string
-	err   error
-}
-
-func newRangeField(frame *Frame, name string) *RangeField {
-	err := validateLabel(name)
-	return &RangeField{
-		frame: frame,
-		name:  name,
-		err:   err,
-	}
-}
-
 // LT creates a less than query.
-func (field *RangeField) LT(n int) *PQLBitmapQuery {
+func (field *Field) LT(n int) *PQLRowQuery {
 	return field.binaryOperation("<", n)
 }
 
 // LTE creates a less than or equal query.
-func (field *RangeField) LTE(n int) *PQLBitmapQuery {
+func (field *Field) LTE(n int) *PQLRowQuery {
 	return field.binaryOperation("<=", n)
 }
 
 // GT creates a greater than query.
-func (field *RangeField) GT(n int) *PQLBitmapQuery {
+func (field *Field) GT(n int) *PQLRowQuery {
 	return field.binaryOperation(">", n)
 }
 
 // GTE creates a greater than or equal query.
-func (field *RangeField) GTE(n int) *PQLBitmapQuery {
+func (field *Field) GTE(n int) *PQLRowQuery {
 	return field.binaryOperation(">=", n)
 }
 
 // Equals creates an equals query.
-func (field *RangeField) Equals(n int) *PQLBitmapQuery {
+func (field *Field) Equals(n int) *PQLRowQuery {
 	return field.binaryOperation("==", n)
 }
 
 // NotEquals creates a not equals query.
-func (field *RangeField) NotEquals(n int) *PQLBitmapQuery {
+func (field *Field) NotEquals(n int) *PQLRowQuery {
 	return field.binaryOperation("!=", n)
 }
 
 // NotNull creates a not equal to null query.
-func (field *RangeField) NotNull() *PQLBitmapQuery {
-	qry := fmt.Sprintf("Range(frame='%s', %s != null)", field.frame.name, field.name)
-	return NewPQLBitmapQuery(qry, field.frame.index, field.err)
+func (field *Field) NotNull() *PQLRowQuery {
+	qry := fmt.Sprintf("Range(%s != null)", field.name)
+	return NewPQLRowQuery(qry, field.index, nil)
 }
 
 // Between creates a between query.
-func (field *RangeField) Between(a int, b int) *PQLBitmapQuery {
-	qry := fmt.Sprintf("Range(frame='%s', %s >< [%d,%d])", field.frame.name, field.name, a, b)
-	return NewPQLBitmapQuery(qry, field.frame.index, field.err)
+func (field *Field) Between(a int, b int) *PQLRowQuery {
+	qry := fmt.Sprintf("Range(%s >< [%d,%d])", field.name, a, b)
+	return NewPQLRowQuery(qry, field.index, nil)
 }
 
 // Sum creates a sum query.
-func (field *RangeField) Sum(bitmap *PQLBitmapQuery) *PQLBaseQuery {
-	return field.valQuery("Sum", bitmap)
+func (field *Field) Sum(row *PQLRowQuery) *PQLBaseQuery {
+	return field.valQuery("Sum", row)
 }
 
 // Min creates a min query.
-func (field *RangeField) Min(bitmap *PQLBitmapQuery) *PQLBaseQuery {
-	return field.valQuery("Min", bitmap)
+func (field *Field) Min(row *PQLRowQuery) *PQLBaseQuery {
+	return field.valQuery("Min", row)
 }
 
 // Max creates a min query.
-func (field *RangeField) Max(bitmap *PQLBitmapQuery) *PQLBaseQuery {
-	return field.valQuery("Max", bitmap)
+func (field *Field) Max(row *PQLRowQuery) *PQLBaseQuery {
+	return field.valQuery("Max", row)
 }
 
 // SetIntValue creates a SetValue query.
-func (field *RangeField) SetIntValue(columnID uint64, value int) *PQLBaseQuery {
-	index := field.frame.index
-	qry := fmt.Sprintf("SetFieldValue(frame='%s', col=%d, %s=%d)",
-		field.frame.name, columnID, field.name, value)
-	return NewPQLBaseQuery(qry, index, nil)
+func (field *Field) SetIntValue(columnID uint64, value int) *PQLBaseQuery {
+	qry := fmt.Sprintf("SetValue(col=%d, %s=%d)", columnID, field.name, value)
+	return NewPQLBaseQuery(qry, field.index, nil)
 }
 
 // SetIntValueK creates a SetValue query using a string column key. This will
 // only work against a Pilosa Enterprise server.
-func (field *RangeField) SetIntValueK(columnKey string, value int) *PQLBaseQuery {
-	index := field.frame.index
-	qry := fmt.Sprintf("SetFieldValue(frame='%s', col='%s', %s=%d)",
-		field.frame.name, columnKey, field.name, value)
-	return NewPQLBaseQuery(qry, index, nil)
+func (field *Field) SetIntValueK(columnKey string, value int) *PQLBaseQuery {
+	qry := fmt.Sprintf("SetValue(col='%s', %s=%d)", columnKey, field.name, value)
+	return NewPQLBaseQuery(qry, field.index, nil)
 }
 
-func (field *RangeField) binaryOperation(op string, n int) *PQLBitmapQuery {
-	qry := fmt.Sprintf("Range(frame='%s', %s %s %d)", field.frame.name, field.name, op, n)
-	return NewPQLBitmapQuery(qry, field.frame.index, field.err)
+func (field *Field) binaryOperation(op string, n int) *PQLRowQuery {
+	qry := fmt.Sprintf("Range(%s %s %d)", field.name, op, n)
+	return NewPQLRowQuery(qry, field.index, nil)
 }
 
-func (field *RangeField) valQuery(op string, bitmap *PQLBitmapQuery) *PQLBaseQuery {
-	bitmapStr := ""
-	if bitmap != nil {
-		bitmapStr = fmt.Sprintf("%s, ", bitmap.serialize())
+func (field *Field) valQuery(op string, row *PQLRowQuery) *PQLBaseQuery {
+	rowStr := ""
+	if row != nil {
+		rowStr = fmt.Sprintf("%s, ", row.serialize())
 	}
-	qry := fmt.Sprintf("%s(%sframe='%s', field='%s')", op, bitmapStr, field.frame.name, field.name)
-	return NewPQLBaseQuery(qry, field.frame.index, field.err)
+	qry := fmt.Sprintf("%s(%sfield='%s')", op, rowStr, field.name)
+	return NewPQLBaseQuery(qry, field.index, nil)
 }
 
 func encodeMap(m map[string]interface{}) string {

@@ -222,9 +222,9 @@ func TestFieldToString(t *testing.T) {
 func TestFieldSetType(t *testing.T) {
 	schema1 := NewSchema()
 	index, _ := schema1.Index("test-index")
-	field, _ := index.Field("test-field", FieldTypeSet)
-	target := `{"options":{"type":"set"}}`
-	if target != field.options.String() {
+	field, _ := index.Field("test-field", OptFieldSet(CacheTypeLRU, 1000))
+	target := `{"options":{"type":"set","cacheType":"lru","cacheSize":1000}}`
+	if sortedString(target) != sortedString(field.options.String()) {
 		t.Fatalf("%s != %s", target, field.options.String())
 	}
 }
@@ -626,6 +626,14 @@ func TestInvalidFieldOption(t *testing.T) {
 		t.Fatalf("should have failed")
 	}
 	_, err = sampleIndex.Field("invalid-field-opt", FieldOptionErr(0))
+	if err == nil {
+		t.Fatalf("should have failed")
+	}
+	_, err = sampleIndex.Field("invalid-field-opt", OptFieldInt(10, 9))
+	if err == nil {
+		t.Fatalf("should have failed")
+	}
+	_, err = sampleIndex.Field("invalid-field-opt", OptFieldSet(CacheTypeDefault, -1))
 	if err == nil {
 		t.Fatalf("should have failed")
 	}

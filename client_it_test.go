@@ -466,8 +466,7 @@ func TestSchema(t *testing.T) {
 		t.Fatalf("There should be at least 1 index in the schema")
 	}
 	f, err := index.Field("schema-test-field",
-		CacheTypeLRU,
-		OptFieldCacheSize(9999),
+		OptFieldSet(CacheTypeLRU, 9999),
 	)
 	err = client.EnsureField(f)
 	if err != nil {

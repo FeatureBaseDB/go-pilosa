@@ -369,7 +369,7 @@ type FieldOptions struct {
 	fieldType   FieldType
 	timeQuantum TimeQuantum
 	cacheType   CacheType
-	cacheSize   uint
+	cacheSize   int
 	min         int64
 	max         int64
 }
@@ -385,6 +385,13 @@ func (fo FieldOptions) String() string {
 	mopt := map[string]interface{}{}
 
 	switch fo.fieldType {
+	case FieldTypeSet:
+		if fo.cacheType != CacheTypeDefault {
+			mopt["cacheType"] = string(fo.cacheType)
+		}
+		if fo.cacheSize > 0 {
+			mopt["cacheSize"] = fo.cacheSize
+		}
 	case FieldTypeInt:
 		mopt["min"] = fo.min
 		mopt["max"] = fo.max
@@ -394,12 +401,6 @@ func (fo FieldOptions) String() string {
 
 	if fo.fieldType != FieldTypeDefault {
 		mopt["type"] = string(fo.fieldType)
-	}
-	if fo.cacheType != CacheTypeDefault {
-		mopt["cacheType"] = string(fo.cacheType)
-	}
-	if fo.cacheSize != 0 {
-		mopt["cacheSize"] = fo.cacheSize
 	}
 	return fmt.Sprintf(`{"options":%s}`, encodeMap(mopt))
 }
@@ -422,12 +423,8 @@ func (fo *FieldOptions) addOptions(options ...interface{}) error {
 			if err != nil {
 				return err
 			}
-		case FieldType:
-			fo.fieldType = o
 		case TimeQuantum:
 			fo.timeQuantum = o
-		case CacheType:
-			fo.cacheType = o
 		default:
 			return ErrInvalidFieldOption
 		}
@@ -438,10 +435,17 @@ func (fo *FieldOptions) addOptions(options ...interface{}) error {
 // FieldOption is used to pass an option to index.Field function.
 type FieldOption func(options *FieldOptions) error
 
-// OptFieldCacheSize sets the cache size.
-func OptFieldCacheSize(size uint) FieldOption {
+// OptFieldSet adds a set field.
+// Specify CacheTypeDefault for the default cache type.
+// Specify CacheSizeDefault for the default cache size.
+func OptFieldSet(cacheType CacheType, cacheSize int) FieldOption {
 	return func(options *FieldOptions) error {
-		options.cacheSize = size
+		if cacheSize < 0 {
+			return ErrInvalidFieldOption
+		}
+		options.fieldType = FieldTypeSet
+		options.cacheType = cacheType
+		options.cacheSize = cacheSize
 		return nil
 	}
 }
@@ -450,6 +454,9 @@ func OptFieldCacheSize(size uint) FieldOption {
 func OptFieldInt(min int64, max int64) FieldOption {
 	return func(options *FieldOptions) error {
 		options.fieldType = FieldTypeInt
+		if max < min {
+			return ErrInvalidFieldOption
+		}
 		options.min = min
 		options.max = max
 		return nil
@@ -682,6 +689,9 @@ const (
 	CacheTypeRanked  CacheType = "ranked"
 	CacheTypeNone    CacheType = "none"
 )
+
+// CacheSizeDefault is the default cache size
+const CacheSizeDefault = 0
 
 // LT creates a less than query.
 func (field *Field) LT(n int) *PQLRowQuery {

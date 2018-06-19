@@ -293,7 +293,7 @@ func (c *Client) Schema() (*Schema, error) {
 		for _, fieldInfo := range indexInfo.Fields {
 			fieldOptions := &FieldOptions{
 				fieldType:   fieldInfo.Options.FieldType,
-				cacheSize:   fieldInfo.Options.CacheSize,
+				cacheSize:   int(fieldInfo.Options.CacheSize),
 				cacheType:   CacheType(fieldInfo.Options.CacheType),
 				timeQuantum: TimeQuantum(fieldInfo.Options.TimeQuantum),
 				min:         fieldInfo.Options.Min,

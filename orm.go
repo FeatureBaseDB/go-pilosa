@@ -435,9 +435,9 @@ func (fo *FieldOptions) addOptions(options ...interface{}) error {
 // FieldOption is used to pass an option to index.Field function.
 type FieldOption func(options *FieldOptions) error
 
-// OptFieldInt adds a set field.
+// OptFieldSet adds a set field.
 // Specify CacheTypeDefault for the default cache type.
-// Specify 0 for the default cache size.
+// Specify CacheSizeDefault for the default cache size.
 func OptFieldSet(cacheType CacheType, cacheSize int) FieldOption {
 	return func(options *FieldOptions) error {
 		if cacheSize < 0 {
@@ -689,6 +689,9 @@ const (
 	CacheTypeRanked  CacheType = "ranked"
 	CacheTypeNone    CacheType = "none"
 )
+
+// CacheSizeDefault is the default cache size
+const CacheSizeDefault = 0
 
 // LT creates a less than query.
 func (field *Field) LT(n int) *PQLRowQuery {

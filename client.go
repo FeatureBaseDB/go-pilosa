@@ -311,25 +311,17 @@ func (c *Client) Schema() (*Schema, error) {
 // ImportField imports records from the given iterator.
 func (c *Client) ImportField(field *Field, iterator RecordIterator, options ...ImportOption) error {
 	importOptions := &ImportOptions{}
-	importRecordsFunction(c.importBits)(importOptions)
+	if field.options != nil && field.options.fieldType == FieldTypeInt {
+		importRecordsFunction(c.importValues)(importOptions)
+	} else {
+		importRecordsFunction(c.importBits)(importOptions)
+	}
 	for _, option := range options {
 		if err := option(importOptions); err != nil {
 			return err
 		}
 	}
 	return c.importManager.Run(field, iterator, importOptions.withDefaults())
-}
-
-func (c *Client) ImportIntField(field *Field, iterator RecordIterator, options ...ImportOption) error {
-	// c.importValues is the default importer for this function
-	irf := func(indexName string, fieldName string, slice uint64, vals []Record) error {
-		return c.importValues(indexName, fieldName, slice, vals)
-	}
-	newOptions := []ImportOption{importRecordsFunction(irf)}
-	for _, opt := range options {
-		newOptions = append(newOptions, opt)
-	}
-	return c.ImportField(field, iterator, newOptions...)
 }
 
 func (c *Client) importBits(indexName string, fieldName string, slice uint64, records []Record) error {

@@ -839,7 +839,7 @@ func TestValueCSVImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportIntField(field, iterator, OptImportBatchSize(10))
+	err = client.ImportField(field, iterator, OptImportBatchSize(10))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1118,12 +1118,12 @@ func TestImportBitIteratorError(t *testing.T) {
 
 func TestImportValueIteratorError(t *testing.T) {
 	client := getClient()
-	field, err := index.Field("not-important", nil)
+	field, err := index.Field("not-important", OptFieldInt(0, 100))
 	if err != nil {
 		t.Fatal(err)
 	}
 	iterator := NewCSVValueIterator(&BrokenReader{})
-	err = client.ImportIntField(field, iterator, OptImportBatchSize(100))
+	err = client.ImportField(field, iterator, OptImportBatchSize(100))
 	if err == nil {
 		t.Fatalf("import value field should fail with broken reader")
 	}
@@ -1155,7 +1155,7 @@ func TestImportFieldFailsIfImportBitsFails(t *testing.T) {
 	defer server.Close()
 	client, _ := NewClient(server.URL)
 	iterator := NewCSVBitIterator(strings.NewReader("10,7"))
-	field, err := index.Field("importfield", nil)
+	field, err := index.Field("importfield1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1171,13 +1171,13 @@ func TestImportIntFieldFailsIfImportValuesFails(t *testing.T) {
 	defer server.Close()
 	client, _ := NewClient(server.URL)
 	iterator := NewCSVValueIterator(strings.NewReader("10,7"))
-	field, err := index.Field("importfield", nil)
+	field, err := index.Field("import-values-field", OptFieldInt(0, 100))
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportIntField(field, iterator, OptImportBatchSize(10))
+	err = client.ImportField(field, iterator, OptImportBatchSize(10))
 	if err == nil {
-		t.Fatalf("ImportIntField should fail if importValues fails")
+		t.Fatalf("ImportField should fail if importValues fails")
 	}
 }
 
@@ -1477,7 +1477,7 @@ func TestClientRace(t *testing.T) {
 
 func TestImportFieldWithoutImportFunFails(t *testing.T) {
 	client := DefaultClient()
-	err := client.ImportField(nil, nil, importRecordsFunction(nil))
+	err := client.ImportField(&Field{}, nil, importRecordsFunction(nil))
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}

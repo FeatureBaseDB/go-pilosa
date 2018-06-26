@@ -997,6 +997,33 @@ func TestFetchStatus(t *testing.T) {
 	}
 }
 
+func TestRangeQuery(t *testing.T) {
+	client := getClient()
+	field, _ := index.Field("test-rangefield", OptFieldTime(TimeQuantumMonthDayHour))
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.Query(index.BatchQuery(
+		field.SetTimestamp(10, 100, time.Date(2017, time.January, 1, 0, 0, 0, 0, time.UTC)),
+		field.SetTimestamp(10, 100, time.Date(2018, time.January, 1, 0, 0, 0, 0, time.UTC)),
+		field.SetTimestamp(10, 100, time.Date(2019, time.January, 1, 0, 0, 0, 0, time.UTC)),
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Date(2017, time.January, 5, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2018, time.January, 5, 0, 0, 0, 0, time.UTC)
+	resp, err := client.Query(field.Range(10, start, end))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := []uint64{100}
+	if !reflect.DeepEqual(resp.Result().Row().Columns, target) {
+		t.Fatalf("%v != %v", target, resp.Result().Row().Columns)
+	}
+}
+
 func TestRangeField(t *testing.T) {
 	client := getClient()
 	field, _ := index.Field("rangefield", OptFieldInt(10, 20))

@@ -536,7 +536,7 @@ func (f *Field) SetK(rowKey string, columnKey string) *PQLBaseQuery {
 // Set, assigns a value of 1 to a column in the binary matrix,
 // thus associating the given row in the given field with the given column.
 func (f *Field) SetTimestamp(rowID uint64, columnID uint64, timestamp time.Time) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("Set(%d,%s=%d,timestamp='%s')",
+	return NewPQLBaseQuery(fmt.Sprintf("Set(%d,%s=%d,%s)",
 		columnID, f.name, rowID, timestamp.Format(timeFormat)),
 		f.index, nil)
 }
@@ -600,15 +600,15 @@ func (f *Field) filterFieldTopN(n uint64, row *PQLRowQuery, field string, values
 // Range creates a Range query.
 // Similar to Row, but only returns columns which were set with timestamps between the given start and end timestamps.
 func (f *Field) Range(rowID uint64, start time.Time, end time.Time) *PQLRowQuery {
-	return NewPQLRowQuery(fmt.Sprintf("Range(row=%d, field='%s', start='%s', end='%s')",
-		rowID, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
+	return NewPQLRowQuery(fmt.Sprintf("Range(%s=%d,%s,%s)",
+		f.name, rowID, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
 }
 
 // RangeK creates a Range query using a string row key. This will only work
 // against a Pilosa Enterprise server.
 func (f *Field) RangeK(rowKey string, start time.Time, end time.Time) *PQLRowQuery {
-	return NewPQLRowQuery(fmt.Sprintf("Range(row='%s', field='%s', start='%s', end='%s')",
-		rowKey, f.name, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
+	return NewPQLRowQuery(fmt.Sprintf("Range(%s='%s',%s,%s)",
+		f.name, rowKey, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
 }
 
 // SetRowAttrs creates a SetRowAttrs query.

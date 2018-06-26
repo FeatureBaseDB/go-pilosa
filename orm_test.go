@@ -256,7 +256,7 @@ func TestSetK(t *testing.T) {
 func TestTimestamp(t *testing.T) {
 	timestamp := time.Date(2017, time.April, 24, 12, 14, 0, 0, time.UTC)
 	comparePQL(t,
-		"Set(20,collaboration=10,timestamp='2017-04-24T12:14')",
+		"Set(20,collaboration=10,2017-04-24T12:14)",
 		collabField.SetTimestamp(10, 20, timestamp))
 }
 
@@ -569,7 +569,7 @@ func TestRange(t *testing.T) {
 	start := time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2000, time.February, 2, 3, 4, 0, 0, time.UTC)
 	comparePQL(t,
-		"Range(row=10, field='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
+		"Range(collaboration=10,1970-01-01T00:00,2000-02-02T03:04)",
 		collabField.Range(10, start, end))
 }
 
@@ -577,7 +577,7 @@ func TestRangeK(t *testing.T) {
 	start := time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2000, time.February, 2, 3, 4, 0, 0, time.UTC)
 	comparePQL(t,
-		"Range(row='foo', field='collaboration', start='1970-01-01T00:00', end='2000-02-02T03:04')",
+		"Range(collaboration='foo',1970-01-01T00:00,2000-02-02T03:04)",
 		collabField.RangeK("foo", start, end))
 }
 

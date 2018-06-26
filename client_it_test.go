@@ -121,13 +121,13 @@ func TestQueryWithSlices(t *testing.T) {
 	Reset()
 	const sliceWidth = 1048576
 	client := getClient()
-	if _, err := client.Query(testField.SetBit(1, 100)); err != nil {
+	if _, err := client.Query(testField.Set(1, 100)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := client.Query(testField.SetBit(1, sliceWidth)); err != nil {
+	if _, err := client.Query(testField.Set(1, sliceWidth)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := client.Query(testField.SetBit(1, sliceWidth*3)); err != nil {
+	if _, err := client.Query(testField.Set(1, sliceWidth*3)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -149,7 +149,7 @@ func TestQueryWithColumns(t *testing.T) {
 		"registered": true,
 		"height":     1.83,
 	}
-	_, err := client.Query(testField.SetBit(1, 100), nil)
+	_, err := client.Query(testField.Set(1, 100), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,7 @@ func TestSetRowAttrs(t *testing.T) {
 		"registered": true,
 		"height":     1.83,
 	}
-	_, err := client.Query(testField.SetBit(1, 100), nil)
+	_, err := client.Query(testField.Set(1, 100), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,9 +217,9 @@ func TestOrmCount(t *testing.T) {
 		t.Fatal(err)
 	}
 	qry := index.BatchQuery(
-		countField.SetBit(10, 20),
-		countField.SetBit(10, 21),
-		countField.SetBit(15, 25),
+		countField.Set(10, 20),
+		countField.Set(10, 21),
+		countField.Set(15, 25),
 	)
 	client.Query(qry, nil)
 	response, err := client.Query(index.Count(countField.Row(10)), nil)
@@ -242,10 +242,10 @@ func TestIntersectReturns(t *testing.T) {
 		t.Fatal(err)
 	}
 	qry1 := index.BatchQuery(
-		field.SetBit(2, 10),
-		field.SetBit(2, 15),
-		field.SetBit(3, 10),
-		field.SetBit(3, 20),
+		field.Set(2, 10),
+		field.Set(2, 15),
+		field.Set(3, 10),
+		field.Set(3, 20),
 	)
 	client.Query(qry1, nil)
 	qry2 := index.Intersect(field.Row(2), field.Row(3))
@@ -272,11 +272,11 @@ func TestTopNReturns(t *testing.T) {
 		t.Fatal(err)
 	}
 	qry := index.BatchQuery(
-		field.SetBit(10, 5),
-		field.SetBit(10, 10),
-		field.SetBit(10, 15),
-		field.SetBit(20, 5),
-		field.SetBit(30, 5),
+		field.Set(10, 5),
+		field.Set(10, 10),
+		field.Set(10, 15),
+		field.Set(20, 5),
+		field.Set(30, 5),
 	)
 	client.Query(qry, nil)
 	// XXX: The following is required to make this test pass. See: https://github.com/pilosa/pilosa/issues/625
@@ -832,8 +832,8 @@ func TestValueCSVImport(t *testing.T) {
 		t.Fatal(err)
 	}
 	bq := index.BatchQuery(
-		field.SetBit(1, 10),
-		field.SetBit(1, 7),
+		field.Set(1, 10),
+		field.Set(1, 7),
 	)
 	response, err := client.Query(bq)
 	if err != nil {
@@ -872,9 +872,9 @@ func TestCSVExport(t *testing.T) {
 	}
 	client.EnsureField(field)
 	_, err = client.Query(index.BatchQuery(
-		field.SetBit(1, 1),
-		field.SetBit(1, 10),
-		field.SetBit(2, 1048577),
+		field.Set(1, 1),
+		field.Set(1, 10),
+		field.Set(2, 1048577),
 	), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -1006,8 +1006,8 @@ func TestRangeField(t *testing.T) {
 	}
 
 	_, err = client.Query(index.BatchQuery(
-		field.SetBit(1, 10),
-		field.SetBit(1, 100),
+		field.Set(1, 10),
+		field.Set(1, 100),
 		field.SetIntValue(10, 11),
 		field.SetIntValue(100, 15),
 	), nil)
@@ -1071,7 +1071,7 @@ func TestExcludeAttrsColumns(t *testing.T) {
 		"foo": "bar",
 	}
 	_, err = client.Query(index.BatchQuery(
-		field.SetBit(1, 100),
+		field.Set(1, 100),
 		field.SetRowAttrs(1, attrs),
 	), nil)
 	if err != nil {

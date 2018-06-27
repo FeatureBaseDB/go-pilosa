@@ -543,7 +543,7 @@ func (f *Field) SetTimestamp(rowID uint64, columnID uint64, timestamp time.Time)
 
 // SetTimestampK creates a SetK query with timestamp.
 func (f *Field) SetTimestampK(rowKey string, columnKey string, timestamp time.Time) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("Set('%s',%s='%s',timestamp='%s')",
+	return NewPQLBaseQuery(fmt.Sprintf("Set('%s',%s='%s',%s)",
 		columnKey, f.name, rowKey, timestamp.Format(timeFormat)),
 		f.index, nil)
 }

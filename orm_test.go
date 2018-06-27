@@ -263,7 +263,7 @@ func TestTimestamp(t *testing.T) {
 func TestSetTimestampK(t *testing.T) {
 	timestamp := time.Date(2017, time.April, 24, 12, 14, 0, 0, time.UTC)
 	comparePQL(t,
-		"Set('mycol',collaboration='myrow',timestamp='2017-04-24T12:14')",
+		"Set('mycol',collaboration='myrow',2017-04-24T12:14)",
 		collabField.SetTimestampK("myrow", "mycol", timestamp))
 }
 

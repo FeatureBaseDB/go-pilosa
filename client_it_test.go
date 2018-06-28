@@ -1391,7 +1391,7 @@ func TestExportFieldFailure(t *testing.T) {
 			statusCode:    404,
 			contentLength: -1,
 		},
-		"/slices/max": {
+		"/shards/max": {
 			content:       []byte(`{"standard":{"go-testindex": 0}}`),
 			statusCode:    404,
 			contentLength: -1,
@@ -1411,9 +1411,9 @@ func TestExportFieldFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("should have failed")
 	}
-	statusItem = paths["/slices/max"]
+	statusItem = paths["/shards/max"]
 	statusItem.statusCode = 200
-	paths["/slices/max"] = statusItem
+	paths["/shards/max"] = statusItem
 	_, err = client.ExportField(testField)
 	if err == nil {
 		t.Fatal("should have failed")

@@ -373,7 +373,7 @@ func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentN
 	if ok {
 		return nodes, nil
 	}
-	path := fmt.Sprintf("/fragment/nodes?slice=%d&index=%s", slice, indexName)
+	path := fmt.Sprintf("/fragment/nodes?shard=%d&index=%s", slice, indexName)
 	_, body, err := c.httpRequest("GET", path, []byte{}, nil)
 	if err != nil {
 		return nil, err
@@ -469,14 +469,14 @@ func (c *Client) readSchema() ([]StatusIndex, error) {
 }
 
 func (c *Client) slicesMax() (map[string]uint64, error) {
-	_, data, err := c.httpRequest("GET", "/slices/max", nil, nil)
+	_, data, err := c.httpRequest("GET", "/shards/max", nil, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "requesting /slices/max")
+		return nil, errors.Wrap(err, "requesting /shards/max")
 	}
 	m := map[string]map[string]uint64{}
 	err = json.Unmarshal(data, &m)
 	if err != nil {
-		return nil, errors.Wrap(err, "unmarshaling /slices/max data")
+		return nil, errors.Wrap(err, "unmarshaling /shards/max data")
 	}
 	return m["standard"], nil
 }
@@ -1010,7 +1010,7 @@ func (r *exportReader) Read(p []byte) (n int, err error) {
 		headers := map[string]string{
 			"Accept": "text/csv",
 		}
-		path := fmt.Sprintf("/export?index=%s&field=%s&slice=%d",
+		path := fmt.Sprintf("/export?index=%s&field=%s&shard=%d",
 			r.field.index.Name(), r.field.Name(), r.currentSlice)
 		resp, err := r.client.doRequest(uri, "GET", path, headers, nil)
 		if err = anyError(resp, err); err != nil {

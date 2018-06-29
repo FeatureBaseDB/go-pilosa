@@ -273,7 +273,7 @@ func TestClear(t *testing.T) {
 		collabField.Clear(5, 10))
 }
 
-func TestClearBitK(t *testing.T) {
+func TestClearK(t *testing.T) {
 	comparePQL(t,
 		"Clear('some_id',collaboration='b7feb014-8ea7-49a8-9cd8-19709161ab63')",
 		collabField.ClearK("b7feb014-8ea7-49a8-9cd8-19709161ab63", "some_id"))

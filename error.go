@@ -65,6 +65,6 @@ var (
 	ErrInvalidIndexOption     = NewError("Invalid index option")
 	ErrInvalidFieldOption     = NewError("Invalid field option")
 	ErrNoFragmentNodes        = NewError("No fragment nodes")
-	ErrNoSlice                = NewError("Index has no slices")
+	ErrNoShard                = NewError("Index has no shards")
 	ErrUnknownType            = NewError("Unknown type")
 )

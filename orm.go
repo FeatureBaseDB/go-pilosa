@@ -555,7 +555,7 @@ func (f *Field) Clear(rowID uint64, columnID uint64) *PQLBaseQuery {
 		columnID, f.name, rowID), f.index, nil)
 }
 
-// ClearK creates a ClearBit query using string row and column keys. This
+// ClearK creates a Clear query using string row and column keys. This
 // will only work against a Pilosa Enterprise server.
 func (f *Field) ClearK(rowKey string, columnKey string) *PQLBaseQuery {
 	return NewPQLBaseQuery(fmt.Sprintf("Clear('%s',%s='%s')",

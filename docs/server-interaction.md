@@ -82,25 +82,25 @@ client, err := pilosa.NewClient(cluster,
     pilosa.TotalPoolSize(10))   // number of total connections in the pool
 ```
 
-Once you create a client, you can create indexes, frames or start sending queries.
+Once you create a client, you can create indexes, fields or start sending queries.
 
-Here is how you would create a index and frame:
+Here is how you would create a index and field:
 
 ```go
-// materialize repository index definition and stargazer frame definition initialized before
+// materialize repository index definition and stargazer field definition initialized before
 err := client.SyncSchema(schema)
 ```
 
 You can send queries to a Pilosa server using the `Query` function of the `Client` struct:
 
 ```go
-response, err := client.Query(frame.Row(5));
+response, err := client.Query(field.Row(5));
 ```
 
 `Query` accepts zero or more options:
 
 ```go
-response, err := client.Query(frame.Row(5), pilosa.ColumnAttrs(true), pilosa.ExcludeColumns(true))
+response, err := client.Query(field.Row(5), pilosa.ColumnAttrs(true), pilosa.ExcludeColumns(true))
 ```
 
 ## Server Response
@@ -110,7 +110,7 @@ When a query is sent to a Pilosa server, the server either fulfills the query or
 A `QueryResponse` struct may contain zero or more results of `QueryResult` type. You can access all results using the `Results` function of `QueryResponse` (which returns a list of `QueryResult` objects), or you can use the `Result` method (which returns either the first result or `nil` if there are no results):
 
 ```go
-response, err := client.Query(frame.Row(5))
+response, err := client.Query(field.Row(5))
 if err != nil {
     // Act on the error
 }
@@ -147,7 +147,7 @@ for _, column = range response.Columns() {
 * `CountItems()` function to retrieve column count per row ID entries returned from `TopN` queries,
 * `Count()` function to retrieve the number of rows per the given row ID returned from `Count` queries.
 * `Value()` function to retrieve the result of `Min`, `Max` or `Sum` queries.
-* `Changed()` function returns whether a `SetBit` or `ClearBit` query changed a bit.
+* `Changed()` function returns whether a `Set` or `Clear` query changed a column.
 
 ```go
 row := result.Row()

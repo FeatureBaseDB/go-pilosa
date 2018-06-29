@@ -1,8 +1,8 @@
 # Data Model and Queries
 
-## Indexes and Frames
+## Indexes and Fields
 
-*Index* and *frame*s are the main data models of Pilosa. You can check the [Pilosa documentation](https://www.pilosa.com/docs) for more detail about the data model.
+*Index* and *field*s are the main data models of Pilosa. You can check the [Pilosa documentation](https://www.pilosa.com/docs) for more detail about the data model.
 
 The `schema.Index` function is used to create an index object. Note that this does not create an index on the server; the index object simply defines the schema.
 
@@ -11,7 +11,7 @@ schema := pilosa.NewSchema()
 repository, err := schema.Index("repository")
 ```
 
-Frame definitions are created with a call to the `Field` function of an index:
+Field definitions are created with a call to the `Field` function of an index:
 
 ```go
 stargazer, err := repository.Field("stargazer")
@@ -25,12 +25,12 @@ stargazer, err := repository.Field("stargazer", pilosa.OptFieldTime(TimeQuantumY
 
 ## Queries
 
-Once you have indexes and frame structs created, you can create queries for them. Some of the queries work on the columns; corresponding methods are attached to the index. Other queries work on rows with related methods attached to frames.
+Once you have indexes and field structs created, you can create queries for them. Some of the queries work on the columns; corresponding methods are attached to the index. Other queries work on rows with related methods attached to fields.
 
 For instance, `Row` queries work on rows; use a `Field` object to create those queries:
 
 ```go
-rowQuery := stargazer.Row(1)  // corresponds to PQL: Row(frame='stargazer', row=1)
+rowQuery := stargazer.Row(1)  // corresponds to PQL: Row(stargazer=1)
 ```
 
 `Union` queries work on columns; use the index to create them:
@@ -47,10 +47,10 @@ query := repository.BatchQuery(
     repository.Union(stargazer.Row(100), stargazer.Row(5)))
 ```
 
-The recommended way of creating query structs is using dedicated methods attached to index and frame objects, but sometimes it would be desirable to send raw queries to Pilosa. You can use `index.RawQuery` method for that. Note that query string is not validated before sending to the server:
+The recommended way of creating query structs is using dedicated methods attached to index and field objects, but sometimes it would be desirable to send raw queries to Pilosa. You can use `index.RawQuery` method for that. Note that query string is not validated before sending to the server:
 
 ```go
-query := repository.RawQuery("Row(frame='stargazer', row=5)")
+query := repository.RawQuery("Row(stargazer=5)")
 ```
 
 This client supports [BSI groups](https://www.pilosa.com/docs/latest/query-language/#range-bsi). Read the [Range Encoded Bitmaps](https://www.pilosa.com/blog/range-encoded-bitmaps/) blog post for more information about the BSI implementation of range encoding in Pilosa.
@@ -62,7 +62,7 @@ captivity, _ := index.Field("captivity", pilosa.OptFieldInt(0, 956))
 client.SyncSchema(schema)
 ``` 
 
-If the frame with the necessary field already exists on the server, you don't need to create the field instance, `client.SyncSchema(schema)` would load that to `schema`. You can then add some data:
+If the field with the necessary field already exists on the server, you don't need to create the field instance, `client.SyncSchema(schema)` would load that to `schema`. You can then add some data:
 ```go
 // Add the captivity values to the field.
 data := []int{3, 392, 47, 956, 219, 14, 47, 504, 21, 0, 123, 318}
@@ -87,10 +87,10 @@ fmt.Println(response.Result().Value())
 
 If you pass a row query to `Sum` as a filter, then only the columns matching the filter will be considered in the `Sum` calculation:
 ```go
-// Let's run a few setbit queries first
+// Let's run a few set queries first
 client.Query(index.BatchQuery(
-    field.SetBit(42, 1),
-    field.SetBit(42, 6)))
+    field.Set(42, 1),
+    field.Set(42, 6)))
 // Query for the total number of animals in captivity where row 42 is set
 response, _ = client.Query(captivity.Sum(field.Row(42)))
 fmt.Println(response.Result().Value())
@@ -112,9 +112,9 @@ Index:
 Field:
 
 * `Row(rowID uint64) *PQLRowQuery`
-* `SetBit(rowID uint64, columnID uint64) *PQLBaseQuery`
-* `SetBitTimestamp(rowID uint64, columnID uint64, timestamp time.Time) *PQLBaseQuery`
-* `ClearBit(rowID uint64, columnID uint64) *PQLBaseQuery`
+* `Set(rowID uint64, columnID uint64) *PQLBaseQuery`
+* `SetTimestamp(rowID uint64, columnID uint64, timestamp time.Time) *PQLBaseQuery`
+* `Clear(rowID uint64, columnID uint64) *PQLBaseQuery`
 * `TopN(n uint64) *PQLRowQuery`
 * `RowTopN(n uint64, row *PQLRowQuery) *PQLRowQuery`
 * `FilterFieldTopN(n uint64, row *PQLRowQuery, field string, values ...interface{}) *PQLRowQuery`

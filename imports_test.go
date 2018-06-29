@@ -42,11 +42,11 @@ import (
 	pilosa "github.com/pilosa/go-pilosa"
 )
 
-func TestCSVBitIterator(t *testing.T) {
+func TestCSVColumnIterator(t *testing.T) {
 	reader := strings.NewReader(`1,10,683793200
 		5,20,683793300
 		3,41,683793385`)
-	iterator := pilosa.NewCSVBitIterator(reader)
+	iterator := pilosa.NewCSVColumnIterator(reader)
 	columns := []pilosa.Record{}
 	for {
 		column, err := iterator.NextRecord()
@@ -61,7 +61,7 @@ func TestCSVBitIterator(t *testing.T) {
 	if len(columns) != 3 {
 		t.Fatalf("There should be 3 columns")
 	}
-	target := []pilosa.Bit{
+	target := []pilosa.Column{
 		{RowID: 1, ColumnID: 10, Timestamp: 683793200},
 		{RowID: 5, ColumnID: 20, Timestamp: 683793300},
 		{RowID: 3, ColumnID: 41, Timestamp: 683793385},
@@ -73,12 +73,12 @@ func TestCSVBitIterator(t *testing.T) {
 	}
 }
 
-func TestCSVBitIteratorWithTimestampFormat(t *testing.T) {
+func TestCSVColumnIteratorWithTimestampFormat(t *testing.T) {
 	format := "2006-01-02T03:04"
 	reader := strings.NewReader(`1,10,1991-09-02T09:33
 		5,20,1991-09-02T09:35
 		3,41,1991-09-02T09:36`)
-	iterator := pilosa.NewCSVBitIteratorWithTimestampFormat(reader, format)
+	iterator := pilosa.NewCSVColumnIteratorWithTimestampFormat(reader, format)
 	records := []pilosa.Record{}
 	for {
 		record, err := iterator.NextRecord()
@@ -90,7 +90,7 @@ func TestCSVBitIteratorWithTimestampFormat(t *testing.T) {
 		}
 		records = append(records, record)
 	}
-	target := []pilosa.Bit{
+	target := []pilosa.Column{
 		{RowID: 1, ColumnID: 10, Timestamp: 683803980},
 		{RowID: 5, ColumnID: 20, Timestamp: 683804100},
 		{RowID: 3, ColumnID: 41, Timestamp: 683804160},
@@ -105,10 +105,10 @@ func TestCSVBitIteratorWithTimestampFormat(t *testing.T) {
 	}
 }
 
-func TestCSVBitIteratorWithTimestampFormatFail(t *testing.T) {
+func TestCSVColumnIteratorWithTimestampFormatFail(t *testing.T) {
 	format := "2014-07-16"
 	reader := strings.NewReader(`1,10,X`)
-	iterator := pilosa.NewCSVBitIteratorWithTimestampFormat(reader, format)
+	iterator := pilosa.NewCSVColumnIteratorWithTimestampFormat(reader, format)
 	_, err := iterator.NextRecord()
 	if err == nil {
 		t.Fatalf("Should have failed")
@@ -147,7 +147,7 @@ func TestCSVValueIterator(t *testing.T) {
 	}
 }
 
-func TestCSVBitIteratorInvalidInput(t *testing.T) {
+func TestCSVColumnIteratorInvalidInput(t *testing.T) {
 	invalidInputs := []string{
 		// less than 2 columns
 		"155",
@@ -159,10 +159,10 @@ func TestCSVBitIteratorInvalidInput(t *testing.T) {
 		"155,255,a5",
 	}
 	for _, text := range invalidInputs {
-		iterator := pilosa.NewCSVBitIterator(strings.NewReader(text))
+		iterator := pilosa.NewCSVColumnIterator(strings.NewReader(text))
 		_, err := iterator.NextRecord()
 		if err == nil {
-			t.Fatalf("CSVBitIterator input: %s should fail", text)
+			t.Fatalf("CSVColumnIterator input: %s should fail", text)
 		}
 	}
 }
@@ -185,11 +185,11 @@ func TestCSVValueIteratorInvalidInput(t *testing.T) {
 	}
 }
 
-func TestCSVBitIteratorError(t *testing.T) {
-	iterator := pilosa.NewCSVBitIterator(&BrokenReader{})
+func TestCSVColumnIteratorError(t *testing.T) {
+	iterator := pilosa.NewCSVColumnIterator(&BrokenReader{})
 	_, err := iterator.NextRecord()
 	if err == nil {
-		t.Fatal("CSVBitIterator should fail with error")
+		t.Fatal("CSVColumnIterator should fail with error")
 	}
 }
 
@@ -208,7 +208,7 @@ func (r BrokenReader) Read(p []byte) (n int, err error) {
 }
 
 func TestColumnSlice(t *testing.T) {
-	a := pilosa.Bit{RowID: 15, ColumnID: 55, Timestamp: 100101}
+	a := pilosa.Column{RowID: 15, ColumnID: 55, Timestamp: 100101}
 	target := uint64(0)
 	if a.Slice(100) != target {
 		t.Fatalf("slice %d != %d", target, a.Slice(100))
@@ -219,10 +219,10 @@ func TestColumnSlice(t *testing.T) {
 	}
 }
 
-func TestBitLess(t *testing.T) {
-	a := pilosa.Bit{RowID: 10, ColumnID: 200}
-	a2 := pilosa.Bit{RowID: 10, ColumnID: 1000}
-	b := pilosa.Bit{RowID: 200, ColumnID: 10}
+func TestColumnLess(t *testing.T) {
+	a := pilosa.Column{RowID: 10, ColumnID: 200}
+	a2 := pilosa.Column{RowID: 10, ColumnID: 1000}
+	b := pilosa.Column{RowID: 200, ColumnID: 10}
 	c := pilosa.FieldValue{ColumnID: 1}
 	if !a.Less(a2) {
 		t.Fatalf("%v should be less than %v", a, a2)
@@ -254,7 +254,7 @@ func TestFieldValueSlice(t *testing.T) {
 func TestFieldValueLess(t *testing.T) {
 	a := pilosa.FieldValue{ColumnID: 55, Value: 125}
 	b := pilosa.FieldValue{ColumnID: 100, Value: 125}
-	c := pilosa.Bit{ColumnID: 1, RowID: 2}
+	c := pilosa.Column{ColumnID: 1, RowID: 2}
 	if !a.Less(b) {
 		t.Fatalf("%v should be less than %v", a, b)
 	}

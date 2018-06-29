@@ -593,7 +593,7 @@ func TestCSVImport(t *testing.T) {
 		10,5
 		2,3
 		7,1`
-	iterator := NewCSVBitIterator(strings.NewReader(text))
+	iterator := NewCSVColumnIterator(strings.NewReader(text))
 	field, err := index.Field("importfield")
 	if err != nil {
 		t.Fatal(err)
@@ -630,17 +630,17 @@ func TestCSVImport(t *testing.T) {
 	}
 }
 
-type BitGenerator struct {
+type ColumnGenerator struct {
 	numRows    uint64
 	numColumns uint64
 	rowIndex   uint64
 	colIndex   uint64
 }
 
-func (gen *BitGenerator) NextRecord() (Record, error) {
-	column := Bit{RowID: gen.rowIndex, ColumnID: gen.colIndex}
+func (gen *ColumnGenerator) NextRecord() (Record, error) {
+	column := Column{RowID: gen.rowIndex, ColumnID: gen.colIndex}
 	if gen.rowIndex >= gen.numRows {
-		return Bit{}, io.EOF
+		return Column{}, io.EOF
 	}
 	gen.colIndex += 1
 	if gen.colIndex >= gen.numColumns {
@@ -650,25 +650,25 @@ func (gen *BitGenerator) NextRecord() (Record, error) {
 	return column, nil
 }
 
-// GivenBitGenerator iterates over the set of columns provided in New().
+// GivenColumnGenerator iterates over the set of columns provided in New().
 // This is being used because Goveralls would run out of memory
-// when providing BitGenerator with a large number of columns (3 * sliceWidth).
-type GivenBitGenerator struct {
+// when providing ColumnGenerator with a large number of columns (3 * sliceWidth).
+type GivenColumnGenerator struct {
 	ii      int
 	records []Record
 }
 
-func (gen *GivenBitGenerator) NextRecord() (Record, error) {
+func (gen *GivenColumnGenerator) NextRecord() (Record, error) {
 	if len(gen.records) > gen.ii {
 		rec := gen.records[gen.ii]
 		gen.ii++
 		return rec, nil
 	}
-	return Bit{}, io.EOF
+	return Column{}, io.EOF
 }
 
-func NewGivenBitGenerator(recs []Record) *GivenBitGenerator {
-	return &GivenBitGenerator{
+func NewGivenColumnGenerator(recs []Record) *GivenColumnGenerator {
+	return &GivenColumnGenerator{
 		ii:      0,
 		records: recs,
 	}
@@ -676,7 +676,7 @@ func NewGivenBitGenerator(recs []Record) *GivenBitGenerator {
 
 func TestImportWithTimeout(t *testing.T) {
 	client := getClient()
-	iterator := &BitGenerator{numRows: 100, numColumns: 1000}
+	iterator := &ColumnGenerator{numRows: 100, numColumns: 1000}
 	field, err := index.Field("importfield-timeout")
 	if err != nil {
 		t.Fatal(err)
@@ -694,7 +694,7 @@ func TestImportWithTimeout(t *testing.T) {
 
 func TestImportWithBatchSize(t *testing.T) {
 	client := getClient()
-	iterator := &BitGenerator{numRows: 10, numColumns: 1000}
+	iterator := &ColumnGenerator{numRows: 10, numColumns: 1000}
 	field, err := index.Field("importfield-batchsize")
 	if err != nil {
 		t.Fatal(err)
@@ -719,21 +719,21 @@ func TestImportWithBatchSizeExpectingZero(t *testing.T) {
 	const sliceWidth = 1048576
 	client := getClient()
 
-	iterator := NewGivenBitGenerator(
+	iterator := NewGivenColumnGenerator(
 		[]Record{
-			Bit{RowID: 1, ColumnID: 1},
-			Bit{RowID: 1, ColumnID: 2},
-			Bit{RowID: 1, ColumnID: 3},
-			Bit{RowID: 1, ColumnID: sliceWidth + 1},
-			Bit{RowID: 1, ColumnID: sliceWidth + 2},
-			Bit{RowID: 1, ColumnID: sliceWidth + 3},
+			Column{RowID: 1, ColumnID: 1},
+			Column{RowID: 1, ColumnID: 2},
+			Column{RowID: 1, ColumnID: 3},
+			Column{RowID: 1, ColumnID: sliceWidth + 1},
+			Column{RowID: 1, ColumnID: sliceWidth + 2},
+			Column{RowID: 1, ColumnID: sliceWidth + 3},
 
-			Bit{RowID: 1, ColumnID: sliceWidth + 4},
-			Bit{RowID: 1, ColumnID: sliceWidth + 5},
-			Bit{RowID: 1, ColumnID: sliceWidth + 6},
-			Bit{RowID: 1, ColumnID: 2*sliceWidth + 1},
-			Bit{RowID: 1, ColumnID: 2*sliceWidth + 2},
-			Bit{RowID: 1, ColumnID: 2*sliceWidth + 3},
+			Column{RowID: 1, ColumnID: sliceWidth + 4},
+			Column{RowID: 1, ColumnID: sliceWidth + 5},
+			Column{RowID: 1, ColumnID: sliceWidth + 6},
+			Column{RowID: 1, ColumnID: 2*sliceWidth + 1},
+			Column{RowID: 1, ColumnID: 2*sliceWidth + 2},
+			Column{RowID: 1, ColumnID: 2*sliceWidth + 3},
 		},
 	)
 
@@ -752,7 +752,7 @@ func TestImportWithBatchSizeExpectingZero(t *testing.T) {
 	}
 }
 
-func failingImportBits(indexName string, fieldName string, slice uint64, records []Record) error {
+func failingImportColumns(indexName string, fieldName string, slice uint64, records []Record) error {
 	if len(records) > 0 {
 		return errors.New("some error")
 	}
@@ -761,7 +761,7 @@ func failingImportBits(indexName string, fieldName string, slice uint64, records
 
 func TestImportWithTimeoutFails(t *testing.T) {
 	client := getClient()
-	iterator := &BitGenerator{numRows: 10, numColumns: 1000}
+	iterator := &ColumnGenerator{numRows: 10, numColumns: 1000}
 	field, err := index.Field("importfield-timeout")
 	if err != nil {
 		t.Fatal(err)
@@ -771,7 +771,7 @@ func TestImportWithTimeoutFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	statusChan := make(chan ImportStatusUpdate, 10)
-	err = client.ImportField(field, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(TimeoutImport), OptImportTimeout(1*time.Millisecond), importRecordsFunction(failingImportBits))
+	err = client.ImportField(field, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(TimeoutImport), OptImportTimeout(1*time.Millisecond), importRecordsFunction(failingImportColumns))
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -779,7 +779,7 @@ func TestImportWithTimeoutFails(t *testing.T) {
 
 func TestImportWithBatchSizeFails(t *testing.T) {
 	client := getClient()
-	iterator := &BitGenerator{numRows: 10, numColumns: 1000}
+	iterator := &ColumnGenerator{numRows: 10, numColumns: 1000}
 	field, err := index.Field("importfield-batchsize")
 	if err != nil {
 		t.Fatal(err)
@@ -789,7 +789,7 @@ func TestImportWithBatchSizeFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	statusChan := make(chan ImportStatusUpdate, 10)
-	err = client.ImportField(field, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(BatchImport), OptImportBatchSize(1000), importRecordsFunction(failingImportBits))
+	err = client.ImportField(field, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(BatchImport), OptImportBatchSize(1000), importRecordsFunction(failingImportColumns))
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -805,7 +805,7 @@ func TestErrorReturningImportOption(t *testing.T) {
 		10,5
 		2,3
 		7,1`
-	iterator := NewCSVBitIterator(strings.NewReader(text))
+	iterator := NewCSVColumnIterator(strings.NewReader(text))
 	field, err := index.Field("importfield")
 	if err != nil {
 		t.Fatal(err)
@@ -879,7 +879,7 @@ func TestCSVExport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	target := []Bit{
+	target := []Column{
 		{RowID: 1, ColumnID: 1},
 		{RowID: 1, ColumnID: 10},
 		{RowID: 2, ColumnID: 1048577},
@@ -1083,7 +1083,7 @@ func TestRangeField(t *testing.T) {
 		t.Fatalf("Count 1 != %d", len(resp.Result().Row().Columns))
 	}
 	if resp.Result().Row().Columns[0] != 10 {
-		t.Fatalf("Bit 10 != %d", resp.Result().Row().Columns[0])
+		t.Fatalf("Column 10 != %d", resp.Result().Row().Columns[0])
 	}
 }
 
@@ -1130,13 +1130,13 @@ func TestExcludeAttrsColumns(t *testing.T) {
 	}
 }
 
-func TestImportBitIteratorError(t *testing.T) {
+func TestImportColumnIteratorError(t *testing.T) {
 	client := getClient()
 	field, err := index.Field("not-important", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	iterator := NewCSVBitIterator(&BrokenReader{})
+	iterator := NewCSVColumnIterator(&BrokenReader{})
 	err = client.ImportField(field, iterator)
 	if err == nil {
 		t.Fatalf("import field should fail with broken reader")
@@ -1160,7 +1160,7 @@ func TestImportFailsOnImportColumnsError(t *testing.T) {
 	server := getMockServer(500, []byte{}, 0)
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	err := client.importBits("foo", "bar", 0, []Record{})
+	err := client.importColumns("foo", "bar", 0, []Record{})
 	if err == nil {
 		t.Fatalf("importColumns should fail when fetch fragment nodes fails")
 	}
@@ -1176,12 +1176,12 @@ func TestValueImportFailsOnImportValueError(t *testing.T) {
 	}
 }
 
-func TestImportFieldFailsIfImportBitsFails(t *testing.T) {
+func TestImportFieldFailsIfImportColumnsFails(t *testing.T) {
 	data := []byte(`[{"host":"non-existing-domain:9999","internalHost":"10101"}]`)
 	server := getMockServer(200, data, len(data))
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	iterator := NewCSVBitIterator(strings.NewReader("10,7"))
+	iterator := NewCSVColumnIterator(strings.NewReader("10,7"))
 	field, err := index.Field("importfield1")
 	if err != nil {
 		t.Fatal(err)
@@ -1213,7 +1213,7 @@ func TestImportColumnsFailInvalidNodeAddress(t *testing.T) {
 	server := getMockServer(200, data, len(data))
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	err := client.importBits("foo", "bar", 0, []Record{})
+	err := client.importColumns("foo", "bar", 0, []Record{})
 	if err == nil {
 		t.Fatalf("importColumns should fail on invalid node host")
 	}

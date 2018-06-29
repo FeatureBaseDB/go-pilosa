@@ -38,48 +38,58 @@ import "github.com/pilosa/go-pilosa"
 Assuming [Pilosa](https://github.com/pilosa/pilosa) server is running at `localhost:10101` (the default):
 
 ```go
-var err error
+package main
 
-// Create the default client
-client := pilosa.DefaultClient()
+import (
+	"fmt"
 
-// Retrieve the schema
-schema, err := client.Schema()
+	"github.com/pilosa/go-pilosa"
+)
 
-// Create an Index object
-myindex, err := schema.Index("myindex")
+func main() {
+	var err error
 
-// Create a Field object
-myframe, err := myindex.Field("myfield")
+	// Create the default client
+	client := pilosa.DefaultClient()
 
-// make sure the index and the field exists on the server
-err = client.SyncSchema(schema)
+	// Retrieve the schema
+	schema, err := client.Schema()
 
-// Send a SetBit query. PilosaException is thrown if execution of the query fails.
-response, err := client.Query(myfield.SetBit(5, 42))
+	// Create an Index object
+	myindex, err := schema.Index("myindex")
 
-// Send a Row query. PilosaException is thrown if execution of the query fails.
-response, err = client.Query(myframe.Row(5))
+	// Create a Field object
+	myfield, err := myindex.Field("myfield")
 
-// Get the result
-result := response.Result()
-// Act on the result
-if result != nil {
-    bits := result.Row().Columns
-    fmt.Println("Got columns: ", columns)
-}
+	// make sure the index and the field exists on the server
+	err = client.SyncSchema(schema)
 
-// You can batch queries to improve throughput
-response, err = client.Query(myindex.BatchQuery(
-    myframe.Row(5),
-    myframe.Row(10)))
-if err != nil {
-    fmt.Println(err)
-}
+	// Send a Set query. PilosaException is thrown if execution of the query fails.
+	response, err := client.Query(myfield.Set(5, 42))
 
-for _, result := range response.Results() {
-    // Act on the result
-    fmt.Println(result.Row().Bits)
+	// Send a Row query. PilosaException is thrown if execution of the query fails.
+	response, err = client.Query(myfield.Row(5))
+
+	// Get the result
+	result := response.Result()
+	// Act on the result
+	if result != nil {
+		columns := result.Row().Columns
+		fmt.Println("Got columns: ", columns)
+	}
+
+	// You can batch queries to improve throughput
+	response, err = client.Query(myindex.BatchQuery(
+		myfield.Row(5),
+		myfield.Row(10)))
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	for _, result := range response.Results() {
+		// Act on the result
+		fmt.Println(result.Row().Columns)
+	}
 }
 ```
 

@@ -314,7 +314,7 @@ func (c *Client) ImportField(field *Field, iterator RecordIterator, options ...I
 	if field.options != nil && field.options.fieldType == FieldTypeInt {
 		importRecordsFunction(c.importValues)(importOptions)
 	} else {
-		importRecordsFunction(c.importBits)(importOptions)
+		importRecordsFunction(c.importColumns)(importOptions)
 	}
 	for _, option := range options {
 		if err := option(importOptions); err != nil {
@@ -324,7 +324,7 @@ func (c *Client) ImportField(field *Field, iterator RecordIterator, options ...I
 	return c.importManager.Run(field, iterator, importOptions.withDefaults())
 }
 
-func (c *Client) importBits(indexName string, fieldName string, slice uint64, records []Record) error {
+func (c *Client) importColumns(indexName string, fieldName string, slice uint64, records []Record) error {
 	nodes, err := c.fetchFragmentNodes(indexName, slice)
 	if err != nil {
 		return errors.Wrap(err, "fetching fragment nodes")
@@ -338,7 +338,7 @@ func (c *Client) importBits(indexName string, fieldName string, slice uint64, re
 			port:   node.Port,
 		}
 		eg.Go(func() error {
-			return c.importNode(uri, bitsToImportRequest(indexName, fieldName, slice, records))
+			return c.importNode(uri, columnsToImportRequest(indexName, fieldName, slice, records))
 		})
 	}
 	err = eg.Wait()
@@ -438,7 +438,7 @@ func (c *Client) ExportField(field *Field) (RecordIterator, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewCSVBitIterator(newExportReader(c, sliceURIs, field)), nil
+	return NewCSVColumnIterator(newExportReader(c, sliceURIs, field)), nil
 }
 
 // Status returns the serves status.
@@ -648,15 +648,15 @@ func makeRequestData(query string, options *QueryOptions) ([]byte, error) {
 	return r, nil
 }
 
-func bitsToImportRequest(indexName string, fieldName string, slice uint64, records []Record) *pbuf.ImportRequest {
+func columnsToImportRequest(indexName string, fieldName string, slice uint64, records []Record) *pbuf.ImportRequest {
 	rowIDs := make([]uint64, 0, len(records))
 	columnIDs := make([]uint64, 0, len(records))
 	timestamps := make([]int64, 0, len(records))
 	for _, record := range records {
-		bit := record.(Bit)
-		rowIDs = append(rowIDs, bit.RowID)
-		columnIDs = append(columnIDs, bit.ColumnID)
-		timestamps = append(timestamps, bit.Timestamp)
+		column := record.(Column)
+		rowIDs = append(rowIDs, column.RowID)
+		columnIDs = append(columnIDs, column.ColumnID)
+		timestamps = append(timestamps, column.Timestamp)
 	}
 	return &pbuf.ImportRequest{
 		Index:      indexName,

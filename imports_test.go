@@ -207,15 +207,15 @@ func (r BrokenReader) Read(p []byte) (n int, err error) {
 	return 0, errors.New("broken reader")
 }
 
-func TestColumnSlice(t *testing.T) {
+func TestColumnShard(t *testing.T) {
 	a := pilosa.Column{RowID: 15, ColumnID: 55, Timestamp: 100101}
 	target := uint64(0)
-	if a.Slice(100) != target {
-		t.Fatalf("slice %d != %d", target, a.Slice(100))
+	if a.Shard(100) != target {
+		t.Fatalf("shard %d != %d", target, a.Shard(100))
 	}
 	target = 5
-	if a.Slice(10) != target {
-		t.Fatalf("slice %d != %d", target, a.Slice(10))
+	if a.Shard(10) != target {
+		t.Fatalf("shard %d != %d", target, a.Shard(10))
 	}
 }
 
@@ -238,15 +238,15 @@ func TestColumnLess(t *testing.T) {
 	}
 }
 
-func TestFieldValueSlice(t *testing.T) {
+func TestFieldValueShard(t *testing.T) {
 	a := pilosa.FieldValue{ColumnID: 55, Value: 125}
 	target := uint64(0)
-	if a.Slice(100) != target {
-		t.Fatalf("slice %d != %d", target, a.Slice(100))
+	if a.Shard(100) != target {
+		t.Fatalf("shard %d != %d", target, a.Shard(100))
 	}
 	target = 5
-	if a.Slice(10) != target {
-		t.Fatalf("slice %d != %d", target, a.Slice(10))
+	if a.Shard(10) != target {
+		t.Fatalf("shard %d != %d", target, a.Shard(10))
 	}
 
 }

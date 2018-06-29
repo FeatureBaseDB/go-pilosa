@@ -143,8 +143,8 @@ func (gen *RandomColumnGenerator) NextRecord() (pilosa.Record, error) {
 You can change the import strategy, thread count and other options by passing them to `client.ImportField` or `client.ImportFieldWithStatus` functions. Here are the import options:
 * `OptImportStrategy`: Changes the import strategy of the import goroutines to one of the following:
 	* `DefaultImport`: Default strategy, currently `TimeoutImport`.
-	* `BatchImport`: Read `BatchSize` records, bucket them by slices and import them. By default 100000.
-	* `TimeoutImport`: Read and bucket records by slices and after `Timeout` import the largest bucket. By default `100` milliseconds.
+	* `BatchImport`: Read `BatchSize` records, bucket them by shards and import them. By default 100000.
+	* `TimeoutImport`: Read and bucket records by shards and after `Timeout` import the largest bucket. By default `100` milliseconds.
 * `OptImportThreadCount`: Number of import goroutines. By default only a single importer is used.
 * `OptImportBatchSize`: Sets the `BatchSize`.
 * `OptImportTimeout`: Sets the `Timeout`.
@@ -160,7 +160,7 @@ err := client.ImportField(field, iterator,
 
 ### Tracking Import Status
 
-You can pass a channel of type `ImportStatusUpdate` to `client.ImportField` using `OptImportStatusChannel` function to get notified when an importer imports a slice of columns. The status channel is closed by the client when the import 
+You can pass a channel of type `ImportStatusUpdate` to `client.ImportField` using `OptImportStatusChannel` function to get notified when an importer imports a shard of columns. The status channel is closed by the client when the import 
 ends.
 
 Note that if you use this feature, you have to consume from the status channel, otherwise import goroutines may get blocked.
@@ -169,7 +169,7 @@ Note that if you use this feature, you have to consume from the status channel, 
 ```go
 type ImportStatusUpdate struct {
 	ThreadID      int  // goroutine index
-	Slice         uint64 // slice that was imported
+	Shard         uint64 // shard that was imported
 	ImportedCount int // imported number of columns
 	Time          time.Duration // the time it took to import
 }

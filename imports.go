@@ -44,7 +44,7 @@ import (
 )
 
 type Record interface {
-	Slice(sliceWidth uint64) uint64
+	Shard(shardWidth uint64) uint64
 	Less(other Record) bool
 }
 
@@ -73,8 +73,8 @@ type Column struct {
 	Timestamp int64
 }
 
-func (b Column) Slice(sliceWidth uint64) uint64 {
-	return b.ColumnID / sliceWidth
+func (b Column) Shard(shardWidth uint64) uint64 {
+	return b.ColumnID / shardWidth
 }
 
 func (b Column) Less(other Record) bool {
@@ -192,8 +192,8 @@ type FieldValue struct {
 	Value     int64
 }
 
-func (v FieldValue) Slice(sliceWidth uint64) uint64 {
-	return v.ColumnID / sliceWidth
+func (v FieldValue) Shard(shardWidth uint64) uint64 {
+	return v.ColumnID / shardWidth
 }
 
 func (v FieldValue) Less(other Record) bool {

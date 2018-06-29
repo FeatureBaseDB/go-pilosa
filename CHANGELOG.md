@@ -7,6 +7,7 @@
         * frame to field
         * bitmap to row
         * bit to column
+        * slice to shard
     * Removed `Field` type and renamed `Frame` to `Field`.
     * There are three types of fields:
         * Set fields to store boolean values (default)

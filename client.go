@@ -62,7 +62,7 @@ type Client struct {
 	// and user agent is saved here in NewClient
 	userAgent              string
 	importThreadCount      int
-	sliceWidth             uint64
+	shardWidth             uint64
 	fragmentNodeCache      map[string][]fragmentNode
 	fragmentNodeCacheMutex *sync.RWMutex
 	importManager          *recordImportManager
@@ -324,8 +324,8 @@ func (c *Client) ImportField(field *Field, iterator RecordIterator, options ...I
 	return c.importManager.Run(field, iterator, importOptions.withDefaults())
 }
 
-func (c *Client) importColumns(indexName string, fieldName string, slice uint64, records []Record) error {
-	nodes, err := c.fetchFragmentNodes(indexName, slice)
+func (c *Client) importColumns(indexName string, fieldName string, shard uint64, records []Record) error {
+	nodes, err := c.fetchFragmentNodes(indexName, shard)
 	if err != nil {
 		return errors.Wrap(err, "fetching fragment nodes")
 	}
@@ -338,15 +338,15 @@ func (c *Client) importColumns(indexName string, fieldName string, slice uint64,
 			port:   node.Port,
 		}
 		eg.Go(func() error {
-			return c.importNode(uri, columnsToImportRequest(indexName, fieldName, slice, records))
+			return c.importNode(uri, columnsToImportRequest(indexName, fieldName, shard, records))
 		})
 	}
 	err = eg.Wait()
 	return errors.Wrap(err, "importing to nodes")
 }
 
-func (c *Client) importValues(indexName string, fieldName string, slice uint64, vals []Record) error {
-	nodes, err := c.fetchFragmentNodes(indexName, slice)
+func (c *Client) importValues(indexName string, fieldName string, shard uint64, vals []Record) error {
+	nodes, err := c.fetchFragmentNodes(indexName, shard)
 	if err != nil {
 		return err
 	}
@@ -356,7 +356,7 @@ func (c *Client) importValues(indexName string, fieldName string, slice uint64, 
 			host:   node.Host,
 			port:   node.Port,
 		}
-		err = c.importValueNode(uri, valsToImportRequest(indexName, fieldName, slice, vals))
+		err = c.importValueNode(uri, valsToImportRequest(indexName, fieldName, shard, vals))
 		if err != nil {
 			return err
 		}
@@ -365,15 +365,15 @@ func (c *Client) importValues(indexName string, fieldName string, slice uint64, 
 	return nil
 }
 
-func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentNode, error) {
-	key := fmt.Sprintf("%s-%d", indexName, slice)
+func (c *Client) fetchFragmentNodes(indexName string, shard uint64) ([]fragmentNode, error) {
+	key := fmt.Sprintf("%s-%d", indexName, shard)
 	c.fragmentNodeCacheMutex.RLock()
 	nodes, ok := c.fragmentNodeCache[key]
 	c.fragmentNodeCacheMutex.RUnlock()
 	if ok {
 		return nodes, nil
 	}
-	path := fmt.Sprintf("/fragment/nodes?shard=%d&index=%s", slice, indexName)
+	path := fmt.Sprintf("/fragment/nodes?shard=%d&index=%s", shard, indexName)
 	_, body, err := c.httpRequest("GET", path, []byte{}, nil)
 	if err != nil {
 		return nil, err
@@ -422,23 +422,23 @@ func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest) err
 
 // ExportField exports columns for a field.
 func (c *Client) ExportField(field *Field) (RecordIterator, error) {
-	var slicesMax map[string]uint64
+	var shardsMax map[string]uint64
 	var err error
 
 	status, err := c.Status()
 	if err != nil {
 		return nil, err
 	}
-	slicesMax, err = c.slicesMax()
+	shardsMax, err = c.shardsMax()
 	if err != nil {
 		return nil, err
 	}
-	status.indexMaxSlice = slicesMax
-	sliceURIs, err := c.statusToNodeSlicesForIndex(status, field.index.Name())
+	status.indexMaxShard = shardsMax
+	shardURIs, err := c.statusToNodeShardsForIndex(status, field.index.Name())
 	if err != nil {
 		return nil, err
 	}
-	return NewCSVColumnIterator(newExportReader(c, sliceURIs, field)), nil
+	return NewCSVColumnIterator(newExportReader(c, shardURIs, field)), nil
 }
 
 // Status returns the serves status.
@@ -468,7 +468,7 @@ func (c *Client) readSchema() ([]StatusIndex, error) {
 	return schemaInfo.Indexes, nil
 }
 
-func (c *Client) slicesMax() (map[string]uint64, error) {
+func (c *Client) shardsMax() (map[string]uint64, error) {
 	_, data, err := c.httpRequest("GET", "/shards/max", nil, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "requesting /shards/max")
@@ -556,12 +556,12 @@ func (c *Client) doRequest(host *URI, method, path string, headers map[string]st
 	return c.client.Do(req)
 }
 
-// statusToNodeSlicesForIndex finds the hosts which contains slices for the given index
-func (c *Client) statusToNodeSlicesForIndex(status Status, indexName string) (map[uint64]*URI, error) {
+// statusToNodeShardsForIndex finds the hosts which contains shards for the given index
+func (c *Client) statusToNodeShardsForIndex(status Status, indexName string) (map[uint64]*URI, error) {
 	result := make(map[uint64]*URI)
-	if maxSlice, ok := status.indexMaxSlice[indexName]; ok {
-		for slice := 0; slice <= int(maxSlice); slice++ {
-			fragmentNodes, err := c.fetchFragmentNodes(indexName, uint64(slice))
+	if maxShard, ok := status.indexMaxShard[indexName]; ok {
+		for shard := 0; shard <= int(maxShard); shard++ {
+			fragmentNodes, err := c.fetchFragmentNodes(indexName, uint64(shard))
 			if err != nil {
 				return nil, err
 			}
@@ -575,10 +575,10 @@ func (c *Client) statusToNodeSlicesForIndex(status Status, indexName string) (ma
 				scheme: node.Scheme,
 			}
 
-			result[uint64(slice)] = uri
+			result[uint64(shard)] = uri
 		}
 	} else {
-		return nil, ErrNoSlice
+		return nil, ErrNoShard
 	}
 	return result, nil
 }
@@ -636,7 +636,7 @@ func newHTTPClient(options *ClientOptions) *http.Client {
 func makeRequestData(query string, options *QueryOptions) ([]byte, error) {
 	request := &pbuf.QueryRequest{
 		Query:           query,
-		Slices:          options.Slices,
+		Shards:          options.Shards,
 		ColumnAttrs:     options.ColumnAttrs,
 		ExcludeRowAttrs: options.ExcludeRowAttrs,
 		ExcludeColumns:  options.ExcludeColumns,
@@ -648,7 +648,7 @@ func makeRequestData(query string, options *QueryOptions) ([]byte, error) {
 	return r, nil
 }
 
-func columnsToImportRequest(indexName string, fieldName string, slice uint64, records []Record) *pbuf.ImportRequest {
+func columnsToImportRequest(indexName string, fieldName string, shard uint64, records []Record) *pbuf.ImportRequest {
 	rowIDs := make([]uint64, 0, len(records))
 	columnIDs := make([]uint64, 0, len(records))
 	timestamps := make([]int64, 0, len(records))
@@ -661,14 +661,14 @@ func columnsToImportRequest(indexName string, fieldName string, slice uint64, re
 	return &pbuf.ImportRequest{
 		Index:      indexName,
 		Field:      fieldName,
-		Slice:      slice,
+		Shard:      shard,
 		RowIDs:     rowIDs,
 		ColumnIDs:  columnIDs,
 		Timestamps: timestamps,
 	}
 }
 
-func valsToImportRequest(indexName string, fieldName string, slice uint64, vals []Record) *pbuf.ImportValueRequest {
+func valsToImportRequest(indexName string, fieldName string, shard uint64, vals []Record) *pbuf.ImportValueRequest {
 	columnIDs := make([]uint64, 0, len(vals))
 	values := make([]int64, 0, len(vals))
 	for _, record := range vals {
@@ -679,7 +679,7 @@ func valsToImportRequest(indexName string, fieldName string, slice uint64, vals 
 	return &pbuf.ImportValueRequest{
 		Index:     indexName,
 		Field:     fieldName,
-		Slice:     slice,
+		Shard:     shard,
 		ColumnIDs: columnIDs,
 		Values:    values,
 	}
@@ -776,8 +776,8 @@ func (co *ClientOptions) withDefaults() (updated *ClientOptions) {
 
 // QueryOptions contains options to customize the Query function.
 type QueryOptions struct {
-	// Slices restricts query to a subset of slices. Queries all slices if nil.
-	Slices []uint64
+	// Shards restricts query to a subset of shards. Queries all shards if nil.
+	Shards []uint64
 	// ColumnAttrs enables returning columns in the query response.
 	ColumnAttrs bool
 	// ExcludeRowAttrs inhibits returning attributes
@@ -822,10 +822,10 @@ func OptQueryColumnAttrs(enable bool) QueryOption {
 	}
 }
 
-// OptQuerySlices restricts the set of slices on which a query operates.
-func OptQuerySlices(slices ...uint64) QueryOption {
+// OptQueryShards restricts the set of shards on which a query operates.
+func OptQueryShards(shards ...uint64) QueryOption {
 	return func(options *QueryOptions) error {
-		options.Slices = append(options.Slices, slices...)
+		options.Shards = append(options.Shards, shards...)
 		return nil
 	}
 }
@@ -856,17 +856,17 @@ const (
 
 type ImportOptions struct {
 	threadCount           int
-	sliceWidth            uint64
+	shardWidth            uint64
 	timeout               time.Duration
 	batchSize             int
 	strategy              ImportWorkerStrategy
 	statusChan            chan<- ImportStatusUpdate
-	importRecordsFunction func(indexName string, fieldName string, slice uint64, records []Record) error
+	importRecordsFunction func(indexName string, fieldName string, shard uint64, records []Record) error
 }
 
 func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
 	updated = *opt
-	updated.sliceWidth = 1048576
+	updated.shardWidth = 1048576
 
 	if updated.threadCount <= 0 {
 		updated.threadCount = 1
@@ -921,7 +921,7 @@ func OptImportStatusChannel(statusChan chan<- ImportStatusUpdate) ImportOption {
 	}
 }
 
-func importRecordsFunction(fun func(indexName string, fieldName string, slice uint64, records []Record) error) ImportOption {
+func importRecordsFunction(fun func(indexName string, fieldName string, shard uint64, records []Record) error) ImportOption {
 	return func(options *ImportOptions) error {
 		options.importRecordsFunction = fun
 		return nil
@@ -941,7 +941,7 @@ type fragmentNode struct {
 // Status contains the status information from a Pilosa server.
 type Status struct {
 	Nodes         []StatusNode `json:"nodes"`
-	indexMaxSlice map[string]uint64
+	indexMaxShard map[string]uint64
 }
 
 // StatusNode contains node information.
@@ -961,7 +961,7 @@ type StatusIndex struct {
 	Name    string        `json:"name"`
 	Options StatusOptions `json:"options"`
 	Fields  []StatusField `json:"fields"`
-	Slices  []uint64      `json:"slices"`
+	Shards  []uint64      `json:"shards"`
 }
 
 // StatusField contains field information.
@@ -982,36 +982,36 @@ type StatusOptions struct {
 
 type exportReader struct {
 	client       *Client
-	sliceURIs    map[uint64]*URI
+	shardURIs    map[uint64]*URI
 	field        *Field
 	body         []byte
 	bodyIndex    int
-	currentSlice uint64
-	sliceCount   uint64
+	currentShard uint64
+	shardCount   uint64
 }
 
-func newExportReader(client *Client, sliceURIs map[uint64]*URI, field *Field) *exportReader {
+func newExportReader(client *Client, shardURIs map[uint64]*URI, field *Field) *exportReader {
 	return &exportReader{
 		client:     client,
-		sliceURIs:  sliceURIs,
+		shardURIs:  shardURIs,
 		field:      field,
-		sliceCount: uint64(len(sliceURIs)),
+		shardCount: uint64(len(shardURIs)),
 	}
 }
 
 // Read updates the passed array with the exported CSV data and returns the number of bytes read
 func (r *exportReader) Read(p []byte) (n int, err error) {
-	if r.currentSlice >= r.sliceCount {
+	if r.currentShard >= r.shardCount {
 		err = io.EOF
 		return
 	}
 	if r.body == nil {
-		uri, _ := r.sliceURIs[r.currentSlice]
+		uri, _ := r.shardURIs[r.currentShard]
 		headers := map[string]string{
 			"Accept": "text/csv",
 		}
 		path := fmt.Sprintf("/export?index=%s&field=%s&shard=%d",
-			r.field.index.Name(), r.field.Name(), r.currentSlice)
+			r.field.index.Name(), r.field.Name(), r.currentShard)
 		resp, err := r.client.doRequest(uri, "GET", path, headers, nil)
 		if err = anyError(resp, err); err != nil {
 			return 0, errors.Wrap(err, "doing export request")
@@ -1027,7 +1027,7 @@ func (r *exportReader) Read(p []byte) (n int, err error) {
 	r.bodyIndex += n
 	if n >= len(r.body) {
 		r.body = nil
-		r.currentSlice++
+		r.currentShard++
 	}
 	return
 }

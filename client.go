@@ -373,7 +373,7 @@ func (c *Client) fetchFragmentNodes(indexName string, shard uint64) ([]fragmentN
 	if ok {
 		return nodes, nil
 	}
-	path := fmt.Sprintf("/fragment/nodes?shard=%d&index=%s", shard, indexName)
+	path := fmt.Sprintf("/internal/fragment/nodes?shard=%d&index=%s", shard, indexName)
 	_, body, err := c.httpRequest("GET", path, []byte{}, nil)
 	if err != nil {
 		return nil, err

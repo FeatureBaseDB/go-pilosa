@@ -398,7 +398,8 @@ func (c *Client) importNode(uri *URI, request *pbuf.ImportRequest) error {
 	if err != nil {
 		return errors.Wrap(err, "marshaling to protobuf")
 	}
-	resp, err := c.doRequest(uri, "POST", "/import", defaultProtobufHeaders(), bytes.NewReader(data))
+	path := fmt.Sprintf("/index/%s/field/%s/import", request.GetIndex(), request.GetField())
+	resp, err := c.doRequest(uri, "POST", path, defaultProtobufHeaders(), bytes.NewReader(data))
 	if err = anyError(resp, err); err != nil {
 		return errors.Wrap(err, "doing import request")
 	}
@@ -408,7 +409,8 @@ func (c *Client) importNode(uri *URI, request *pbuf.ImportRequest) error {
 func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest) error {
 	data, _ := proto.Marshal(request)
 	// request.Marshal never returns an error
-	resp, err := c.doRequest(uri, "POST", "/import-value", defaultProtobufHeaders(), bytes.NewReader(data))
+	path := fmt.Sprintf("/index/%s/field/%s/import", request.GetIndex(), request.GetField())
+	resp, err := c.doRequest(uri, "POST", path, defaultProtobufHeaders(), bytes.NewReader(data))
 	if err != nil {
 		return errors.Wrap(err, "doing /import-value request")
 	}
@@ -469,14 +471,14 @@ func (c *Client) readSchema() ([]StatusIndex, error) {
 }
 
 func (c *Client) shardsMax() (map[string]uint64, error) {
-	_, data, err := c.httpRequest("GET", "/shards/max", nil, nil)
+	_, data, err := c.httpRequest("GET", "/internal/shards/max", nil, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "requesting /shards/max")
+		return nil, errors.Wrap(err, "requesting /internal/shards/max")
 	}
 	m := map[string]map[string]uint64{}
 	err = json.Unmarshal(data, &m)
 	if err != nil {
-		return nil, errors.Wrap(err, "unmarshaling /shards/max data")
+		return nil, errors.Wrap(err, "unmarshaling /internal/shards/max data")
 	}
 	return m["standard"], nil
 }

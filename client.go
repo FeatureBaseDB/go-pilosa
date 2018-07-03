@@ -373,7 +373,7 @@ func (c *Client) fetchFragmentNodes(indexName string, shard uint64) ([]fragmentN
 	if ok {
 		return nodes, nil
 	}
-	path := fmt.Sprintf("/fragment/nodes?shard=%d&index=%s", shard, indexName)
+	path := fmt.Sprintf("/internal/fragment/nodes?shard=%d&index=%s", shard, indexName)
 	_, body, err := c.httpRequest("GET", path, []byte{}, nil)
 	if err != nil {
 		return nil, err
@@ -398,22 +398,22 @@ func (c *Client) importNode(uri *URI, request *pbuf.ImportRequest) error {
 	if err != nil {
 		return errors.Wrap(err, "marshaling to protobuf")
 	}
-	resp, err := c.doRequest(uri, "POST", "/import", defaultProtobufHeaders(), bytes.NewReader(data))
-	if err = anyError(resp, err); err != nil {
-		return errors.Wrap(err, "doing import request")
-	}
-	return errors.Wrap(resp.Body.Close(), "closing import response body")
+	return c.importData(uri, request.GetIndex(), request.GetField(), data)
 }
 
 func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest) error {
-	data, _ := proto.Marshal(request)
-	// request.Marshal never returns an error
-	resp, err := c.doRequest(uri, "POST", "/import-value", defaultProtobufHeaders(), bytes.NewReader(data))
+	data, err := proto.Marshal(request)
 	if err != nil {
-		return errors.Wrap(err, "doing /import-value request")
+		return errors.Wrap(err, "marshaling to protobuf")
 	}
+	return c.importData(uri, request.GetIndex(), request.GetField(), data)
+}
+
+func (c *Client) importData(uri *URI, indexName string, fieldName string, data []byte) error {
+	path := fmt.Sprintf("/index/%s/field/%s/import", indexName, fieldName)
+	resp, err := c.doRequest(uri, "POST", path, defaultProtobufHeaders(), bytes.NewReader(data))
 	if err = anyError(resp, err); err != nil {
-		return errors.Wrap(err, "doing import request")
+		return errors.Wrap(err, "doing import")
 	}
 	defer resp.Body.Close()
 
@@ -469,14 +469,14 @@ func (c *Client) readSchema() ([]StatusIndex, error) {
 }
 
 func (c *Client) shardsMax() (map[string]uint64, error) {
-	_, data, err := c.httpRequest("GET", "/shards/max", nil, nil)
+	_, data, err := c.httpRequest("GET", "/internal/shards/max", nil, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "requesting /shards/max")
+		return nil, errors.Wrap(err, "requesting /internal/shards/max")
 	}
 	m := map[string]map[string]uint64{}
 	err = json.Unmarshal(data, &m)
 	if err != nil {
-		return nil, errors.Wrap(err, "unmarshaling /shards/max data")
+		return nil, errors.Wrap(err, "unmarshaling /internal/shards/max data")
 	}
 	return m["standard"], nil
 }

@@ -160,8 +160,7 @@ err := client.ImportField(field, iterator,
 
 ### Tracking Import Status
 
-You can pass a channel of type `ImportStatusUpdate` to `client.ImportField` using `OptImportStatusChannel` function to get notified when an importer imports a shard of columns. The status channel is closed by the client when the import 
-ends.
+You can pass a channel of type `ImportStatusUpdate` to `client.ImportField` using `OptImportStatusChannel` function to get notified when an importer imports a shard of columns. You are responsible to close the status channel when the import ends.
 
 Note that if you use this feature, you have to consume from the status channel, otherwise import goroutines may get blocked.
 
@@ -199,6 +198,9 @@ for ok {
 		time.Sleep(1000 * time.Millisecond)
 	}
 }
+
+// Don't forget to close the status channel
+close(statusChan)
 ```
 
 ## Exporting Data

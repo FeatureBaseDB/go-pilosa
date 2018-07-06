@@ -750,16 +750,16 @@ func (field *Field) Max(row *PQLRowQuery) *PQLBaseQuery {
 	return field.valQuery("Max", row)
 }
 
-// SetIntValue creates a SetValue query.
+// SetIntValue creates a Set query.
 func (field *Field) SetIntValue(columnID uint64, value int) *PQLBaseQuery {
-	qry := fmt.Sprintf("SetValue(col=%d, %s=%d)", columnID, field.name, value)
+	qry := fmt.Sprintf("Set(%d, %s=%d)", columnID, field.name, value)
 	return NewPQLBaseQuery(qry, field.index, nil)
 }
 
-// SetIntValueK creates a SetValue query using a string column key. This will
+// SetIntValueK creates a Set query using a string column key. This will
 // only work against a Pilosa Enterprise server.
 func (field *Field) SetIntValueK(columnKey string, value int) *PQLBaseQuery {
-	qry := fmt.Sprintf("SetValue(col='%s', %s=%d)", columnKey, field.name, value)
+	qry := fmt.Sprintf("Set('%s', %s=%d)", columnKey, field.name, value)
 	return NewPQLBaseQuery(qry, field.index, nil)
 }
 

@@ -602,9 +602,7 @@ func TestCSVImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// TODO: This test doesn't actually use batch or time import strategy because it falls through to the
-	// "remaining records" part of import_manager.recordImportWorker. These functional options are misleading.
-	err = client.ImportField(field, iterator, OptImportBatchSize(10), OptImportThreadCount(1), OptImportTimeout(400*time.Millisecond))
+	err = client.ImportField(field, iterator)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -831,9 +829,17 @@ func TestValueCSVImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	field2, err := index.Field("importvaluefield-set")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureField(field2)
+	if err != nil {
+		t.Fatal(err)
+	}
 	bq := index.BatchQuery(
-		field.Set(1, 10),
-		field.Set(1, 7),
+		field2.Set(1, 10),
+		field2.Set(1, 7),
 	)
 	response, err := client.Query(bq)
 	if err != nil {
@@ -843,7 +849,7 @@ func TestValueCSVImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err = client.Query(field.Sum(field.Row(1)))
+	response, err = client.Query(field.Sum(field2.Row(1)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1027,14 +1033,19 @@ func TestRangeQuery(t *testing.T) {
 func TestRangeField(t *testing.T) {
 	client := getClient()
 	field, _ := index.Field("rangefield", OptFieldInt(10, 20))
+	field2, _ := index.Field("rangefield-set")
 	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureField(field2)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	_, err = client.Query(index.BatchQuery(
-		field.Set(1, 10),
-		field.Set(1, 100),
+		field2.Set(1, 10),
+		field2.Set(1, 100),
 		field.SetIntValue(10, 11),
 		field.SetIntValue(100, 15),
 	), nil)
@@ -1042,7 +1053,7 @@ func TestRangeField(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp, err := client.Query(field.Sum(field.Row(1)))
+	resp, err := client.Query(field.Sum(field2.Row(1)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1053,7 +1064,7 @@ func TestRangeField(t *testing.T) {
 		t.Fatalf("Count 2 != %d", resp.Result().Count())
 	}
 
-	resp, err = client.Query(field.Min(field.Row(1)))
+	resp, err = client.Query(field.Min(field2.Row(1)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1064,7 +1075,7 @@ func TestRangeField(t *testing.T) {
 		t.Fatalf("Count 2 != %d", resp.Result().Count())
 	}
 
-	resp, err = client.Query(field.Max(field.Row(1)))
+	resp, err = client.Query(field.Max(field2.Row(1)))
 	if err != nil {
 		t.Fatal(err)
 	}

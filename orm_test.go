@@ -281,13 +281,13 @@ func TestClearK(t *testing.T) {
 
 func TestSetValue(t *testing.T) {
 	comparePQL(t,
-		"SetValue(col=50, collaboration=15)",
+		"Set(50, collaboration=15)",
 		collabField.SetIntValue(50, 15))
 }
 
 func TestSetValueK(t *testing.T) {
 	comparePQL(t,
-		"SetValue(col='mycol', sample-field=22)",
+		"Set('mycol', sample-field=22)",
 		sampleField.SetIntValueK("mycol", 22))
 }
 
@@ -425,7 +425,7 @@ func TestFieldSum(t *testing.T) {
 
 func TestFieldBSetIntValue(t *testing.T) {
 	comparePQL(t,
-		"SetValue(col=10, collaboration=20)",
+		"Set(10, collaboration=20)",
 		collabField.SetIntValue(10, 20))
 }
 

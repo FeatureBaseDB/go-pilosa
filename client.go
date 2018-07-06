@@ -48,11 +48,9 @@ import (
 	"github.com/golang/protobuf/proto"
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
 	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 )
 
 const maxHosts = 10
-const pilosaMinVersion = ">=0.9.0"
 
 // Client is the HTTP client for Pilosa server.
 type Client struct {
@@ -329,20 +327,18 @@ func (c *Client) importColumns(indexName string, fieldName string, shard uint64,
 	if err != nil {
 		return errors.Wrap(err, "fetching fragment nodes")
 	}
-
-	eg := errgroup.Group{}
 	for _, node := range nodes {
 		uri := &URI{
 			scheme: node.Scheme,
 			host:   node.Host,
 			port:   node.Port,
 		}
-		eg.Go(func() error {
-			return c.importNode(uri, columnsToImportRequest(indexName, fieldName, shard, records))
-		})
+		err = c.importNode(uri, columnsToImportRequest(indexName, fieldName, shard, records))
+		if err != nil {
+			return errors.Wrap(err, "importing to nodes")
+		}
 	}
-	err = eg.Wait()
-	return errors.Wrap(err, "importing to nodes")
+	return nil
 }
 
 func (c *Client) importValues(indexName string, fieldName string, shard uint64, vals []Record) error {

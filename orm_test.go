@@ -183,9 +183,9 @@ func TestField(t *testing.T) {
 
 func TestFieldCopy(t *testing.T) {
 	options := &FieldOptions{
-		timeQuantum: TimeQuantumMonthDayHour,
-		cacheType:   CacheTypeRanked,
-		cacheSize:   123456,
+		TimeQuantum: TimeQuantumMonthDayHour,
+		CacheType:   CacheTypeRanked,
+		CacheSize:   123456,
 	}
 	field, err := sampleIndex.Field("my-field-4copy", options)
 	if err != nil {

@@ -366,12 +366,12 @@ type FieldInfo struct {
 
 // FieldOptions contains options to customize Field objects and field queries.
 type FieldOptions struct {
-	fieldType   FieldType
-	timeQuantum TimeQuantum
-	cacheType   CacheType
-	cacheSize   int
-	min         int64
-	max         int64
+	Type        FieldType
+	TimeQuantum TimeQuantum
+	CacheType   CacheType
+	CacheSize   int
+	Min         int64
+	Max         int64
 }
 
 func (fo *FieldOptions) withDefaults() (updated *FieldOptions) {
@@ -384,23 +384,23 @@ func (fo *FieldOptions) withDefaults() (updated *FieldOptions) {
 func (fo FieldOptions) String() string {
 	mopt := map[string]interface{}{}
 
-	switch fo.fieldType {
+	switch fo.Type {
 	case FieldTypeSet:
-		if fo.cacheType != CacheTypeDefault {
-			mopt["cacheType"] = string(fo.cacheType)
+		if fo.CacheType != CacheTypeDefault {
+			mopt["cacheType"] = string(fo.CacheType)
 		}
-		if fo.cacheSize > 0 {
-			mopt["cacheSize"] = fo.cacheSize
+		if fo.CacheSize > 0 {
+			mopt["cacheSize"] = fo.CacheSize
 		}
 	case FieldTypeInt:
-		mopt["min"] = fo.min
-		mopt["max"] = fo.max
+		mopt["min"] = fo.Min
+		mopt["max"] = fo.Max
 	case FieldTypeTime:
-		mopt["timeQuantum"] = string(fo.timeQuantum)
+		mopt["timeQuantum"] = string(fo.TimeQuantum)
 	}
 
-	if fo.fieldType != FieldTypeDefault {
-		mopt["type"] = string(fo.fieldType)
+	if fo.Type != FieldTypeDefault {
+		mopt["type"] = string(fo.Type)
 	}
 	return fmt.Sprintf(`{"options":%s}`, encodeMap(mopt))
 }
@@ -424,7 +424,7 @@ func (fo *FieldOptions) addOptions(options ...interface{}) error {
 				return err
 			}
 		case TimeQuantum:
-			fo.timeQuantum = o
+			fo.TimeQuantum = o
 		default:
 			return ErrInvalidFieldOption
 		}
@@ -443,9 +443,9 @@ func OptFieldSet(cacheType CacheType, cacheSize int) FieldOption {
 		if cacheSize < 0 {
 			return ErrInvalidFieldOption
 		}
-		options.fieldType = FieldTypeSet
-		options.cacheType = cacheType
-		options.cacheSize = cacheSize
+		options.Type = FieldTypeSet
+		options.CacheType = cacheType
+		options.CacheSize = cacheSize
 		return nil
 	}
 }
@@ -453,20 +453,20 @@ func OptFieldSet(cacheType CacheType, cacheSize int) FieldOption {
 // OptFieldInt adds an integer field.
 func OptFieldInt(min int64, max int64) FieldOption {
 	return func(options *FieldOptions) error {
-		options.fieldType = FieldTypeInt
+		options.Type = FieldTypeInt
 		if max < min {
 			return ErrInvalidFieldOption
 		}
-		options.min = min
-		options.max = max
+		options.Min = min
+		options.Max = max
 		return nil
 	}
 }
 
 func OptFieldTime(quantum TimeQuantum) FieldOption {
 	return func(options *FieldOptions) error {
-		options.fieldType = FieldTypeTime
-		options.timeQuantum = quantum
+		options.Type = FieldTypeTime
+		options.TimeQuantum = quantum
 		return nil
 	}
 }
@@ -692,6 +692,12 @@ const (
 
 // CacheSizeDefault is the default cache size
 const CacheSizeDefault = 0
+
+// Options returns the options set for the field. Which fields of the
+// FieldOptions struct are actually being used depends on the field's type.
+func (f *Field) Options() FieldOptions {
+	return *f.options
+}
 
 // LT creates a less than query.
 func (field *Field) LT(n int) *PQLRowQuery {

@@ -481,11 +481,11 @@ func TestSchema(t *testing.T) {
 		t.Fatal("Field should not be nil")
 	}
 	opt := f.options
-	if opt.CacheType != CacheTypeLRU {
-		t.Fatalf("cache type %s != %s", CacheTypeLRU, opt.CacheType)
+	if opt.cacheType != CacheTypeLRU {
+		t.Fatalf("cache type %s != %s", CacheTypeLRU, opt.cacheType)
 	}
-	if opt.CacheSize != 9999 {
-		t.Fatalf("cache size 9999 != %d", opt.CacheSize)
+	if opt.cacheSize != 9999 {
+		t.Fatalf("cache size 9999 != %d", opt.cacheSize)
 	}
 }
 

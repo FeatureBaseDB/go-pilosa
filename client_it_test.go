@@ -481,11 +481,11 @@ func TestSchema(t *testing.T) {
 		t.Fatal("Field should not be nil")
 	}
 	opt := f.options
-	if opt.cacheType != CacheTypeLRU {
-		t.Fatalf("cache type %s != %s", CacheTypeLRU, opt.cacheType)
+	if opt.CacheType != CacheTypeLRU {
+		t.Fatalf("cache type %s != %s", CacheTypeLRU, opt.CacheType)
 	}
-	if opt.cacheSize != 9999 {
-		t.Fatalf("cache size 9999 != %d", opt.cacheSize)
+	if opt.CacheSize != 9999 {
+		t.Fatalf("cache size 9999 != %d", opt.CacheSize)
 	}
 }
 
@@ -832,8 +832,8 @@ func TestValueCSVImport(t *testing.T) {
 		t.Fatal(err)
 	}
 	bq := index.BatchQuery(
-		field.Set(1, 10),
-		field.Set(1, 7),
+		testField.Set(1, 10),
+		testField.Set(1, 7),
 	)
 	response, err := client.Query(bq)
 	if err != nil {
@@ -843,13 +843,13 @@ func TestValueCSVImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err = client.Query(field.Sum(field.Row(1)))
+	response, err = client.Query(field.Sum(testField.Row(1)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	target := int64(8)
 	if target != response.Result().Value() {
-		t.Fatalf("%d != %d", target, response.Result().Value())
+		t.Fatalf("%d != %#v", target, response.Result())
 	}
 }
 
@@ -1033,57 +1033,55 @@ func TestRangeField(t *testing.T) {
 	}
 
 	_, err = client.Query(index.BatchQuery(
-		field.Set(1, 10),
-		field.Set(1, 100),
-		field.SetIntValue(10, 11),
-		field.SetIntValue(100, 15),
+		field.Set(10, 1),
+		field.Set(12, 2),
 	), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	resp, err := client.Query(field.Sum(field.Row(1)))
+	resp, err := client.Query(field.Sum(field.GT(11)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Result().Value() != 26 {
-		t.Fatalf("Sum 26 != %d", resp.Result().Value())
-	}
-	if resp.Result().Count() != 2 {
-		t.Fatalf("Count 2 != %d", resp.Result().Count())
-	}
-
-	resp, err = client.Query(field.Min(field.Row(1)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resp.Result().Value() != 11 {
-		t.Fatalf("Min 11 != %d", resp.Result().Value())
+	if resp.Result().Value() != 12 {
+		t.Fatalf("Sum 12 != %d", resp.Result().Value())
 	}
 	if resp.Result().Count() != 1 {
-		t.Fatalf("Count 2 != %d", resp.Result().Count())
+		t.Fatalf("Count 1 != %d", resp.Result().Count())
 	}
 
-	resp, err = client.Query(field.Max(field.Row(1)))
+	resp, err = client.Query(field.Min(nil))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Result().Value() != 15 {
-		t.Fatalf("Max 15 != %d", resp.Result().Value())
+	if resp.Result().Value() != 10 {
+		t.Fatalf("Min 10 != %d", resp.Result().Value())
 	}
 	if resp.Result().Count() != 1 {
-		t.Fatalf("Count 2 != %d", resp.Result().Count())
+		t.Fatalf("Count 1 != %d", resp.Result().Count())
+	}
+
+	resp, err = client.Query(field.Max(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Result().Value() != 12 {
+		t.Fatalf("Max 12 != %d", resp.Result().Value())
+	}
+	if resp.Result().Count() != 1 {
+		t.Fatalf("Count 1 != %d", resp.Result().Count())
 	}
 
 	resp, err = client.Query(field.LT(15))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(resp.Result().Row().Columns) != 1 {
-		t.Fatalf("Count 1 != %d", len(resp.Result().Row().Columns))
+	if len(resp.Result().Row().Columns) != 2 {
+		t.Fatalf("Count 2 != %d", len(resp.Result().Row().Columns))
 	}
-	if resp.Result().Row().Columns[0] != 10 {
-		t.Fatalf("Column 10 != %d", resp.Result().Row().Columns[0])
+	if resp.Result().Row().Columns[0] != 1 {
+		t.Fatalf("Column 1 != %d", resp.Result().Row().Columns[0])
 	}
 }
 

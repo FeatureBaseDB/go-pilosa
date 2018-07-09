@@ -292,12 +292,12 @@ func (c *Client) Schema() (*Schema, error) {
 		}
 		for _, fieldInfo := range indexInfo.Fields {
 			fieldOptions := &FieldOptions{
-				fieldType:   fieldInfo.Options.FieldType,
-				cacheSize:   int(fieldInfo.Options.CacheSize),
-				cacheType:   CacheType(fieldInfo.Options.CacheType),
-				timeQuantum: TimeQuantum(fieldInfo.Options.TimeQuantum),
-				min:         fieldInfo.Options.Min,
-				max:         fieldInfo.Options.Max,
+				Type:        fieldInfo.Options.FieldType,
+				CacheSize:   int(fieldInfo.Options.CacheSize),
+				CacheType:   CacheType(fieldInfo.Options.CacheType),
+				TimeQuantum: TimeQuantum(fieldInfo.Options.TimeQuantum),
+				Min:         fieldInfo.Options.Min,
+				Max:         fieldInfo.Options.Max,
 			}
 			_, err := index.Field(fieldInfo.Name, fieldOptions)
 			if err != nil {
@@ -311,7 +311,7 @@ func (c *Client) Schema() (*Schema, error) {
 // ImportField imports records from the given iterator.
 func (c *Client) ImportField(field *Field, iterator RecordIterator, options ...ImportOption) error {
 	importOptions := &ImportOptions{}
-	if field.options != nil && field.options.fieldType == FieldTypeInt {
+	if field.options != nil && field.options.Type == FieldTypeInt {
 		importRecordsFunction(c.importValues)(importOptions)
 	} else {
 		importRecordsFunction(c.importColumns)(importOptions)

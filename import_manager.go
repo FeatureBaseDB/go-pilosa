@@ -19,9 +19,9 @@ func newRecordImportManager(client *Client) *recordImportManager {
 }
 
 type importWorkerChannels struct {
-	recordChan <-chan Record
-	errChan    chan<- error
-	statusChan chan<- ImportStatusUpdate
+	records <-chan Record
+	errs    chan<- error
+	status  chan<- ImportStatusUpdate
 }
 
 func (rim recordImportManager) Run(field *Field, iterator RecordIterator, options ImportOptions) error {
@@ -38,9 +38,9 @@ func (rim recordImportManager) Run(field *Field, iterator RecordIterator, option
 	for i := range recordChans {
 		recordChans[i] = make(chan Record, options.batchSize)
 		chans := importWorkerChannels{
-			recordChan: recordChans[i],
-			errChan:    errChan,
-			statusChan: statusChan,
+			records: recordChans[i],
+			errs:    errChan,
+			status:  statusChan,
 		}
 		go recordImportWorker(i, rim.client, field, chans, options)
 	}
@@ -88,9 +88,9 @@ func recordImportWorker(id int, client *Client, field *Field, chans importWorker
 	fieldName := field.Name()
 	indexName := field.index.Name()
 	importFun := options.importRecordsFunction
-	statusChan := chans.statusChan
-	recordChan := chans.recordChan
-	errChan := chans.errChan
+	statusChan := chans.status
+	recordChan := chans.records
+	errChan := chans.errs
 
 	importRecords := func(shard uint64, records []Record) error {
 		tic := time.Now()

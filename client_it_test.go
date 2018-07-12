@@ -855,7 +855,7 @@ func TestValueCSVImport(t *testing.T) {
 	}
 	target := int64(8)
 	if target != response.Result().Value() {
-		t.Fatalf("%d != %d", target, response.Result().Value())
+		t.Fatalf("%d != %#v", target, response.Result())
 	}
 }
 
@@ -1072,7 +1072,7 @@ func TestRangeField(t *testing.T) {
 		t.Fatalf("Min 11 != %d", resp.Result().Value())
 	}
 	if resp.Result().Count() != 1 {
-		t.Fatalf("Count 2 != %d", resp.Result().Count())
+		t.Fatalf("Count 1 != %d", resp.Result().Count())
 	}
 
 	resp, err = client.Query(field.Max(field2.Row(1)))
@@ -1083,7 +1083,7 @@ func TestRangeField(t *testing.T) {
 		t.Fatalf("Max 15 != %d", resp.Result().Value())
 	}
 	if resp.Result().Count() != 1 {
-		t.Fatalf("Count 2 != %d", resp.Result().Count())
+		t.Fatalf("Count 1 != %d", resp.Result().Count())
 	}
 
 	resp, err = client.Query(field.LT(15))

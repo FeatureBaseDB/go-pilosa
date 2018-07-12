@@ -374,6 +374,38 @@ type FieldOptions struct {
 	max         int64
 }
 
+// Type returns the type of the field. Currently "set", "int", or "time".
+func (fo *FieldOptions) Type() FieldType {
+	return fo.fieldType
+}
+
+// TimeQuantum returns the configured time quantum for a time field. Empty
+// string otherwise.
+func (fo *FieldOptions) TimeQuantum() TimeQuantum {
+	return fo.timeQuantum
+}
+
+// CacheType returns the configured cache type for a "set" field. Empty string
+// otherwise.
+func (fo *FieldOptions) CacheType() CacheType {
+	return fo.cacheType
+}
+
+// CacheSize returns the cache size for a set field. Zero otherwise.
+func (fo *FieldOptions) CacheSize() int {
+	return fo.cacheSize
+}
+
+// Min returns the minimum accepted value for an integer field. Zero otherwise.
+func (fo *FieldOptions) Min() int64 {
+	return fo.min
+}
+
+// Max returns the maximum accepted value for an integer field. Zero otherwise.
+func (fo *FieldOptions) Max() int64 {
+	return fo.max
+}
+
 func (fo *FieldOptions) withDefaults() (updated *FieldOptions) {
 	// copy options so the original is not updated
 	updated = &FieldOptions{}
@@ -692,6 +724,12 @@ const (
 
 // CacheSizeDefault is the default cache size
 const CacheSizeDefault = 0
+
+// Options returns the options set for the field. Which fields of the
+// FieldOptions struct are actually being used depends on the field's type.
+func (f *Field) Options() *FieldOptions {
+	return f.options
+}
 
 // LT creates a less than query.
 func (field *Field) LT(n int) *PQLRowQuery {

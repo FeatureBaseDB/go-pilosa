@@ -581,7 +581,20 @@ func TestRangeK(t *testing.T) {
 		collabField.RangeK("foo", start, end))
 }
 
-func TestIntFieldOptionsToString(t *testing.T) {
+func TestSetFieldOptions(t *testing.T) {
+	field, err := sampleIndex.Field("set-field", OptFieldSet(CacheTypeRanked, 9999))
+	if err != nil {
+		t.Fatal(err)
+	}
+	jsonString := field.options.String()
+	targetString := `{"options":{"type":"set","cacheType":"ranked","cacheSize":9999}}`
+	if sortedString(targetString) != sortedString(jsonString) {
+		t.Fatalf("`%s` != `%s`", targetString, jsonString)
+	}
+	compareFieldOptions(t, field.Options(), FieldTypeSet, TimeQuantumNone, CacheTypeRanked, 9999, 0, 0)
+}
+
+func TestIntFieldOptions(t *testing.T) {
 	field, err := sampleIndex.Field("int-field", OptFieldInt(-10, 100))
 	if err != nil {
 		t.Fatal(err)
@@ -591,9 +604,10 @@ func TestIntFieldOptionsToString(t *testing.T) {
 	if sortedString(targetString) != sortedString(jsonString) {
 		t.Fatalf("`%s` != `%s`", targetString, jsonString)
 	}
+	compareFieldOptions(t, field.Options(), FieldTypeInt, TimeQuantumNone, CacheTypeDefault, 0, -10, 100)
 }
 
-func TestTimeFieldOptionsToString(t *testing.T) {
+func TestTimeFieldOptions(t *testing.T) {
 	field, err := sampleIndex.Field("time-field", OptFieldTime(TimeQuantumDayHour))
 	if err != nil {
 		t.Fatal(err)
@@ -603,6 +617,7 @@ func TestTimeFieldOptionsToString(t *testing.T) {
 	if sortedString(targetString) != sortedString(jsonString) {
 		t.Fatalf("`%s` != `%s`", targetString, jsonString)
 	}
+	compareFieldOptions(t, field.Options(), FieldTypeTime, TimeQuantumDayHour, CacheTypeDefault, 0, 0, 0)
 }
 
 func TestInvalidFieldOption(t *testing.T) {
@@ -647,6 +662,27 @@ func comparePQL(t *testing.T, target string, q PQLQuery) {
 	pql := q.serialize()
 	if target != pql {
 		t.Fatalf("%s != %s", target, pql)
+	}
+}
+
+func compareFieldOptions(t *testing.T, opts *FieldOptions, fieldType FieldType, timeQuantum TimeQuantum, cacheType CacheType, cacheSize int, min int64, max int64) {
+	if fieldType != opts.Type() {
+		t.Fatalf("%s != %s", fieldType, opts.Type())
+	}
+	if timeQuantum != opts.TimeQuantum() {
+		t.Fatalf("%s != %s", timeQuantum, opts.TimeQuantum())
+	}
+	if cacheType != opts.CacheType() {
+		t.Fatalf("%s != %s", cacheType, opts.CacheType())
+	}
+	if cacheSize != opts.CacheSize() {
+		t.Fatalf("%d != %d", cacheSize, opts.CacheSize())
+	}
+	if min != opts.Min() {
+		t.Fatalf("%d != %d", min, opts.Min())
+	}
+	if max != opts.Max() {
+		t.Fatalf("%d != %d", max, opts.Max())
 	}
 }
 

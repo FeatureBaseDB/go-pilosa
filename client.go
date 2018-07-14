@@ -52,7 +52,6 @@ import (
 )
 
 const maxHosts = 10
-const pilosaMinVersion = ">=0.9.0"
 
 // Client is the HTTP client for Pilosa server.
 type Client struct {
@@ -329,7 +328,6 @@ func (c *Client) importColumns(indexName string, fieldName string, shard uint64,
 	if err != nil {
 		return errors.Wrap(err, "fetching fragment nodes")
 	}
-
 	eg := errgroup.Group{}
 	for _, node := range nodes {
 		uri := &URI{
@@ -342,7 +340,7 @@ func (c *Client) importColumns(indexName string, fieldName string, shard uint64,
 		})
 	}
 	err = eg.Wait()
-	return errors.Wrap(err, "importing to nodes")
+	return errors.Wrap(err, "importing columns to nodes")
 }
 
 func (c *Client) importValues(indexName string, fieldName string, shard uint64, vals []Record) error {
@@ -350,19 +348,19 @@ func (c *Client) importValues(indexName string, fieldName string, shard uint64, 
 	if err != nil {
 		return err
 	}
+	eg := errgroup.Group{}
 	for _, node := range nodes {
 		uri := &URI{
 			scheme: node.Scheme,
 			host:   node.Host,
 			port:   node.Port,
 		}
-		err = c.importValueNode(uri, valsToImportRequest(indexName, fieldName, shard, vals))
-		if err != nil {
-			return err
-		}
+		eg.Go(func() error {
+			return c.importValueNode(uri, valsToImportRequest(indexName, fieldName, shard, vals))
+		})
 	}
-
-	return nil
+	err = eg.Wait()
+	return errors.Wrap(err, "importing values to nodes")
 }
 
 func (c *Client) fetchFragmentNodes(indexName string, shard uint64) ([]fragmentNode, error) {

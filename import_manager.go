@@ -18,11 +18,17 @@ func newRecordImportManager(client *Client) *recordImportManager {
 	}
 }
 
+type importWorkerChannels struct {
+	records <-chan Record
+	errs    chan<- error
+	status  chan<- ImportStatusUpdate
+}
+
 func (rim recordImportManager) Run(field *Field, iterator RecordIterator, options ImportOptions) error {
 	shardWidth := options.shardWidth
 	threadCount := uint64(options.threadCount)
 	recordChans := make([]chan Record, threadCount)
-	errChans := make([]chan error, threadCount)
+	errChan := make(chan error)
 	statusChan := options.statusChan
 
 	if options.importRecordsFunction == nil {
@@ -31,8 +37,12 @@ func (rim recordImportManager) Run(field *Field, iterator RecordIterator, option
 
 	for i := range recordChans {
 		recordChans[i] = make(chan Record, options.batchSize)
-		errChans[i] = make(chan error)
-		go recordImportWorker(i, rim.client, field, recordChans[i], errChans[i], statusChan, options)
+		chans := importWorkerChannels{
+			records: recordChans[i],
+			errs:    errChan,
+			status:  statusChan,
+		}
+		go recordImportWorker(i, rim.client, field, chans, options)
 	}
 
 	var record Record
@@ -54,36 +64,33 @@ func (rim recordImportManager) Run(field *Field, iterator RecordIterator, option
 		close(q)
 	}
 
-	// wait for workers to stop
-	var workerErr error
-	for _, q := range errChans {
-		workerErr = <-q
-		if workerErr != nil {
-			break
-		}
-	}
-
-	// TODO: Closing this channel will panic if the field has multiple fields.
-	if statusChan != nil {
-		close(statusChan)
-	}
-
 	if recordIteratorError != nil {
 		return recordIteratorError
 	}
 
-	if workerErr != nil {
-		return workerErr
+	done := uint64(0)
+	for {
+		select {
+		case workerErr := <-errChan:
+			if workerErr != nil {
+				return workerErr
+			}
+			done += 1
+			if done == threadCount {
+				return nil
+			}
+		}
 	}
-
-	return nil
 }
 
-func recordImportWorker(id int, client *Client, field *Field, recordChan <-chan Record, errChan chan<- error, statusChan chan<- ImportStatusUpdate, options ImportOptions) {
+func recordImportWorker(id int, client *Client, field *Field, chans importWorkerChannels, options ImportOptions) {
 	batchForShard := map[uint64][]Record{}
 	fieldName := field.Name()
 	indexName := field.index.Name()
 	importFun := options.importRecordsFunction
+	statusChan := chans.status
+	recordChan := chans.records
+	errChan := chans.errs
 
 	importRecords := func(shard uint64, records []Record) error {
 		tic := time.Now()

@@ -169,7 +169,7 @@ func (c *Client) Query(query PQLQuery, options ...interface{}) (*QueryResponse, 
 
 // CreateIndex creates an index on the server using the given Index struct.
 func (c *Client) CreateIndex(index *Index) error {
-	data := []byte("")
+	data := []byte(index.options.String())
 	path := fmt.Sprintf("/index/%s", index.name)
 	response, _, err := c.httpRequest("POST", path, data, nil)
 	if err != nil {

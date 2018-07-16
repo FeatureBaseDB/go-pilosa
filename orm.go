@@ -59,7 +59,7 @@ func NewSchema() *Schema {
 }
 
 // Index returns an index with a name.
-func (s *Schema) Index(name string) (*Index, error) {
+func (s *Schema) Index(name string, options ...interface{}) (*Index, error) {
 	if index, ok := s.indexes[name]; ok {
 		return index, nil
 	}
@@ -67,6 +67,13 @@ func (s *Schema) Index(name string) (*Index, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	indexOptions := &IndexOptions{}
+	if err := indexOptions.addOptions(options...); err != nil {
+		return nil, err
+	}
+	index.options = indexOptions.withDefaults()
+
 	s.indexes[name] = index
 	return index, nil
 }
@@ -211,11 +218,63 @@ func NewPQLRowQuery(pql string, index *Index, err error) *PQLRowQuery {
 	}
 }
 
+// IndexOptions contains options to customize Index objects.
+type IndexOptions struct {
+	keys bool
+}
+
+func (io *IndexOptions) withDefaults() (updated *IndexOptions) {
+	// copy options so the original is not updated
+	updated = &IndexOptions{}
+	*updated = *io
+	return
+}
+
+func (io IndexOptions) String() string {
+	mopt := map[string]interface{}{}
+	if io.keys {
+		mopt["keys"] = io.keys
+	}
+	return fmt.Sprintf(`{"options":%s}`, encodeMap(mopt))
+}
+
+func (io *IndexOptions) addOptions(options ...interface{}) error {
+	for i, option := range options {
+		switch o := option.(type) {
+		case *IndexOptions:
+			if i != 0 {
+				return ErrInvalidIndexOption
+			}
+			*io = *o
+		case IndexOption:
+			err := o(io)
+			if err != nil {
+				return err
+			}
+		default:
+			return ErrInvalidIndexOption
+		}
+	}
+	return nil
+}
+
+// IndexOption is used to pass an option to Index function.
+type IndexOption func(options *IndexOptions) error
+
+// OptIndexKeys sets whether index uses string keys.
+func OptIndexKeys(keys bool) IndexOption {
+	return func(options *IndexOptions) error {
+		options.keys = keys
+		return nil
+	}
+}
+
 // Index is a Pilosa index. The purpose of the Index is to represent a data namespace.
 // You cannot perform cross-index queries. Column-level attributes are global to the Index.
 type Index struct {
-	name   string
-	fields map[string]*Field
+	name    string
+	options *IndexOptions
+	fields  map[string]*Field
 }
 
 func (idx *Index) String() string {
@@ -228,8 +287,9 @@ func NewIndex(name string) (*Index, error) {
 		return nil, err
 	}
 	return &Index{
-		name:   name,
-		fields: map[string]*Field{},
+		name:    name,
+		options: &IndexOptions{},
+		fields:  map[string]*Field{},
 	}, nil
 }
 
@@ -248,9 +308,11 @@ func (idx *Index) copy() *Index {
 		fields[name] = f.copy()
 	}
 	index := &Index{
-		name:   idx.name,
-		fields: fields,
+		name:    idx.name,
+		options: &IndexOptions{},
+		fields:  fields,
 	}
+	*index.options = *idx.options
 	return index
 }
 
@@ -372,6 +434,7 @@ type FieldOptions struct {
 	cacheSize   int
 	min         int64
 	max         int64
+	keys        bool
 }
 
 func (fo *FieldOptions) withDefaults() (updated *FieldOptions) {
@@ -401,6 +464,9 @@ func (fo FieldOptions) String() string {
 
 	if fo.fieldType != FieldTypeDefault {
 		mopt["type"] = string(fo.fieldType)
+	}
+	if fo.keys {
+		mopt["keys"] = fo.keys
 	}
 	return fmt.Sprintf(`{"options":%s}`, encodeMap(mopt))
 }
@@ -471,6 +537,14 @@ func OptFieldTime(quantum TimeQuantum) FieldOption {
 	}
 }
 
+// OptFieldKeys sets whether field uses string keys.
+func OptFieldKeys(keys bool) FieldOption {
+	return func(options *FieldOptions) error {
+		options.keys = keys
+		return nil
+	}
+}
+
 // Field structs are used to segment and define different functional characteristics within your entire index.
 // You can think of a Field as a table-like data partition within your Index.
 // Row-level attributes are namespaced at the Field level.
@@ -528,7 +602,7 @@ func (f *Field) Set(rowID uint64, columnID uint64) *PQLBaseQuery {
 // SetK creates a Set query using string row and column keys. This will
 // only work against a Pilosa Enterprise server.
 func (f *Field) SetK(rowKey string, columnKey string) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("Set(%s,%s='%s')",
+	return NewPQLBaseQuery(fmt.Sprintf(`Set("%s",%s='%s')`,
 		columnKey, f.name, rowKey), f.index, nil)
 }
 

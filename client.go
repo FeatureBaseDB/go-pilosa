@@ -285,20 +285,12 @@ func (c *Client) Schema() (*Schema, error) {
 	}
 	schema := NewSchema()
 	for _, indexInfo := range indexes {
-		index, err := schema.Index(indexInfo.Name)
+		index, err := schema.indexWithOptions(indexInfo.Name, indexInfo.Options.asIndexOptions())
 		if err != nil {
 			return nil, err
 		}
 		for _, fieldInfo := range indexInfo.Fields {
-			fieldOptions := &FieldOptions{
-				fieldType:   fieldInfo.Options.FieldType,
-				cacheSize:   int(fieldInfo.Options.CacheSize),
-				cacheType:   CacheType(fieldInfo.Options.CacheType),
-				timeQuantum: TimeQuantum(fieldInfo.Options.TimeQuantum),
-				min:         fieldInfo.Options.Min,
-				max:         fieldInfo.Options.Max,
-			}
-			_, err := index.Field(fieldInfo.Name, fieldOptions)
+			_, err := index.fieldWithOptions(fieldInfo.Name, fieldInfo.Options.asFieldOptions())
 			if err != nil {
 				return nil, err
 			}
@@ -976,6 +968,24 @@ type StatusOptions struct {
 	TimeQuantum string    `json:"timeQuantum"`
 	Min         int64     `json:"min"`
 	Max         int64     `json:"max"`
+	Keys        bool      `json:"keys"`
+}
+
+func (so StatusOptions) asIndexOptions() *IndexOptions {
+	return &IndexOptions{
+		keys: so.Keys,
+	}
+}
+
+func (so StatusOptions) asFieldOptions() *FieldOptions {
+	return &FieldOptions{
+		fieldType:   so.FieldType,
+		cacheSize:   int(so.CacheSize),
+		cacheType:   CacheType(so.CacheType),
+		timeQuantum: TimeQuantum(so.TimeQuantum),
+		min:         so.Min,
+		max:         so.Max,
+	}
 }
 
 type exportReader struct {

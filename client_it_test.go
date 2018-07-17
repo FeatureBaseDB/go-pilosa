@@ -108,7 +108,7 @@ func TestCreateDefaultClient(t *testing.T) {
 
 func TestClientReturnsResponse(t *testing.T) {
 	client := getClient()
-	response, err := client.Query(testField.Row(1), nil)
+	response, err := client.Query(testField.Row(1))
 	if err != nil {
 		t.Fatalf("Error querying: %s", err)
 	}
@@ -149,11 +149,11 @@ func TestQueryWithColumns(t *testing.T) {
 		"registered": true,
 		"height":     1.83,
 	}
-	_, err := client.Query(testField.Set(1, 100), nil)
+	_, err := client.Query(testField.Set(1, 100))
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := client.Query(index.SetColumnAttrs(100, targetAttrs), nil)
+	response, err := client.Query(index.SetColumnAttrs(100, targetAttrs))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,11 +189,11 @@ func TestSetRowAttrs(t *testing.T) {
 		"registered": true,
 		"height":     1.83,
 	}
-	_, err := client.Query(testField.Set(1, 100), nil)
+	_, err := client.Query(testField.Set(1, 100))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = client.Query(testField.SetRowAttrs(1, targetAttrs), nil)
+	_, err = client.Query(testField.SetRowAttrs(1, targetAttrs))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +208,7 @@ func TestSetRowAttrs(t *testing.T) {
 
 func TestOrmCount(t *testing.T) {
 	client := getClient()
-	countField, err := index.Field("count-test", nil)
+	countField, err := index.Field("count-test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,8 +221,8 @@ func TestOrmCount(t *testing.T) {
 		countField.Set(10, 21),
 		countField.Set(15, 25),
 	)
-	client.Query(qry, nil)
-	response, err := client.Query(index.Count(countField.Row(10)), nil)
+	client.Query(qry)
+	response, err := client.Query(index.Count(countField.Row(10)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,9 +247,9 @@ func TestIntersectReturns(t *testing.T) {
 		field.Set(3, 10),
 		field.Set(3, 20),
 	)
-	client.Query(qry1, nil)
+	client.Query(qry1)
 	qry2 := index.Intersect(field.Row(2), field.Row(3))
-	response, err := client.Query(qry2, nil)
+	response, err := client.Query(qry2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +263,7 @@ func TestIntersectReturns(t *testing.T) {
 
 func TestTopNReturns(t *testing.T) {
 	client := getClient()
-	field, err := index.Field("topn_test", nil)
+	field, err := index.Field("topn_test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,10 +278,10 @@ func TestTopNReturns(t *testing.T) {
 		field.Set(20, 5),
 		field.Set(30, 5),
 	)
-	client.Query(qry, nil)
+	client.Query(qry)
 	// XXX: The following is required to make this test pass. See: https://github.com/pilosa/pilosa/issues/625
 	client.HttpRequest("POST", "/recalculate-caches", nil, nil)
-	response, err := client.Query(field.TopN(2), nil)
+	response, err := client.Query(field.TopN(2))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -377,7 +377,7 @@ func TestIndexAlreadyExists(t *testing.T) {
 
 func TestQueryWithEmptyClusterFails(t *testing.T) {
 	client, _ := NewClient(DefaultCluster())
-	_, err := client.Query(index.RawQuery("won't run"), nil)
+	_, err := client.Query(index.RawQuery("won't run"))
 	if err != ErrEmptyCluster {
 		t.Fatal(err)
 	}
@@ -387,7 +387,7 @@ func TestMaxHostsFail(t *testing.T) {
 	uri, _ := NewURIFromAddress("does-not-resolve.foo.bar")
 	cluster := NewClusterWithHost(uri, uri, uri, uri)
 	client, _ := NewClient(cluster)
-	_, err := client.Query(index.RawQuery("foo"), nil)
+	_, err := client.Query(index.RawQuery("foo"))
 	if err != ErrTriedMaxHosts {
 		t.Fatalf("ErrTriedMaxHosts error should be returned")
 	}
@@ -396,7 +396,7 @@ func TestMaxHostsFail(t *testing.T) {
 func TestQueryFailsIfAddressNotResolved(t *testing.T) {
 	uri, _ := NewURIFromAddress("nonexisting.domain.pilosa.com:3456")
 	client, _ := NewClient(uri)
-	_, err := client.Query(index.RawQuery("bar"), nil)
+	_, err := client.Query(index.RawQuery("bar"))
 	if err == nil {
 		t.Fatal()
 	}
@@ -404,7 +404,7 @@ func TestQueryFailsIfAddressNotResolved(t *testing.T) {
 
 func TestQueryFails(t *testing.T) {
 	client := getClient()
-	_, err := client.Query(index.RawQuery("Invalid query"), nil)
+	_, err := client.Query(index.RawQuery("Invalid query"))
 	if err == nil {
 		t.Fatal()
 	}
@@ -426,7 +426,7 @@ func TestErrorResponseNotRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	client, _ := NewClient(uri)
-	response, err := client.Query(testField.Row(1), nil)
+	response, err := client.Query(testField.Row(1))
 	if err == nil {
 		t.Fatalf("Got response: %v", response)
 	}
@@ -440,7 +440,7 @@ func TestResponseNotRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	client, _ := NewClient(uri)
-	response, err := client.Query(testField.Row(1), nil)
+	response, err := client.Query(testField.Row(1))
 	if err == nil {
 		t.Fatalf("Got response: %v", response)
 	}
@@ -450,7 +450,7 @@ func TestInvalidResponse(t *testing.T) {
 	server := getMockServer(200, []byte("unmarshal this!"), -1)
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	response, err := client.Query(index.RawQuery("don't care"), nil)
+	response, err := client.Query(index.RawQuery("don't care"))
 	if err == nil {
 		t.Fatalf("Got response: %v", response)
 	}
@@ -919,7 +919,7 @@ func TestCSVExportFailure(t *testing.T) {
 	server := getMockServer(404, []byte("sorry, not found"), -1)
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	field, err := index.Field("exportfield", nil)
+	field, err := index.Field("exportfield")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -936,7 +936,7 @@ func TestExportReaderFailure(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	field, err := index.Field("exportfield", nil)
+	field, err := index.Field("exportfield")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -959,7 +959,7 @@ func TestExportReaderReadBodyFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	field, err := index.Field("exportfield", nil)
+	field, err := index.Field("exportfield")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1048,7 +1048,7 @@ func TestRangeField(t *testing.T) {
 		field2.Set(1, 100),
 		field.SetIntValue(10, 11),
 		field.SetIntValue(100, 15),
-	), nil)
+	))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1111,7 +1111,7 @@ func TestExcludeAttrsColumns(t *testing.T) {
 	_, err = client.Query(index.BatchQuery(
 		field.Set(1, 100),
 		field.SetRowAttrs(1, attrs),
-	), nil)
+	))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1143,7 +1143,7 @@ func TestExcludeAttrsColumns(t *testing.T) {
 
 func TestImportColumnIteratorError(t *testing.T) {
 	client := getClient()
-	field, err := index.Field("not-important", nil)
+	field, err := index.Field("not-important")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1308,7 +1308,7 @@ func TestResponseWithInvalidType(t *testing.T) {
 	server := getMockServer(200, data, -1)
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	_, err = client.Query(testField.Row(1), nil)
+	_, err = client.Query(testField.Row(1))
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}

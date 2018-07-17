@@ -126,11 +126,11 @@ func TestNewIndexWithInvalidName(t *testing.T) {
 }
 
 func TestIndexCopy(t *testing.T) {
-	index, err := schema.Index("my-index-4copy")
+	index, err := schema.Index("my-index-4copy", OptIndexKeys(true))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = index.Field("my-field-4copy", TimeQuantumDayHour)
+	_, err = index.Field("my-field-4copy", OptFieldTime(TimeQuantumDayHour))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,6 +138,32 @@ func TestIndexCopy(t *testing.T) {
 	if !reflect.DeepEqual(index, copiedIndex) {
 		t.Fatalf("copied index should be equivalent")
 	}
+}
+
+func TestIndexOptions(t *testing.T) {
+	index, err := schema.Index("index-with-options", OptIndexKeys(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := `{"options":{"keys":true}}`
+	if target != index.options.String() {
+		t.Fatalf("%s != %s", target, index.options.String())
+	}
+}
+
+func TestInvalidIndexOption(t *testing.T) {
+	_, err := schema.Index("index-with-invalid-option", IndexOptionErr(0))
+	if err == nil {
+		t.Fatalf("should have failed")
+	}
+}
+
+func TestNilIndexOption(t *testing.T) {
+	_, err := schema.Index("index-with-nil-option", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 }
 
 func TestIndexFields(t *testing.T) {
@@ -182,12 +208,7 @@ func TestField(t *testing.T) {
 }
 
 func TestFieldCopy(t *testing.T) {
-	options := &FieldOptions{
-		timeQuantum: TimeQuantumMonthDayHour,
-		cacheType:   CacheTypeRanked,
-		cacheSize:   123456,
-	}
-	field, err := sampleIndex.Field("my-field-4copy", options)
+	field, err := sampleIndex.Field("my-field-4copy", OptFieldSet(CacheTypeRanked, 123456))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,11 +240,20 @@ func TestFieldToString(t *testing.T) {
 	}
 }
 
+func TestNilFieldOption(t *testing.T) {
+	schema1 := NewSchema()
+	index, _ := schema1.Index("test-index")
+	_, err := index.Field("test-field-with-nil-option", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestFieldSetType(t *testing.T) {
 	schema1 := NewSchema()
 	index, _ := schema1.Index("test-index")
-	field, _ := index.Field("test-field", OptFieldSet(CacheTypeLRU, 1000))
-	target := `{"options":{"type":"set","cacheType":"lru","cacheSize":1000}}`
+	field, _ := index.Field("test-field", OptFieldSet(CacheTypeLRU, 1000), OptFieldKeys(true))
+	target := `{"options":{"type":"set","cacheType":"lru","cacheSize":1000,"keys":true}}`
 	if sortedString(target) != sortedString(field.options.String()) {
 		t.Fatalf("%s != %s", target, field.options.String())
 	}
@@ -621,19 +651,7 @@ func TestTimeFieldOptions(t *testing.T) {
 }
 
 func TestInvalidFieldOption(t *testing.T) {
-	_, err := sampleIndex.Field("invalid-field-opt", 1)
-	if err == nil {
-		t.Fatalf("should have failed")
-	}
-	_, err = sampleIndex.Field("invalid-field-opt", TimeQuantumDayHour, nil)
-	if err == nil {
-		t.Fatalf("should have failed")
-	}
-	_, err = sampleIndex.Field("invalid-field-opt", TimeQuantumDayHour, &FieldOptions{})
-	if err == nil {
-		t.Fatalf("should have failed")
-	}
-	_, err = sampleIndex.Field("invalid-field-opt", FieldOptionErr(0))
+	_, err := sampleIndex.Field("invalid-field-opt", FieldOptionErr(0))
 	if err == nil {
 		t.Fatalf("should have failed")
 	}
@@ -708,6 +726,12 @@ func sortedString(s string) string {
 	arr := strings.Split(s, "")
 	sort.Strings(arr)
 	return strings.Join(arr, "")
+}
+
+func IndexOptionErr(int) IndexOption {
+	return func(*IndexOptions) error {
+		return errors.New("Some error")
+	}
 }
 
 func FieldOptionErr(int) FieldOption {

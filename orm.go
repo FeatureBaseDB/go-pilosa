@@ -59,21 +59,23 @@ func NewSchema() *Schema {
 }
 
 // Index returns an index with a name.
-func (s *Schema) Index(name string, options ...interface{}) (*Index, error) {
+func (s *Schema) Index(name string, options ...IndexOption) (*Index, error) {
 	if index, ok := s.indexes[name]; ok {
 		return index, nil
 	}
-	index, err := NewIndex(name)
-	if err != nil {
-		return nil, err
-	}
-
 	indexOptions := &IndexOptions{}
 	if err := indexOptions.addOptions(options...); err != nil {
 		return nil, err
 	}
-	index.options = indexOptions.withDefaults()
+	return s.indexWithOptions(name, indexOptions)
+}
 
+func (s *Schema) indexWithOptions(name string, options *IndexOptions) (*Index, error) {
+	index, err := NewIndex(name)
+	if err != nil {
+		return nil, err
+	}
+	index.options = options.withDefaults()
 	s.indexes[name] = index
 	return index, nil
 }
@@ -238,21 +240,14 @@ func (io IndexOptions) String() string {
 	return fmt.Sprintf(`{"options":%s}`, encodeMap(mopt))
 }
 
-func (io *IndexOptions) addOptions(options ...interface{}) error {
-	for i, option := range options {
-		switch o := option.(type) {
-		case *IndexOptions:
-			if i != 0 {
-				return ErrInvalidIndexOption
-			}
-			*io = *o
-		case IndexOption:
-			err := o(io)
-			if err != nil {
-				return err
-			}
-		default:
-			return ErrInvalidIndexOption
+func (io *IndexOptions) addOptions(options ...IndexOption) error {
+	for _, option := range options {
+		if option == nil {
+			continue
+		}
+		err := option(io)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
@@ -322,20 +317,25 @@ func (idx *Index) Name() string {
 }
 
 // Field creates a Field struct with the specified name and defaults.
-func (idx *Index) Field(name string, options ...interface{}) (*Field, error) {
+func (idx *Index) Field(name string, options ...FieldOption) (*Field, error) {
 	if field, ok := idx.fields[name]; ok {
 		return field, nil
-	}
-	if err := validateFieldName(name); err != nil {
-		return nil, err
 	}
 	fieldOptions := &FieldOptions{}
 	err := fieldOptions.addOptions(options...)
 	if err != nil {
 		return nil, err
 	}
-	fieldOptions = fieldOptions.withDefaults()
+	return idx.fieldWithOptions(name, fieldOptions)
+}
+
+func (idx *Index) fieldWithOptions(name string, fieldOptions *FieldOptions) (*Field, error) {
+	if err := validateFieldName(name); err != nil {
+		return nil, err
+
+	}
 	field := newField(name, idx)
+	fieldOptions = fieldOptions.withDefaults()
 	field.options = fieldOptions
 	idx.fields[name] = field
 	return field, nil
@@ -503,28 +503,14 @@ func (fo FieldOptions) String() string {
 	return fmt.Sprintf(`{"options":%s}`, encodeMap(mopt))
 }
 
-func (fo *FieldOptions) addOptions(options ...interface{}) error {
-	for i, option := range options {
-		switch o := option.(type) {
-		case nil:
-			if i != 0 {
-				return ErrInvalidFieldOption
-			}
+func (fo *FieldOptions) addOptions(options ...FieldOption) error {
+	for _, option := range options {
+		if option == nil {
 			continue
-		case *FieldOptions:
-			if i != 0 {
-				return ErrInvalidFieldOption
-			}
-			*fo = *o
-		case FieldOption:
-			err := o(fo)
-			if err != nil {
-				return err
-			}
-		case TimeQuantum:
-			fo.timeQuantum = o
-		default:
-			return ErrInvalidFieldOption
+		}
+		err := option(fo)
+		if err != nil {
+			return err
 		}
 	}
 	return nil

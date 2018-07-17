@@ -158,7 +158,7 @@ func TestIndexFields(t *testing.T) {
 func TestIndexToString(t *testing.T) {
 	schema1 := NewSchema()
 	index, _ := schema1.Index("test-index")
-	target := fmt.Sprintf(`&pilosa.Index{name:"test-index", fields:map[string]*pilosa.Field{}}`)
+	target := fmt.Sprintf(`&pilosa.Index{name:"test-index", options:(*pilosa.IndexOptions)(%p), fields:map[string]*pilosa.Field{}}`, index.options)
 	if target != index.String() {
 		t.Fatalf("%s != %s", target, index.String())
 	}
@@ -249,7 +249,7 @@ func TestSet(t *testing.T) {
 
 func TestSetK(t *testing.T) {
 	comparePQL(t,
-		"Set(some_id,collaboration='b7feb014-8ea7-49a8-9cd8-19709161ab63')",
+		`Set("some_id",collaboration='b7feb014-8ea7-49a8-9cd8-19709161ab63')`,
 		collabField.SetK("b7feb014-8ea7-49a8-9cd8-19709161ab63", "some_id"))
 }
 
@@ -659,6 +659,7 @@ func TestEncodeMapPanicsOnMarshalFailure(t *testing.T) {
 }
 
 func comparePQL(t *testing.T, target string, q PQLQuery) {
+	t.Helper()
 	pql := q.serialize()
 	if target != pql {
 		t.Fatalf("%s != %s", target, pql)

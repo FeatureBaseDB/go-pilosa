@@ -46,7 +46,7 @@ func TestQueryWithError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	field, err := index.Field("foo", nil)
+	field, err := index.Field("foo")
 	if err != nil {
 		t.Fatal(err)
 	}

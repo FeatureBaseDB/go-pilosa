@@ -57,16 +57,8 @@ var index *Index
 var testField *Field
 
 func TestMain(m *testing.M) {
-	var err error
-	index, err = NewIndex("go-testindex")
-	if err != nil {
-		panic(err)
-	}
-	testField, err = index.Field("test-field")
-	if err != nil {
-		panic(err)
-	}
-
+	index = NewIndex("go-testindex")
+	testField = index.Field("test-field")
 	Setup()
 	r := m.Run()
 	TearDown()
@@ -208,11 +200,8 @@ func TestSetRowAttrs(t *testing.T) {
 
 func TestOrmCount(t *testing.T) {
 	client := getClient()
-	countField, err := index.Field("count-test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.EnsureField(countField)
+	countField := index.Field("count-test")
+	err := client.EnsureField(countField)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,11 +222,8 @@ func TestOrmCount(t *testing.T) {
 
 func TestIntersectReturns(t *testing.T) {
 	client := getClient()
-	field, err := index.Field("segments")
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.EnsureField(field)
+	field := index.Field("segments")
+	err := client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,11 +249,8 @@ func TestIntersectReturns(t *testing.T) {
 
 func TestTopNReturns(t *testing.T) {
 	client := getClient()
-	field, err := index.Field("topn_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.EnsureField(field)
+	field := index.Field("topn_test")
+	err := client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -300,12 +283,9 @@ func TestTopNReturns(t *testing.T) {
 
 func TestCreateDeleteIndexField(t *testing.T) {
 	client := getClient()
-	index1, err := NewIndex("to-be-deleted")
-	if err != nil {
-		panic(err)
-	}
-	field1, err := index1.Field("foo")
-	err = client.CreateIndex(index1)
+	index1 := NewIndex("to-be-deleted")
+	field1 := index1.Field("foo")
+	err := client.CreateIndex(index1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -341,11 +321,8 @@ func TestEnsureFieldExists(t *testing.T) {
 
 func TestCreateFieldWithTimeQuantum(t *testing.T) {
 	client := getClient()
-	field, err := index.Field("field-with-timequantum", OptFieldTime(TimeQuantumYear))
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.CreateField(field)
+	field := index.Field("field-with-timequantum", OptFieldTime(TimeQuantumYear))
+	err := client.CreateField(field)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -465,7 +442,7 @@ func TestSchema(t *testing.T) {
 	if len(schema.indexes) < 1 {
 		t.Fatalf("There should be at least 1 index in the schema")
 	}
-	f, err := index.Field("schema-test-field",
+	f := index.Field("schema-test-field",
 		OptFieldSet(CacheTypeLRU, 9999),
 	)
 	err = client.EnsureField(f)
@@ -491,21 +468,21 @@ func TestSchema(t *testing.T) {
 
 func TestSync(t *testing.T) {
 	client := getClient()
-	remoteIndex, _ := NewIndex("remote-index-1")
+	remoteIndex := NewIndex("remote-index-1")
 	err := client.EnsureIndex(remoteIndex)
 	if err != nil {
 		t.Fatal(err)
 	}
-	remoteField, _ := remoteIndex.Field("remote-field-1")
+	remoteField := remoteIndex.Field("remote-field-1")
 	err = client.EnsureField(remoteField)
 	if err != nil {
 		t.Fatal(err)
 	}
 	schema1 := NewSchema()
-	index11, _ := schema1.Index("diff-index1")
+	index11 := schema1.Index("diff-index1")
 	index11.Field("field1-1")
 	index11.Field("field1-2")
-	index12, _ := schema1.Index("diff-index2")
+	index12 := schema1.Index("diff-index2")
 	index12.Field("field2-1")
 	schema1.Index(remoteIndex.Name())
 
@@ -546,47 +523,6 @@ func TestErrorRetrievingSchema(t *testing.T) {
 	}
 }
 
-func TestInvalidSchemaInvalidIndex(t *testing.T) {
-	data := []byte(`
-		{
-			"indexes": [{
-				"Name": "**INVALID**"
-			}]
-		}
-	`)
-	server := getMockServer(200, data, len(data))
-	defer server.Close()
-	uri, err := NewURIFromAddress(server.URL)
-	if err != nil {
-		panic(err)
-	}
-	client, _ := NewClient(uri)
-	_, err = client.Schema()
-	if err == nil {
-		t.Fatal("should have failed")
-	}
-}
-
-func TestInvalidSchemaInvalidField(t *testing.T) {
-	data := []byte(`
-		{
-			"indexes": [{
-				"name": "myindex",
-				"fields": [{
-					"name": "**INVALID**"
-				}]
-			}]
-		}
-	`)
-	server := getMockServer(200, data, len(data))
-	defer server.Close()
-	client, _ := NewClient(server.URL)
-	_, err := client.Schema()
-	if err == nil {
-		t.Fatal("should have failed")
-	}
-}
-
 func TestCSVImport(t *testing.T) {
 	client := getClient()
 	text := `10,7
@@ -594,11 +530,8 @@ func TestCSVImport(t *testing.T) {
 		2,3
 		7,1`
 	iterator := NewCSVColumnIterator(strings.NewReader(text))
-	field, err := index.Field("importfield")
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.EnsureField(field)
+	field := index.Field("importfield")
+	err := client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -675,11 +608,8 @@ func NewGivenColumnGenerator(recs []Record) *GivenColumnGenerator {
 func TestImportWithTimeout(t *testing.T) {
 	client := getClient()
 	iterator := &ColumnGenerator{numRows: 100, numColumns: 1000}
-	field, err := index.Field("importfield-timeout")
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.EnsureField(field)
+	field := index.Field("importfield-timeout")
+	err := client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -693,11 +623,8 @@ func TestImportWithTimeout(t *testing.T) {
 func TestImportWithBatchSize(t *testing.T) {
 	client := getClient()
 	iterator := &ColumnGenerator{numRows: 10, numColumns: 1000}
-	field, err := index.Field("importfield-batchsize")
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.EnsureField(field)
+	field := index.Field("importfield-batchsize")
+	err := client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -735,11 +662,8 @@ func TestImportWithBatchSizeExpectingZero(t *testing.T) {
 		},
 	)
 
-	field, err := index.Field("importfield-batchsize-zero")
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.EnsureField(field)
+	field := index.Field("importfield-batchsize-zero")
+	err := client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -760,11 +684,8 @@ func failingImportColumns(indexName string, fieldName string, shard uint64, reco
 func TestImportWithTimeoutFails(t *testing.T) {
 	client := getClient()
 	iterator := &ColumnGenerator{numRows: 10, numColumns: 1000}
-	field, err := index.Field("importfield-timeout")
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.EnsureField(field)
+	field := index.Field("importfield-timeout")
+	err := client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -778,11 +699,8 @@ func TestImportWithTimeoutFails(t *testing.T) {
 func TestImportWithBatchSizeFails(t *testing.T) {
 	client := getClient()
 	iterator := &ColumnGenerator{numRows: 10, numColumns: 1000}
-	field, err := index.Field("importfield-batchsize")
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.EnsureField(field)
+	field := index.Field("importfield-batchsize")
+	err := client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -804,13 +722,10 @@ func TestErrorReturningImportOption(t *testing.T) {
 		2,3
 		7,1`
 	iterator := NewCSVColumnIterator(strings.NewReader(text))
-	field, err := index.Field("importfield")
-	if err != nil {
-		t.Fatal(err)
-	}
+	field := index.Field("importfield")
 	client := getClient()
 	optionErr := errors.New("ERR")
-	err = client.ImportField(field, iterator, ErrorImportOption(optionErr))
+	err := client.ImportField(field, iterator, ErrorImportOption(optionErr))
 	if err != optionErr {
 		t.Fatal("ImportField should fail if an import option fails")
 	}
@@ -821,18 +736,12 @@ func TestValueCSVImport(t *testing.T) {
 	text := `10,7
 		7,1`
 	iterator := NewCSVValueIterator(strings.NewReader(text))
-	field, err := index.Field("importvaluefield", OptFieldInt(0, 100))
+	field := index.Field("importvaluefield", OptFieldInt(0, 100))
+	err := client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.EnsureField(field)
-	if err != nil {
-		t.Fatal(err)
-	}
-	field2, err := index.Field("importvaluefield-set")
-	if err != nil {
-		t.Fatal(err)
-	}
+	field2 := index.Field("importvaluefield-set")
 	err = client.EnsureField(field2)
 	if err != nil {
 		t.Fatal(err)
@@ -872,12 +781,9 @@ func TestValueCSVImportFailure(t *testing.T) {
 
 func TestCSVExport(t *testing.T) {
 	client := getClient()
-	field, err := index.Field("exportfield")
-	if err != nil {
-		t.Fatal(err)
-	}
+	field := index.Field("exportfield")
 	client.EnsureField(field)
-	_, err = client.Query(index.BatchQuery(
+	_, err := client.Query(index.BatchQuery(
 		field.Set(1, 1),
 		field.Set(1, 10),
 		field.Set(2, 1048577),
@@ -919,11 +825,8 @@ func TestCSVExportFailure(t *testing.T) {
 	server := getMockServer(404, []byte("sorry, not found"), -1)
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	field, err := index.Field("exportfield")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = client.ExportField(field)
+	field := index.Field("exportfield")
+	_, err := client.ExportField(field)
 	if err == nil {
 		t.Fatal("should have failed")
 	}
@@ -936,10 +839,7 @@ func TestExportReaderFailure(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	field, err := index.Field("exportfield")
-	if err != nil {
-		t.Fatal(err)
-	}
+	field := index.Field("exportfield")
 	shardURIs := map[uint64]*URI{
 		0: uri,
 	}
@@ -959,10 +859,7 @@ func TestExportReaderReadBodyFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	field, err := index.Field("exportfield")
-	if err != nil {
-		t.Fatal(err)
-	}
+	field := index.Field("exportfield")
 	shardURIs := map[uint64]*URI{0: uri}
 	client, _ := NewClient(uri)
 	reader := newExportReader(client, shardURIs, field)
@@ -1005,7 +902,7 @@ func TestFetchStatus(t *testing.T) {
 
 func TestRangeQuery(t *testing.T) {
 	client := getClient()
-	field, _ := index.Field("test-rangefield", OptFieldTime(TimeQuantumMonthDayHour))
+	field := index.Field("test-rangefield", OptFieldTime(TimeQuantumMonthDayHour))
 	err := client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
@@ -1032,8 +929,8 @@ func TestRangeQuery(t *testing.T) {
 
 func TestRangeField(t *testing.T) {
 	client := getClient()
-	field, _ := index.Field("rangefield", OptFieldInt(10, 20))
-	field2, _ := index.Field("rangefield-set")
+	field := index.Field("rangefield", OptFieldInt(10, 20))
+	field2 := index.Field("rangefield-set")
 	err := client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
@@ -1100,7 +997,7 @@ func TestRangeField(t *testing.T) {
 
 func TestExcludeAttrsColumns(t *testing.T) {
 	client := getClient()
-	field, _ := index.Field("excludecolumnsattrsfield")
+	field := index.Field("excludecolumnsattrsfield")
 	err := client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
@@ -1143,12 +1040,9 @@ func TestExcludeAttrsColumns(t *testing.T) {
 
 func TestImportColumnIteratorError(t *testing.T) {
 	client := getClient()
-	field, err := index.Field("not-important")
-	if err != nil {
-		t.Fatal(err)
-	}
+	field := index.Field("not-important")
 	iterator := NewCSVColumnIterator(&BrokenReader{})
-	err = client.ImportField(field, iterator)
+	err := client.ImportField(field, iterator)
 	if err == nil {
 		t.Fatalf("import field should fail with broken reader")
 	}
@@ -1156,12 +1050,9 @@ func TestImportColumnIteratorError(t *testing.T) {
 
 func TestImportValueIteratorError(t *testing.T) {
 	client := getClient()
-	field, err := index.Field("not-important", OptFieldInt(0, 100))
-	if err != nil {
-		t.Fatal(err)
-	}
+	field := index.Field("not-important", OptFieldInt(0, 100))
 	iterator := NewCSVValueIterator(&BrokenReader{})
-	err = client.ImportField(field, iterator, OptImportBatchSize(100))
+	err := client.ImportField(field, iterator, OptImportBatchSize(100))
 	if err == nil {
 		t.Fatalf("import value field should fail with broken reader")
 	}
@@ -1193,11 +1084,8 @@ func TestImportFieldFailsIfImportColumnsFails(t *testing.T) {
 	defer server.Close()
 	client, _ := NewClient(server.URL)
 	iterator := NewCSVColumnIterator(strings.NewReader("10,7"))
-	field, err := index.Field("importfield1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.ImportField(field, iterator)
+	field := index.Field("importfield1")
+	err := client.ImportField(field, iterator)
 	if err == nil {
 		t.Fatalf("ImportField should fail if importColumns fails")
 	}
@@ -1209,11 +1097,8 @@ func TestImportIntFieldFailsIfImportValuesFails(t *testing.T) {
 	defer server.Close()
 	client, _ := NewClient(server.URL)
 	iterator := NewCSVValueIterator(strings.NewReader("10,7"))
-	field, err := index.Field("import-values-field", OptFieldInt(0, 100))
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.ImportField(field, iterator, OptImportBatchSize(10))
+	field := index.Field("import-values-field", OptFieldInt(0, 100))
+	err := client.ImportField(field, iterator, OptImportBatchSize(10))
 	if err == nil {
 		t.Fatalf("ImportField should fail if importValues fails")
 	}
@@ -1385,7 +1270,7 @@ func TestSyncSchemaCantCreateField(t *testing.T) {
 	defer server.Close()
 	client, _ := NewClient(server.URL)
 	schema = NewSchema()
-	index, _ := schema.Index("foo")
+	index := schema.Index("foo")
 	index.Field("foofield")
 	serverSchema := NewSchema()
 	serverSchema.Index("foo")

@@ -76,10 +76,10 @@ It is possible to customize the behaviour of the underlying HTTP client by passi
 
 ```go
 client, err := pilosa.NewClient(cluster,
-	pilosa.ConnectTimeout(1000),  // if can't connect in  a second, close the connection 
-    pilosa.SocketTimeout(10000),  // if no response received in 10 seconds, close the connection
-    pilosa.PoolSizePerRoute(3),  // number of connections in the pool per host
-    pilosa.TotalPoolSize(10))   // number of total connections in the pool
+	pilosa.OptClientConnectTimeout(1000),  // if can't connect in  a second, close the connection 
+    pilosa.OptClientSocketTimeout(10000),  // if no response received in 10 seconds, close the connection
+    pilosa.OptClientPoolSizePerRoute(3),  // number of connections in the pool per host
+    pilosa.OptClientTotalPoolSize(10))   // number of total connections in the pool
 ```
 
 Once you create a client, you can create indexes, fields or start sending queries.

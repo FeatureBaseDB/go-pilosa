@@ -8,19 +8,19 @@ The `schema.Index` function is used to create an index object. Note that this do
 
 ```go
 schema := pilosa.NewSchema()
-repository, err := schema.Index("repository")
+repository := schema.Index("repository")
 ```
 
 Field definitions are created with a call to the `Field` function of an index:
 
 ```go
-stargazer, err := repository.Field("stargazer")
+stargazer := repository.Field("stargazer")
 ```
 
 You can pass options to fields:
 
 ```go
-stargazer, err := repository.Field("stargazer", pilosa.OptFieldTime(TimeQuantumYearMonthDay))
+stargazer := repository.Field("stargazer", pilosa.OptFieldTime(TimeQuantumYearMonthDay))
 ```
 
 ## Queries
@@ -57,8 +57,8 @@ This client supports [BSI groups](https://www.pilosa.com/docs/latest/query-langu
 
 In order to use BSI groups, an integer field should be created. The field should have its minimum and maximum set. Here's how you would do that:
 ```go
-index, _ := schema.Index("animals")
-captivity, _ := index.Field("captivity", pilosa.OptFieldInt(0, 956))
+index := schema.Index("animals")
+captivity := index.Field("captivity", pilosa.OptFieldInt(0, 956))
 client.SyncSchema(schema)
 ``` 
 

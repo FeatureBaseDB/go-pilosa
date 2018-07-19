@@ -321,7 +321,7 @@ func TestEnsureFieldExists(t *testing.T) {
 
 func TestCreateFieldWithTimeQuantum(t *testing.T) {
 	client := getClient()
-	field := index.Field("field-with-timequantum", OptFieldTime(TimeQuantumYear))
+	field := index.Field("field-with-timequantum", OptFieldTypeTime(TimeQuantumYear))
 	err := client.CreateField(field)
 	if err != nil {
 		t.Fatal(err)
@@ -443,7 +443,7 @@ func TestSchema(t *testing.T) {
 		t.Fatalf("There should be at least 1 index in the schema")
 	}
 	f := index.Field("schema-test-field",
-		OptFieldSet(CacheTypeLRU, 9999),
+		OptFieldTypeSet(CacheTypeLRU, 9999),
 	)
 	err = client.EnsureField(f)
 	if err != nil {
@@ -736,7 +736,7 @@ func TestValueCSVImport(t *testing.T) {
 	text := `10,7
 		7,1`
 	iterator := NewCSVValueIterator(strings.NewReader(text))
-	field := index.Field("importvaluefield", OptFieldInt(0, 100))
+	field := index.Field("importvaluefield", OptFieldTypeInt(0, 100))
 	err := client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
@@ -902,7 +902,7 @@ func TestFetchStatus(t *testing.T) {
 
 func TestRangeQuery(t *testing.T) {
 	client := getClient()
-	field := index.Field("test-rangefield", OptFieldTime(TimeQuantumMonthDayHour))
+	field := index.Field("test-rangefield", OptFieldTypeTime(TimeQuantumMonthDayHour))
 	err := client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
@@ -929,7 +929,7 @@ func TestRangeQuery(t *testing.T) {
 
 func TestRangeField(t *testing.T) {
 	client := getClient()
-	field := index.Field("rangefield", OptFieldInt(10, 20))
+	field := index.Field("rangefield", OptFieldTypeInt(10, 20))
 	field2 := index.Field("rangefield-set")
 	err := client.EnsureField(field)
 	if err != nil {
@@ -1050,7 +1050,7 @@ func TestImportColumnIteratorError(t *testing.T) {
 
 func TestImportValueIteratorError(t *testing.T) {
 	client := getClient()
-	field := index.Field("not-important", OptFieldInt(0, 100))
+	field := index.Field("not-important", OptFieldTypeInt(0, 100))
 	iterator := NewCSVValueIterator(&BrokenReader{})
 	err := client.ImportField(field, iterator, OptImportBatchSize(100))
 	if err == nil {
@@ -1097,7 +1097,7 @@ func TestImportIntFieldFailsIfImportValuesFails(t *testing.T) {
 	defer server.Close()
 	client, _ := NewClient(server.URL)
 	iterator := NewCSVValueIterator(strings.NewReader("10,7"))
-	field := index.Field("import-values-field", OptFieldInt(0, 100))
+	field := index.Field("import-values-field", OptFieldTypeInt(0, 100))
 	err := client.ImportField(field, iterator, OptImportBatchSize(10))
 	if err == nil {
 		t.Fatalf("ImportField should fail if importValues fails")

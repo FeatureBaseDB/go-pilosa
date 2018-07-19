@@ -113,7 +113,7 @@ func TestNewIndex(t *testing.T) {
 
 func TestIndexCopy(t *testing.T) {
 	index := schema.Index("my-index-4copy", OptIndexKeys(true))
-	index.Field("my-field-4copy", OptFieldTime(TimeQuantumDayHour))
+	index.Field("my-field-4copy", OptFieldTypeTime(TimeQuantumDayHour))
 	copiedIndex := index.copy()
 	if !reflect.DeepEqual(index, copiedIndex) {
 		t.Fatalf("copied index should be equivalent")
@@ -168,7 +168,7 @@ func TestField(t *testing.T) {
 }
 
 func TestFieldCopy(t *testing.T) {
-	field := sampleIndex.Field("my-field-4copy", OptFieldSet(CacheTypeRanked, 123456))
+	field := sampleIndex.Field("my-field-4copy", OptFieldTypeSet(CacheTypeRanked, 123456))
 	copiedField := field.copy()
 	if !reflect.DeepEqual(field, copiedField) {
 		t.Fatalf("copied field should be equivalent")
@@ -195,13 +195,13 @@ func TestNilFieldOption(t *testing.T) {
 func TestFieldSetType(t *testing.T) {
 	schema1 := NewSchema()
 	index := schema1.Index("test-index")
-	field := index.Field("test-set-field", OptFieldSet(CacheTypeLRU, 1000), OptFieldKeys(true))
+	field := index.Field("test-set-field", OptFieldTypeSet(CacheTypeLRU, 1000), OptFieldKeys(true))
 	target := `{"options":{"type":"set","cacheType":"lru","cacheSize":1000,"keys":true}}`
 	if sortedString(target) != sortedString(field.options.String()) {
 		t.Fatalf("%s != %s", target, field.options.String())
 	}
 
-	field = index.Field("test-set-field2", OptFieldSet(CacheTypeLRU, -10), OptFieldKeys(true))
+	field = index.Field("test-set-field2", OptFieldTypeSet(CacheTypeLRU, -10), OptFieldKeys(true))
 	target = `{"options":{"type":"set","cacheType":"lru","keys":true}}`
 	if sortedString(target) != sortedString(field.options.String()) {
 		t.Fatalf("%s != %s", target, field.options.String())
@@ -561,7 +561,7 @@ func TestRangeK(t *testing.T) {
 }
 
 func TestSetFieldOptions(t *testing.T) {
-	field := sampleIndex.Field("set-field", OptFieldSet(CacheTypeRanked, 9999))
+	field := sampleIndex.Field("set-field", OptFieldTypeSet(CacheTypeRanked, 9999))
 	jsonString := field.options.String()
 	targetString := `{"options":{"type":"set","cacheType":"ranked","cacheSize":9999}}`
 	if sortedString(targetString) != sortedString(jsonString) {
@@ -571,7 +571,7 @@ func TestSetFieldOptions(t *testing.T) {
 }
 
 func TestIntFieldOptions(t *testing.T) {
-	field := sampleIndex.Field("int-field", OptFieldInt(-10, 100))
+	field := sampleIndex.Field("int-field", OptFieldTypeInt(-10, 100))
 	jsonString := field.options.String()
 	targetString := `{"options":{"type":"int","min":-10,"max":100}}`
 	if sortedString(targetString) != sortedString(jsonString) {
@@ -581,7 +581,7 @@ func TestIntFieldOptions(t *testing.T) {
 }
 
 func TestTimeFieldOptions(t *testing.T) {
-	field := sampleIndex.Field("time-field", OptFieldTime(TimeQuantumDayHour))
+	field := sampleIndex.Field("time-field", OptFieldTypeTime(TimeQuantumDayHour))
 	jsonString := field.options.String()
 	targetString := `{"options":{"type":"time","timeQuantum":"DH"}}`
 	if sortedString(targetString) != sortedString(jsonString) {

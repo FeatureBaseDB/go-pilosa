@@ -495,10 +495,10 @@ func (fo *FieldOptions) addOptions(options ...FieldOption) {
 // FieldOption is used to pass an option to index.Field function.
 type FieldOption func(options *FieldOptions)
 
-// OptFieldSet adds a set field.
+// OptFieldTypeSet adds a set field.
 // Specify CacheTypeDefault for the default cache type.
 // Specify CacheSizeDefault for the default cache size.
-func OptFieldSet(cacheType CacheType, cacheSize int) FieldOption {
+func OptFieldTypeSet(cacheType CacheType, cacheSize int) FieldOption {
 	return func(options *FieldOptions) {
 		options.fieldType = FieldTypeSet
 		options.cacheType = cacheType
@@ -506,8 +506,8 @@ func OptFieldSet(cacheType CacheType, cacheSize int) FieldOption {
 	}
 }
 
-// OptFieldInt adds an integer field.
-func OptFieldInt(min int64, max int64) FieldOption {
+// OptFieldTypeInt adds an integer field.
+func OptFieldTypeInt(min int64, max int64) FieldOption {
 	return func(options *FieldOptions) {
 		options.fieldType = FieldTypeInt
 		options.min = min
@@ -515,7 +515,7 @@ func OptFieldInt(min int64, max int64) FieldOption {
 	}
 }
 
-func OptFieldTime(quantum TimeQuantum) FieldOption {
+func OptFieldTypeTime(quantum TimeQuantum) FieldOption {
 	return func(options *FieldOptions) {
 		options.fieldType = FieldTypeTime
 		options.timeQuantum = quantum

@@ -285,15 +285,9 @@ func (c *Client) Schema() (*Schema, error) {
 	}
 	schema := NewSchema()
 	for _, indexInfo := range indexes {
-		index, err := schema.indexWithOptions(indexInfo.Name, indexInfo.Options.asIndexOptions())
-		if err != nil {
-			return nil, err
-		}
+		index := schema.indexWithOptions(indexInfo.Name, indexInfo.Options.asIndexOptions())
 		for _, fieldInfo := range indexInfo.Fields {
-			_, err := index.fieldWithOptions(fieldInfo.Name, fieldInfo.Options.asFieldOptions())
-			if err != nil {
-				return nil, err
-			}
+			index.fieldWithOptions(fieldInfo.Name, fieldInfo.Options.asFieldOptions())
 		}
 	}
 	return schema, nil

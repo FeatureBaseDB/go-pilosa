@@ -59,25 +59,20 @@ func NewSchema() *Schema {
 }
 
 // Index returns an index with a name.
-func (s *Schema) Index(name string, options ...IndexOption) (*Index, error) {
+func (s *Schema) Index(name string, options ...IndexOption) *Index {
 	if index, ok := s.indexes[name]; ok {
-		return index, nil
+		return index
 	}
 	indexOptions := &IndexOptions{}
-	if err := indexOptions.addOptions(options...); err != nil {
-		return nil, err
-	}
+	indexOptions.addOptions(options...)
 	return s.indexWithOptions(name, indexOptions)
 }
 
-func (s *Schema) indexWithOptions(name string, options *IndexOptions) (*Index, error) {
-	index, err := NewIndex(name)
-	if err != nil {
-		return nil, err
-	}
+func (s *Schema) indexWithOptions(name string, options *IndexOptions) *Index {
+	index := NewIndex(name)
 	index.options = options.withDefaults()
 	s.indexes[name] = index
-	return index, nil
+	return index
 }
 
 // Indexes return a copy of the indexes in this schema
@@ -97,7 +92,7 @@ func (s *Schema) diff(other *Schema) *Schema {
 			result.indexes[indexName] = index.copy()
 		} else {
 			// the index exists in the other schema; check the fields
-			resultIndex, _ := NewIndex(indexName)
+			resultIndex := NewIndex(indexName)
 			for fieldName, field := range index.fields {
 				if _, ok := otherIndex.fields[fieldName]; !ok {
 					// the field doesn't exist in the other schema, copy it
@@ -240,27 +235,22 @@ func (io IndexOptions) String() string {
 	return fmt.Sprintf(`{"options":%s}`, encodeMap(mopt))
 }
 
-func (io *IndexOptions) addOptions(options ...IndexOption) error {
+func (io *IndexOptions) addOptions(options ...IndexOption) {
 	for _, option := range options {
 		if option == nil {
 			continue
 		}
-		err := option(io)
-		if err != nil {
-			return err
-		}
+		option(io)
 	}
-	return nil
 }
 
 // IndexOption is used to pass an option to Index function.
-type IndexOption func(options *IndexOptions) error
+type IndexOption func(options *IndexOptions)
 
 // OptIndexKeys sets whether index uses string keys.
 func OptIndexKeys(keys bool) IndexOption {
-	return func(options *IndexOptions) error {
+	return func(options *IndexOptions) {
 		options.keys = keys
-		return nil
 	}
 }
 
@@ -277,15 +267,12 @@ func (idx *Index) String() string {
 }
 
 // NewIndex creates an index with a name.
-func NewIndex(name string) (*Index, error) {
-	if err := validateIndexName(name); err != nil {
-		return nil, err
-	}
+func NewIndex(name string) *Index {
 	return &Index{
 		name:    name,
 		options: &IndexOptions{},
 		fields:  map[string]*Field{},
-	}, nil
+	}
 }
 
 // Fields return a copy of the fields in this index
@@ -317,28 +304,21 @@ func (idx *Index) Name() string {
 }
 
 // Field creates a Field struct with the specified name and defaults.
-func (idx *Index) Field(name string, options ...FieldOption) (*Field, error) {
+func (idx *Index) Field(name string, options ...FieldOption) *Field {
 	if field, ok := idx.fields[name]; ok {
-		return field, nil
+		return field
 	}
 	fieldOptions := &FieldOptions{}
-	err := fieldOptions.addOptions(options...)
-	if err != nil {
-		return nil, err
-	}
+	fieldOptions.addOptions(options...)
 	return idx.fieldWithOptions(name, fieldOptions)
 }
 
-func (idx *Index) fieldWithOptions(name string, fieldOptions *FieldOptions) (*Field, error) {
-	if err := validateFieldName(name); err != nil {
-		return nil, err
-
-	}
+func (idx *Index) fieldWithOptions(name string, fieldOptions *FieldOptions) *Field {
 	field := newField(name, idx)
 	fieldOptions = fieldOptions.withDefaults()
 	field.options = fieldOptions
 	idx.fields[name] = field
-	return field, nil
+	return field
 }
 
 // BatchQuery creates a batch query with the given queries.
@@ -503,63 +483,49 @@ func (fo FieldOptions) String() string {
 	return fmt.Sprintf(`{"options":%s}`, encodeMap(mopt))
 }
 
-func (fo *FieldOptions) addOptions(options ...FieldOption) error {
+func (fo *FieldOptions) addOptions(options ...FieldOption) {
 	for _, option := range options {
 		if option == nil {
 			continue
 		}
-		err := option(fo)
-		if err != nil {
-			return err
-		}
+		option(fo)
 	}
-	return nil
 }
 
 // FieldOption is used to pass an option to index.Field function.
-type FieldOption func(options *FieldOptions) error
+type FieldOption func(options *FieldOptions)
 
-// OptFieldSet adds a set field.
+// OptFieldTypeSet adds a set field.
 // Specify CacheTypeDefault for the default cache type.
 // Specify CacheSizeDefault for the default cache size.
-func OptFieldSet(cacheType CacheType, cacheSize int) FieldOption {
-	return func(options *FieldOptions) error {
-		if cacheSize < 0 {
-			return ErrInvalidFieldOption
-		}
+func OptFieldTypeSet(cacheType CacheType, cacheSize int) FieldOption {
+	return func(options *FieldOptions) {
 		options.fieldType = FieldTypeSet
 		options.cacheType = cacheType
 		options.cacheSize = cacheSize
-		return nil
 	}
 }
 
-// OptFieldInt adds an integer field.
-func OptFieldInt(min int64, max int64) FieldOption {
-	return func(options *FieldOptions) error {
+// OptFieldTypeInt adds an integer field.
+func OptFieldTypeInt(min int64, max int64) FieldOption {
+	return func(options *FieldOptions) {
 		options.fieldType = FieldTypeInt
-		if max < min {
-			return ErrInvalidFieldOption
-		}
 		options.min = min
 		options.max = max
-		return nil
 	}
 }
 
-func OptFieldTime(quantum TimeQuantum) FieldOption {
-	return func(options *FieldOptions) error {
+func OptFieldTypeTime(quantum TimeQuantum) FieldOption {
+	return func(options *FieldOptions) {
 		options.fieldType = FieldTypeTime
 		options.timeQuantum = quantum
-		return nil
 	}
 }
 
 // OptFieldKeys sets whether field uses string keys.
 func OptFieldKeys(keys bool) FieldOption {
-	return func(options *FieldOptions) error {
+	return func(options *FieldOptions) {
 		options.keys = keys
-		return nil
 	}
 }
 

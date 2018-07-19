@@ -56,10 +56,10 @@ func main() {
 	schema, err := client.Schema()
 
 	// Create an Index object
-	myindex, err := schema.Index("myindex")
+	myindex := schema.Index("myindex")
 
 	// Create a Field object
-	myfield, err := myindex.Field("myfield")
+	myfield := myindex.Field("myfield")
 
 	// make sure the index and the field exists on the server
 	err = client.SyncSchema(schema)

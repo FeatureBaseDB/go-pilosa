@@ -42,14 +42,8 @@ import (
 func TestQueryWithError(t *testing.T) {
 	var err error
 	client := DefaultClient()
-	index, err := NewIndex("foo")
-	if err != nil {
-		t.Fatal(err)
-	}
-	field, err := index.Field("foo")
-	if err != nil {
-		t.Fatal(err)
-	}
+	index := NewIndex("foo")
+	field := index.Field("foo")
 	invalid := field.FilterFieldTopN(12, field.Row(7), "$invalid$", 80, 81)
 	_, err = client.Query(invalid, nil)
 	if err == nil {
@@ -208,7 +202,7 @@ func TestQueryOptionsWithError(t *testing.T) {
 
 func TestQueryOptionsError(t *testing.T) {
 	client := DefaultClient()
-	index, _ := NewIndex("foo")
+	index := NewIndex("foo")
 	_, err := client.Query(index.RawQuery(""), QueryOptionErr(0))
 	if err == nil {
 		t.Fatalf("should have failed")

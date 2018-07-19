@@ -2,18 +2,19 @@
 
 * **v1.0.0** (2018-06-28)
     * Compatible with Pilosa 1.0.
-    * Removed all deprecated code.
-    * Following terminolgy was changed:
+    * Following terminology was changed:
         * frame to field
         * bitmap to row
         * bit to column
         * slice to shard
-    * Removed `Field` type and renamed `Frame` to `Field`.
     * There are three types of fields:
         * Set fields to store boolean values (default)
         * Integer fields to store an integer in the given range.
         * Time fields which can store timestamps.
+    * Removed all deprecated code.
+    * Removed `Field` type and renamed `Frame` to `Field`.
     * Removed `client.ImportValueField` function. `client.ImportField` function imports both set and integer fields, depending on the type of the field.
+    * Removed index and field validation. The validation is done only on the server side. `schema.Index` and `index.Field` functions do not return `error` values.
   
 * **v0.9.0** (2018-05-10)
     * Compatible with Pilosa 0.9.

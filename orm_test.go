@@ -33,7 +33,6 @@
 package pilosa
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 	"sort"
@@ -43,10 +42,10 @@ import (
 )
 
 var schema = NewSchema()
-var sampleIndex = mustNewIndex(schema, "sample-index")
-var sampleField = mustNewField(sampleIndex, "sample-field")
-var projectIndex = mustNewIndex(schema, "project-index")
-var collabField = mustNewField(projectIndex, "collaboration")
+var sampleIndex = schema.Index("sample-index")
+var sampleField = sampleIndex.Field("sample-field")
+var projectIndex = schema.Index("project-index")
+var collabField = projectIndex.Field("collaboration")
 var b1 = sampleField.Row(10)
 var b2 = sampleField.Row(20)
 var b3 = sampleField.Row(42)
@@ -54,21 +53,21 @@ var b4 = collabField.Row(2)
 
 func TestSchemaDiff(t *testing.T) {
 	schema1 := NewSchema()
-	index11, _ := schema1.Index("diff-index1")
+	index11 := schema1.Index("diff-index1")
 	index11.Field("field1-1")
 	index11.Field("field1-2")
-	index12, _ := schema1.Index("diff-index2")
+	index12 := schema1.Index("diff-index2")
 	index12.Field("field2-1")
 
 	schema2 := NewSchema()
-	index21, _ := schema2.Index("diff-index1")
+	index21 := schema2.Index("diff-index1")
 	index21.Field("another-field")
 
 	targetDiff12 := NewSchema()
-	targetIndex1, _ := targetDiff12.Index("diff-index1")
+	targetIndex1 := targetDiff12.Index("diff-index1")
 	targetIndex1.Field("field1-1")
 	targetIndex1.Field("field1-2")
-	targetIndex2, _ := targetDiff12.Index("diff-index2")
+	targetIndex2 := targetDiff12.Index("diff-index2")
 	targetIndex2.Field("field2-1")
 
 	diff12 := schema1.diff(schema2)
@@ -79,8 +78,8 @@ func TestSchemaDiff(t *testing.T) {
 
 func TestSchemaIndexes(t *testing.T) {
 	schema1 := NewSchema()
-	index11, _ := schema1.Index("diff-index1")
-	index12, _ := schema1.Index("diff-index2")
+	index11 := schema1.Index("diff-index1")
+	index12 := schema1.Index("diff-index2")
 	indexes := schema1.Indexes()
 	target := map[string]*Index{
 		"diff-index1": index11,
@@ -93,7 +92,7 @@ func TestSchemaIndexes(t *testing.T) {
 
 func TestSchemaToString(t *testing.T) {
 	schema1 := NewSchema()
-	index, _ := schema1.Index("test-index")
+	index := schema1.Index("test-index")
 	target := fmt.Sprintf(`map[string]*pilosa.Index{"test-index":(*pilosa.Index)(%p)}`, index)
 	if target != schema1.String() {
 		t.Fatalf("%s != %s", target, schema1.String())
@@ -101,39 +100,20 @@ func TestSchemaToString(t *testing.T) {
 }
 
 func TestNewIndex(t *testing.T) {
-	index1, err := schema.Index("index-name")
-	if err != nil {
-		t.Fatal(err)
-	}
+	index1 := schema.Index("index-name")
 	if index1.Name() != "index-name" {
 		t.Fatalf("index name was not set")
 	}
 	// calling schema.Index again should return the same index
-	index2, err := schema.Index("index-name")
-	if err != nil {
-		t.Fatal(err)
-	}
+	index2 := schema.Index("index-name")
 	if index1 != index2 {
 		t.Fatalf("calling schema.Index again should return the same index")
 	}
 }
 
-func TestNewIndexWithInvalidName(t *testing.T) {
-	_, err := schema.Index("$FOO")
-	if err == nil {
-		t.Fatal(err)
-	}
-}
-
 func TestIndexCopy(t *testing.T) {
-	index, err := schema.Index("my-index-4copy", OptIndexKeys(true))
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = index.Field("my-field-4copy", OptFieldTime(TimeQuantumDayHour))
-	if err != nil {
-		t.Fatal(err)
-	}
+	index := schema.Index("my-index-4copy", OptIndexKeys(true))
+	index.Field("my-field-4copy", OptFieldTypeTime(TimeQuantumDayHour))
 	copiedIndex := index.copy()
 	if !reflect.DeepEqual(index, copiedIndex) {
 		t.Fatalf("copied index should be equivalent")
@@ -141,36 +121,22 @@ func TestIndexCopy(t *testing.T) {
 }
 
 func TestIndexOptions(t *testing.T) {
-	index, err := schema.Index("index-with-options", OptIndexKeys(true))
-	if err != nil {
-		t.Fatal(err)
-	}
+	index := schema.Index("index-with-options", OptIndexKeys(true))
 	target := `{"options":{"keys":true}}`
 	if target != index.options.String() {
 		t.Fatalf("%s != %s", target, index.options.String())
 	}
 }
 
-func TestInvalidIndexOption(t *testing.T) {
-	_, err := schema.Index("index-with-invalid-option", IndexOptionErr(0))
-	if err == nil {
-		t.Fatalf("should have failed")
-	}
-}
-
 func TestNilIndexOption(t *testing.T) {
-	_, err := schema.Index("index-with-nil-option", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	schema.Index("index-with-nil-option", nil)
 }
 
 func TestIndexFields(t *testing.T) {
 	schema1 := NewSchema()
-	index11, _ := schema1.Index("diff-index1")
-	field11, _ := index11.Field("field1-1")
-	field12, _ := index11.Field("field1-2")
+	index11 := schema1.Index("diff-index1")
+	field11 := index11.Field("field1-1")
+	field12 := index11.Field("field1-2")
 	fields := index11.Fields()
 	target := map[string]*Field{
 		"field1-1": field11,
@@ -183,7 +149,7 @@ func TestIndexFields(t *testing.T) {
 
 func TestIndexToString(t *testing.T) {
 	schema1 := NewSchema()
-	index, _ := schema1.Index("test-index")
+	index := schema1.Index("test-index")
 	target := fmt.Sprintf(`&pilosa.Index{name:"test-index", options:(*pilosa.IndexOptions)(%p), fields:map[string]*pilosa.Field{}}`, index.options)
 	if target != index.String() {
 		t.Fatalf("%s != %s", target, index.String())
@@ -191,14 +157,8 @@ func TestIndexToString(t *testing.T) {
 }
 
 func TestField(t *testing.T) {
-	field1, err := sampleIndex.Field("nonexistent-field")
-	if err != nil {
-		t.Fatal(err)
-	}
-	field2, err := sampleIndex.Field("nonexistent-field")
-	if err != nil {
-		t.Fatal(err)
-	}
+	field1 := sampleIndex.Field("nonexistent-field")
+	field2 := sampleIndex.Field("nonexistent-field")
 	if field1 != field2 {
 		t.Fatalf("calling index.Field again should return the same field")
 	}
@@ -208,31 +168,17 @@ func TestField(t *testing.T) {
 }
 
 func TestFieldCopy(t *testing.T) {
-	field, err := sampleIndex.Field("my-field-4copy", OptFieldSet(CacheTypeRanked, 123456))
-	if err != nil {
-		t.Fatal(err)
-	}
+	field := sampleIndex.Field("my-field-4copy", OptFieldTypeSet(CacheTypeRanked, 123456))
 	copiedField := field.copy()
 	if !reflect.DeepEqual(field, copiedField) {
 		t.Fatalf("copied field should be equivalent")
 	}
 }
 
-func TestNewFieldWithInvalidName(t *testing.T) {
-	index, err := NewIndex("foo")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = index.Field("$$INVALIDFIELD$$")
-	if err == nil {
-		t.Fatal("Creating fields with invalid row labels should fail")
-	}
-}
-
 func TestFieldToString(t *testing.T) {
 	schema1 := NewSchema()
-	index, _ := schema1.Index("test-index")
-	field, _ := index.Field("test-field")
+	index := schema1.Index("test-index")
+	field := index.Field("test-field")
 	target := fmt.Sprintf(`&pilosa.Field{name:"test-field", index:(*pilosa.Index)(%p), options:(*pilosa.FieldOptions)(%p)}`,
 		field.index, field.options)
 	if target != field.String() {
@@ -242,18 +188,21 @@ func TestFieldToString(t *testing.T) {
 
 func TestNilFieldOption(t *testing.T) {
 	schema1 := NewSchema()
-	index, _ := schema1.Index("test-index")
-	_, err := index.Field("test-field-with-nil-option", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	index := schema1.Index("test-index")
+	index.Field("test-field-with-nil-option", nil)
 }
 
 func TestFieldSetType(t *testing.T) {
 	schema1 := NewSchema()
-	index, _ := schema1.Index("test-index")
-	field, _ := index.Field("test-field", OptFieldSet(CacheTypeLRU, 1000), OptFieldKeys(true))
+	index := schema1.Index("test-index")
+	field := index.Field("test-set-field", OptFieldTypeSet(CacheTypeLRU, 1000), OptFieldKeys(true))
 	target := `{"options":{"type":"set","cacheType":"lru","cacheSize":1000,"keys":true}}`
+	if sortedString(target) != sortedString(field.options.String()) {
+		t.Fatalf("%s != %s", target, field.options.String())
+	}
+
+	field = index.Field("test-set-field2", OptFieldTypeSet(CacheTypeLRU, -10), OptFieldKeys(true))
+	target = `{"options":{"type":"set","cacheType":"lru","keys":true}}`
 	if sortedString(target) != sortedString(field.options.String()) {
 		t.Fatalf("%s != %s", target, field.options.String())
 	}
@@ -612,10 +561,7 @@ func TestRangeK(t *testing.T) {
 }
 
 func TestSetFieldOptions(t *testing.T) {
-	field, err := sampleIndex.Field("set-field", OptFieldSet(CacheTypeRanked, 9999))
-	if err != nil {
-		t.Fatal(err)
-	}
+	field := sampleIndex.Field("set-field", OptFieldTypeSet(CacheTypeRanked, 9999))
 	jsonString := field.options.String()
 	targetString := `{"options":{"type":"set","cacheType":"ranked","cacheSize":9999}}`
 	if sortedString(targetString) != sortedString(jsonString) {
@@ -625,10 +571,7 @@ func TestSetFieldOptions(t *testing.T) {
 }
 
 func TestIntFieldOptions(t *testing.T) {
-	field, err := sampleIndex.Field("int-field", OptFieldInt(-10, 100))
-	if err != nil {
-		t.Fatal(err)
-	}
+	field := sampleIndex.Field("int-field", OptFieldTypeInt(-10, 100))
 	jsonString := field.options.String()
 	targetString := `{"options":{"type":"int","min":-10,"max":100}}`
 	if sortedString(targetString) != sortedString(jsonString) {
@@ -638,31 +581,13 @@ func TestIntFieldOptions(t *testing.T) {
 }
 
 func TestTimeFieldOptions(t *testing.T) {
-	field, err := sampleIndex.Field("time-field", OptFieldTime(TimeQuantumDayHour))
-	if err != nil {
-		t.Fatal(err)
-	}
+	field := sampleIndex.Field("time-field", OptFieldTypeTime(TimeQuantumDayHour))
 	jsonString := field.options.String()
 	targetString := `{"options":{"type":"time","timeQuantum":"DH"}}`
 	if sortedString(targetString) != sortedString(jsonString) {
 		t.Fatalf("`%s` != `%s`", targetString, jsonString)
 	}
 	compareFieldOptions(t, field.Options(), FieldTypeTime, TimeQuantumDayHour, CacheTypeDefault, 0, 0, 0)
-}
-
-func TestInvalidFieldOption(t *testing.T) {
-	_, err := sampleIndex.Field("invalid-field-opt", FieldOptionErr(0))
-	if err == nil {
-		t.Fatalf("should have failed")
-	}
-	_, err = sampleIndex.Field("invalid-field-opt", OptFieldInt(10, 9))
-	if err == nil {
-		t.Fatalf("should have failed")
-	}
-	_, err = sampleIndex.Field("invalid-field-opt", OptFieldSet(CacheTypeDefault, -1))
-	if err == nil {
-		t.Fatalf("should have failed")
-	}
 }
 
 func TestEncodeMapPanicsOnMarshalFailure(t *testing.T) {
@@ -705,37 +630,8 @@ func compareFieldOptions(t *testing.T, opts *FieldOptions, fieldType FieldType, 
 	}
 }
 
-func mustNewIndex(schema *Schema, name string) (index *Index) {
-	index, err := schema.Index(name)
-	if err != nil {
-		panic(err)
-	}
-	return
-}
-
-func mustNewField(index *Index, name string) *Field {
-	var err error
-	field, err := index.Field(name)
-	if err != nil {
-		panic(err)
-	}
-	return field
-}
-
 func sortedString(s string) string {
 	arr := strings.Split(s, "")
 	sort.Strings(arr)
 	return strings.Join(arr, "")
-}
-
-func IndexOptionErr(int) IndexOption {
-	return func(*IndexOptions) error {
-		return errors.New("Some error")
-	}
-}
-
-func FieldOptionErr(int) FieldOption {
-	return func(*FieldOptions) error {
-		return errors.New("Some error")
-	}
 }

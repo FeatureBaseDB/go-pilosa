@@ -11,6 +11,7 @@
         * Set fields to store boolean values (default)
         * Integer fields to store an integer in the given range.
         * Time fields which can store timestamps.
+    * Experimental: Import strategies are experimental an may be removed in later versions.
     * Removed all deprecated code.
     * Removed `Field` type and renamed `Frame` to `Field`.
     * Removed `client.ImportValueField` function. `client.ImportField` function imports both set and integer fields, depending on the type of the field.

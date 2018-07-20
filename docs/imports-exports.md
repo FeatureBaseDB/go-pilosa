@@ -140,22 +140,16 @@ func (gen *RandomColumnGenerator) NextRecord() (pilosa.Record, error) {
 
 #### Import Options
 
-You can change the import strategy, thread count and other options by passing them to `client.ImportField` or `client.ImportFieldWithStatus` functions. Here are the import options:
-* `OptImportStrategy`: Changes the import strategy of the import goroutines to one of the following:
-	* `DefaultImport`: Default strategy, currently `TimeoutImport`.
-	* `BatchImport`: Read `BatchSize` records, bucket them by shards and import them. By default 100000.
-	* `TimeoutImport`: Read and bucket records by shards and after `Timeout` import the largest bucket. By default `100` milliseconds.
+You can change the thread count and other options by passing them to `client.ImportField` or `client.ImportFieldWithStatus` functions. Here are the import options:
 * `OptImportThreadCount`: Number of import goroutines. By default only a single importer is used.
 * `OptImportBatchSize`: Sets the `BatchSize`.
-* `OptImportTimeout`: Sets the `Timeout`.
 * `OptImportStatusChannel`: Sets the status channel to track the import progress.
 
 Here's how you would set import options:
 ```go
 err := client.ImportField(field, iterator,
 	pilosa.OptImportThreadCount(4),
-	pilosa.OptImportStrategy(pilosa.TimeoutImport),
-	pilosa.OptImportTimeout(200 * time.Millisecond))
+	pilosa.OptImportBatchSize(1000000))
 ```
 
 ### Tracking Import Status

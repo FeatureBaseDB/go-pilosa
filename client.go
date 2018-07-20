@@ -862,7 +862,7 @@ func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
 		updated.batchSize = 100000
 	}
 	if updated.strategy == DefaultImport {
-		updated.strategy = TimeoutImport
+		updated.strategy = BatchImport
 	}
 	return
 }

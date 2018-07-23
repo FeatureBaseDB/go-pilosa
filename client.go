@@ -39,7 +39,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -53,7 +52,6 @@ import (
 )
 
 const maxHosts = 10
-const pilosaMinVersion = ">=0.9.0"
 
 // Client is the HTTP client for Pilosa server.
 type Client struct {
@@ -63,7 +61,7 @@ type Client struct {
 	// and user agent is saved here in NewClient
 	userAgent              string
 	importThreadCount      int
-	sliceWidth             uint64
+	shardWidth             uint64
 	fragmentNodeCache      map[string][]fragmentNode
 	fragmentNodeCacheMutex *sync.RWMutex
 	importManager          *recordImportManager
@@ -170,7 +168,7 @@ func (c *Client) Query(query PQLQuery, options ...interface{}) (*QueryResponse, 
 
 // CreateIndex creates an index on the server using the given Index struct.
 func (c *Client) CreateIndex(index *Index) error {
-	data := []byte("")
+	data := []byte(index.options.String())
 	path := fmt.Sprintf("/index/%s", index.name)
 	response, _, err := c.httpRequest("POST", path, data, nil)
 	if err != nil {
@@ -183,14 +181,14 @@ func (c *Client) CreateIndex(index *Index) error {
 
 }
 
-// CreateFrame creates a frame on the server using the given Frame struct.
-func (c *Client) CreateFrame(frame *Frame) error {
-	data := []byte(frame.options.String())
-	path := fmt.Sprintf("/index/%s/frame/%s", frame.index.name, frame.name)
+// CreateField creates a field on the server using the given Field struct.
+func (c *Client) CreateField(field *Field) error {
+	data := []byte(field.options.String())
+	path := fmt.Sprintf("/index/%s/field/%s", field.index.name, field.name)
 	response, _, err := c.httpRequest("POST", path, data, nil)
 	if err != nil {
 		if response != nil && response.StatusCode == 409 {
-			return ErrFrameExists
+			return ErrFieldExists
 		}
 		return err
 	}
@@ -206,10 +204,10 @@ func (c *Client) EnsureIndex(index *Index) error {
 	return err
 }
 
-// EnsureFrame creates a frame on the server if it doesn't exists.
-func (c *Client) EnsureFrame(frame *Frame) error {
-	err := c.CreateFrame(frame)
-	if err == ErrFrameExists {
+// EnsureField creates a field on the server if it doesn't exists.
+func (c *Client) EnsureField(field *Field) error {
+	err := c.CreateField(field)
+	if err == ErrFieldExists {
 		return nil
 	}
 	return err
@@ -223,46 +221,16 @@ func (c *Client) DeleteIndex(index *Index) error {
 
 }
 
-// CreateIntField creates an integer range field.
-// *Experimental*: This feature may be removed or its interface may be modified in the future.
-func (c *Client) CreateIntField(frame *Frame, name string, min int, max int) error {
-	// TODO: refactor the code below when we have more fields types
-	field, err := newIntRangeField(name, min, max)
-	if err != nil {
-		return err
-	}
-	path := fmt.Sprintf("/index/%s/frame/%s/field/%s",
-		frame.index.name, frame.name, name)
-	data := []byte(encodeMap(field))
-	_, _, err = c.httpRequest("POST", path, data, nil)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// DeleteField delete a range field.
-// *Experimental*: This feature may be removed or its interface may be modified in the future.
-func (c *Client) DeleteField(frame *Frame, name string) error {
-	path := fmt.Sprintf("/index/%s/frame/%s/field/%s",
-		frame.index.name, frame.name, name)
-	_, _, err := c.httpRequest("DELETE", path, nil, nil)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// DeleteFrame deletes a frame on the server.
-func (c *Client) DeleteFrame(frame *Frame) error {
-	path := fmt.Sprintf("/index/%s/frame/%s", frame.index.name, frame.name)
+// DeleteField deletes a field on the server.
+func (c *Client) DeleteField(field *Field) error {
+	path := fmt.Sprintf("/index/%s/field/%s", field.index.name, field.name)
 	_, _, err := c.httpRequest("DELETE", path, nil, nil)
 	return err
 }
 
-// SyncSchema updates a schema with the indexes and frames on the server and
-// creates the indexes and frames in the schema on the server side.
-// This function does not delete indexes and the frames on the server side nor in the schema.
+// SyncSchema updates a schema with the indexes and fields on the server and
+// creates the indexes and fields in the schema on the server side.
+// This function does not delete indexes and the fields on the server side nor in the schema.
 func (c *Client) SyncSchema(schema *Schema) error {
 	serverSchema, err := c.Schema()
 	if err != nil {
@@ -277,7 +245,7 @@ func (c *Client) syncSchema(schema *Schema, serverSchema *Schema) error {
 
 	// find out local - remote schema
 	diffSchema := schema.diff(serverSchema)
-	// create the indexes and frames which doesn't exist on the server side
+	// create the indexes and fields which doesn't exist on the server side
 	for indexName, index := range diffSchema.indexes {
 		if _, ok := serverSchema.indexes[indexName]; !ok {
 			err = c.EnsureIndex(index)
@@ -285,8 +253,8 @@ func (c *Client) syncSchema(schema *Schema, serverSchema *Schema) error {
 				return err
 			}
 		}
-		for _, frame := range index.frames {
-			err = c.EnsureFrame(frame)
+		for _, field := range index.fields {
+			err = c.EnsureField(field)
 			if err != nil {
 				return err
 			}
@@ -299,8 +267,8 @@ func (c *Client) syncSchema(schema *Schema, serverSchema *Schema) error {
 		if localIndex, ok := schema.indexes[indexName]; !ok {
 			schema.indexes[indexName] = index
 		} else {
-			for frameName, frame := range index.frames {
-				localIndex.frames[frameName] = frame
+			for fieldName, field := range index.fields {
+				localIndex.fields[fieldName] = field
 			}
 		}
 	}
@@ -308,7 +276,7 @@ func (c *Client) syncSchema(schema *Schema, serverSchema *Schema) error {
 	return nil
 }
 
-// Schema returns the indexes and frames on the server.
+// Schema returns the indexes and fields on the server.
 func (c *Client) Schema() (*Schema, error) {
 	var indexes []StatusIndex
 	indexes, err := c.readSchema()
@@ -317,71 +285,35 @@ func (c *Client) Schema() (*Schema, error) {
 	}
 	schema := NewSchema()
 	for _, indexInfo := range indexes {
-		index, err := schema.Index(indexInfo.Name)
-		if err != nil {
-			return nil, err
-		}
-		for _, frameInfo := range indexInfo.Frames {
-			fields := make(map[string]rangeField)
-			frameOptions := &FrameOptions{
-				CacheSize:   frameInfo.Options.CacheSize,
-				CacheType:   CacheType(frameInfo.Options.CacheType),
-				TimeQuantum: TimeQuantum(frameInfo.Options.TimeQuantum),
-			}
-			for _, fieldInfo := range frameInfo.Options.Fields {
-				fields[fieldInfo.Name] = map[string]interface{}{
-					"Name": fieldInfo.Name,
-					"Type": fieldInfo.Type,
-					"Max":  fieldInfo.Max,
-					"Min":  fieldInfo.Min,
-				}
-			}
-			frameOptions.fields = fields
-			fram, err := index.Frame(frameInfo.Name, frameOptions)
-			if err != nil {
-				return nil, err
-			}
-			for name := range fields {
-				ff := fram.Field(name)
-				if ff.err != nil {
-					return nil, errors.Wrap(ff.err, "fielding frame")
-				}
-			}
+		index := schema.indexWithOptions(indexInfo.Name, indexInfo.Options.asIndexOptions())
+		for _, fieldInfo := range indexInfo.Fields {
+			index.fieldWithOptions(fieldInfo.Name, fieldInfo.Options.asFieldOptions())
 		}
 	}
 	return schema, nil
 }
 
-// ImportFrame imports records from the given iterator.
-func (c *Client) ImportFrame(frame *Frame, iterator RecordIterator, options ...ImportOption) error {
+// ImportField imports records from the given iterator.
+func (c *Client) ImportField(field *Field, iterator RecordIterator, options ...ImportOption) error {
 	importOptions := &ImportOptions{}
-	importRecordsFunction(c.importBits)(importOptions)
+	if field.options != nil && field.options.fieldType == FieldTypeInt {
+		importRecordsFunction(c.importValues)(importOptions)
+	} else {
+		importRecordsFunction(c.importColumns)(importOptions)
+	}
 	for _, option := range options {
 		if err := option(importOptions); err != nil {
 			return err
 		}
 	}
-	return c.importManager.Run(frame, iterator, importOptions.withDefaults())
+	return c.importManager.Run(field, iterator, importOptions.withDefaults())
 }
 
-func (c *Client) ImportValueFrame(frame *Frame, field string, iterator RecordIterator, options ...ImportOption) error {
-	// c.importValues is the default importer for this function
-	irf := func(indexName string, frameName string, slice uint64, vals []Record) error {
-		return c.importValues(indexName, frameName, slice, field, vals)
-	}
-	newOptions := []ImportOption{importRecordsFunction(irf)}
-	for _, opt := range options {
-		newOptions = append(newOptions, opt)
-	}
-	return c.ImportFrame(frame, iterator, newOptions...)
-}
-
-func (c *Client) importBits(indexName string, frameName string, slice uint64, bits []Record) error {
-	nodes, err := c.fetchFragmentNodes(indexName, slice)
+func (c *Client) importColumns(indexName string, fieldName string, shard uint64, records []Record) error {
+	nodes, err := c.fetchFragmentNodes(indexName, shard)
 	if err != nil {
 		return errors.Wrap(err, "fetching fragment nodes")
 	}
-
 	eg := errgroup.Group{}
 	for _, node := range nodes {
 		uri := &URI{
@@ -390,42 +322,42 @@ func (c *Client) importBits(indexName string, frameName string, slice uint64, bi
 			port:   node.Port,
 		}
 		eg.Go(func() error {
-			return c.importNode(uri, bitsToImportRequest(indexName, frameName, slice, bits))
+			return c.importNode(uri, columnsToImportRequest(indexName, fieldName, shard, records))
 		})
 	}
 	err = eg.Wait()
-	return errors.Wrap(err, "importing to nodes")
+	return errors.Wrap(err, "importing columns to nodes")
 }
 
-func (c *Client) importValues(indexName string, frameName string, slice uint64, fieldName string, vals []Record) error {
-	nodes, err := c.fetchFragmentNodes(indexName, slice)
+func (c *Client) importValues(indexName string, fieldName string, shard uint64, vals []Record) error {
+	nodes, err := c.fetchFragmentNodes(indexName, shard)
 	if err != nil {
 		return err
 	}
+	eg := errgroup.Group{}
 	for _, node := range nodes {
 		uri := &URI{
 			scheme: node.Scheme,
 			host:   node.Host,
 			port:   node.Port,
 		}
-		err = c.importValueNode(uri, valsToImportRequest(indexName, frameName, slice, fieldName, vals))
-		if err != nil {
-			return err
-		}
+		eg.Go(func() error {
+			return c.importValueNode(uri, valsToImportRequest(indexName, fieldName, shard, vals))
+		})
 	}
-
-	return nil
+	err = eg.Wait()
+	return errors.Wrap(err, "importing values to nodes")
 }
 
-func (c *Client) fetchFragmentNodes(indexName string, slice uint64) ([]fragmentNode, error) {
-	key := fmt.Sprintf("%s-%d", indexName, slice)
+func (c *Client) fetchFragmentNodes(indexName string, shard uint64) ([]fragmentNode, error) {
+	key := fmt.Sprintf("%s-%d", indexName, shard)
 	c.fragmentNodeCacheMutex.RLock()
 	nodes, ok := c.fragmentNodeCache[key]
 	c.fragmentNodeCacheMutex.RUnlock()
 	if ok {
 		return nodes, nil
 	}
-	path := fmt.Sprintf("/fragment/nodes?slice=%d&index=%s", slice, indexName)
+	path := fmt.Sprintf("/internal/fragment/nodes?shard=%d&index=%s", shard, indexName)
 	_, body, err := c.httpRequest("GET", path, []byte{}, nil)
 	if err != nil {
 		return nil, err
@@ -450,43 +382,47 @@ func (c *Client) importNode(uri *URI, request *pbuf.ImportRequest) error {
 	if err != nil {
 		return errors.Wrap(err, "marshaling to protobuf")
 	}
-	resp, err := c.doRequest(uri, "POST", "/import", defaultProtobufHeaders(), bytes.NewReader(data))
-	if err = anyError(resp, err); err != nil {
-		return errors.Wrap(err, "doing import request")
-	}
-	return errors.Wrap(resp.Body.Close(), "closing import response body")
+	return c.importData(uri, request.GetIndex(), request.GetField(), data)
 }
 
 func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest) error {
-	data, _ := proto.Marshal(request)
-	// request.Marshal never returns an error
-	_, err := c.doRequest(uri, "POST", "/import-value", defaultProtobufHeaders(), bytes.NewReader(data))
+	data, err := proto.Marshal(request)
 	if err != nil {
-		return errors.Wrap(err, "doing /import-value request")
+		return errors.Wrap(err, "marshaling to protobuf")
 	}
+	return c.importData(uri, request.GetIndex(), request.GetField(), data)
+}
+
+func (c *Client) importData(uri *URI, indexName string, fieldName string, data []byte) error {
+	path := fmt.Sprintf("/index/%s/field/%s/import", indexName, fieldName)
+	resp, err := c.doRequest(uri, "POST", path, defaultProtobufHeaders(), bytes.NewReader(data))
+	if err = anyError(resp, err); err != nil {
+		return errors.Wrap(err, "doing import")
+	}
+	defer resp.Body.Close()
 
 	return nil
 }
 
-// ExportFrame exports bits for a frame.
-func (c *Client) ExportFrame(frame *Frame) (RecordIterator, error) {
-	var slicesMax map[string]uint64
+// ExportField exports columns for a field.
+func (c *Client) ExportField(field *Field) (RecordIterator, error) {
+	var shardsMax map[string]uint64
 	var err error
 
 	status, err := c.Status()
 	if err != nil {
 		return nil, err
 	}
-	slicesMax, err = c.slicesMax()
+	shardsMax, err = c.shardsMax()
 	if err != nil {
 		return nil, err
 	}
-	status.indexMaxSlice = slicesMax
-	sliceURIs, err := c.statusToNodeSlicesForIndex(status, frame.index.Name())
+	status.indexMaxShard = shardsMax
+	shardURIs, err := c.statusToNodeShardsForIndex(status, field.index.Name())
 	if err != nil {
 		return nil, err
 	}
-	return NewCSVBitIterator(newExportReader(c, sliceURIs, frame)), nil
+	return NewCSVColumnIterator(newExportReader(c, shardURIs, field)), nil
 }
 
 // Status returns the serves status.
@@ -516,15 +452,15 @@ func (c *Client) readSchema() ([]StatusIndex, error) {
 	return schemaInfo.Indexes, nil
 }
 
-func (c *Client) slicesMax() (map[string]uint64, error) {
-	_, data, err := c.httpRequest("GET", "/slices/max", nil, nil)
+func (c *Client) shardsMax() (map[string]uint64, error) {
+	_, data, err := c.httpRequest("GET", "/internal/shards/max", nil, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "requesting /slices/max")
+		return nil, errors.Wrap(err, "requesting /internal/shards/max")
 	}
 	m := map[string]map[string]uint64{}
 	err = json.Unmarshal(data, &m)
 	if err != nil {
-		return nil, errors.Wrap(err, "unmarshaling /slices/max data")
+		return nil, errors.Wrap(err, "unmarshaling /internal/shards/max data")
 	}
 	return m["standard"], nil
 }
@@ -604,12 +540,12 @@ func (c *Client) doRequest(host *URI, method, path string, headers map[string]st
 	return c.client.Do(req)
 }
 
-// statusToNodeSlicesForIndex finds the hosts which contains slices for the given index
-func (c *Client) statusToNodeSlicesForIndex(status Status, indexName string) (map[uint64]*URI, error) {
+// statusToNodeShardsForIndex finds the hosts which contains shards for the given index
+func (c *Client) statusToNodeShardsForIndex(status Status, indexName string) (map[uint64]*URI, error) {
 	result := make(map[uint64]*URI)
-	if maxSlice, ok := status.indexMaxSlice[indexName]; ok {
-		for slice := 0; slice <= int(maxSlice); slice++ {
-			fragmentNodes, err := c.fetchFragmentNodes(indexName, uint64(slice))
+	if maxShard, ok := status.indexMaxShard[indexName]; ok {
+		for shard := 0; shard <= int(maxShard); shard++ {
+			fragmentNodes, err := c.fetchFragmentNodes(indexName, uint64(shard))
 			if err != nil {
 				return nil, err
 			}
@@ -623,10 +559,10 @@ func (c *Client) statusToNodeSlicesForIndex(status Status, indexName string) (ma
 				scheme: node.Scheme,
 			}
 
-			result[uint64(slice)] = uri
+			result[uint64(shard)] = uri
 		}
 	} else {
-		return nil, ErrNoSlice
+		return nil, ErrNoShard
 	}
 	return result, nil
 }
@@ -683,11 +619,11 @@ func newHTTPClient(options *ClientOptions) *http.Client {
 
 func makeRequestData(query string, options *QueryOptions) ([]byte, error) {
 	request := &pbuf.QueryRequest{
-		Query:        query,
-		Slices:       options.Slices,
-		ColumnAttrs:  options.Columns,
-		ExcludeAttrs: options.ExcludeAttrs,
-		ExcludeBits:  options.ExcludeBits,
+		Query:           query,
+		Shards:          options.Shards,
+		ColumnAttrs:     options.ColumnAttrs,
+		ExcludeRowAttrs: options.ExcludeRowAttrs,
+		ExcludeColumns:  options.ExcludeColumns,
 	}
 	r, err := proto.Marshal(request)
 	if err != nil {
@@ -696,27 +632,27 @@ func makeRequestData(query string, options *QueryOptions) ([]byte, error) {
 	return r, nil
 }
 
-func bitsToImportRequest(indexName string, frameName string, slice uint64, bits []Record) *pbuf.ImportRequest {
-	rowIDs := make([]uint64, 0, len(bits))
-	columnIDs := make([]uint64, 0, len(bits))
-	timestamps := make([]int64, 0, len(bits))
-	for _, record := range bits {
-		bit := record.(Bit)
-		rowIDs = append(rowIDs, bit.RowID)
-		columnIDs = append(columnIDs, bit.ColumnID)
-		timestamps = append(timestamps, bit.Timestamp)
+func columnsToImportRequest(indexName string, fieldName string, shard uint64, records []Record) *pbuf.ImportRequest {
+	rowIDs := make([]uint64, 0, len(records))
+	columnIDs := make([]uint64, 0, len(records))
+	timestamps := make([]int64, 0, len(records))
+	for _, record := range records {
+		column := record.(Column)
+		rowIDs = append(rowIDs, column.RowID)
+		columnIDs = append(columnIDs, column.ColumnID)
+		timestamps = append(timestamps, column.Timestamp)
 	}
 	return &pbuf.ImportRequest{
 		Index:      indexName,
-		Frame:      frameName,
-		Slice:      slice,
+		Field:      fieldName,
+		Shard:      shard,
 		RowIDs:     rowIDs,
 		ColumnIDs:  columnIDs,
 		Timestamps: timestamps,
 	}
 }
 
-func valsToImportRequest(indexName string, frameName string, slice uint64, fieldName string, vals []Record) *pbuf.ImportValueRequest {
+func valsToImportRequest(indexName string, fieldName string, shard uint64, vals []Record) *pbuf.ImportValueRequest {
 	columnIDs := make([]uint64, 0, len(vals))
 	values := make([]int64, 0, len(vals))
 	for _, record := range vals {
@@ -726,9 +662,8 @@ func valsToImportRequest(indexName string, frameName string, slice uint64, field
 	}
 	return &pbuf.ImportValueRequest{
 		Index:     indexName,
-		Frame:     frameName,
-		Slice:     slice,
 		Field:     fieldName,
+		Shard:     shard,
 		ColumnIDs: columnIDs,
 		Values:    values,
 	}
@@ -764,26 +699,12 @@ func OptClientSocketTimeout(timeout time.Duration) ClientOption {
 	}
 }
 
-// SocketTimeout is the maximum idle socket time in nanoseconds
-// *DEPRECATED* Use OptClientSocketTimeout instead.
-func SocketTimeout(timeout time.Duration) ClientOption {
-	log.Println("The SocketTimeout client option is deprecated and will be removed.")
-	return OptClientSocketTimeout(timeout)
-}
-
 // OptClientConnectTimeout is the maximum time to connect in nanoseconds.
 func OptClientConnectTimeout(timeout time.Duration) ClientOption {
 	return func(options *ClientOptions) error {
 		options.ConnectTimeout = timeout
 		return nil
 	}
-}
-
-// ConnectTimeout is the maximum time to connect in nanoseconds.
-// *DEPRECATED* Use OptClientConnectTimeout instead.
-func ConnectTimeout(timeout time.Duration) ClientOption {
-	log.Println("The ConnectTimeout client option is deprecated and will be removed.")
-	return OptClientConnectTimeout(timeout)
 }
 
 // OptPoolSizePerRoute is the maximum number of active connections in the pool to a host.
@@ -794,13 +715,6 @@ func OptClientPoolSizePerRoute(size int) ClientOption {
 	}
 }
 
-// PoolSizePerRoute is the maximum number of active connections in the pool to a host.
-// *DEPRECATED* Use OptClientPoolSizePerRoute instead.
-func PoolSizePerRoute(size int) ClientOption {
-	log.Println("The PoolSizePerRoute client option is deprecated and will be removed.")
-	return OptClientPoolSizePerRoute(size)
-}
-
 // OptClientTotalPoolSize is the maximum number of connections in the pool.
 func OptClientTotalPoolSize(size int) ClientOption {
 	return func(options *ClientOptions) error {
@@ -809,26 +723,12 @@ func OptClientTotalPoolSize(size int) ClientOption {
 	}
 }
 
-// TotalPoolSize is the maximum number of connections in the pool.
-// *DEPRECATED* Use OptClientTotalPoolSize instead.
-func TotalPoolSize(size int) ClientOption {
-	log.Println("The TotalPoolSize client option is deprecated and will be removed.")
-	return OptClientTotalPoolSize(size)
-}
-
 // OptClientTLSConfig contains the TLS configuration.
 func OptClientTLSConfig(config *tls.Config) ClientOption {
 	return func(options *ClientOptions) error {
 		options.TLSConfig = config
 		return nil
 	}
-}
-
-// TLSConfig contains the TLS configuration.
-// *DEPRECATED* Use OptClientTLSConfig instead.
-func TLSConfig(config *tls.Config) ClientOption {
-	log.Println("The TLSConfig client option is deprecated and will be removed.")
-	return OptClientTLSConfig(config)
 }
 
 type versionInfo struct {
@@ -860,14 +760,14 @@ func (co *ClientOptions) withDefaults() (updated *ClientOptions) {
 
 // QueryOptions contains options to customize the Query function.
 type QueryOptions struct {
-	// Slices restricts query to a subset of slices. Queries all slices if nil.
-	Slices []uint64
-	// Columns enables returning columns in the query response.
-	Columns bool
-	// ExcludeAttrs inhibits returning attributes
-	ExcludeAttrs bool
-	// ExcludeBits inhibits returning bits
-	ExcludeBits bool
+	// Shards restricts query to a subset of shards. Queries all shards if nil.
+	Shards []uint64
+	// ColumnAttrs enables returning columns in the query response.
+	ColumnAttrs bool
+	// ExcludeRowAttrs inhibits returning attributes
+	ExcludeRowAttrs bool
+	// ExcludeColumns inhibits returning columns
+	ExcludeColumns bool
 }
 
 func (qo *QueryOptions) addOptions(options ...interface{}) error {
@@ -901,77 +801,31 @@ type QueryOption func(options *QueryOptions) error
 // OptQueryColumnAttrs enables returning column attributes in the result.
 func OptQueryColumnAttrs(enable bool) QueryOption {
 	return func(options *QueryOptions) error {
-		options.Columns = enable
+		options.ColumnAttrs = enable
 		return nil
 	}
 }
 
-// ColumnAttrs enables returning column attributes in the result.
-// *DEPRECATED* Use OptQueryColumnAttrs instead.
-func ColumnAttrs(enable bool) QueryOption {
-	log.Println("The ColumnAttrs query option is deprecated and will be removed.")
-	return OptQueryColumnAttrs(enable)
-}
-
-// OptQuerySlices restricts the set of slices on which a query operates.
-func OptQuerySlices(slices ...uint64) QueryOption {
+// OptQueryShards restricts the set of shards on which a query operates.
+func OptQueryShards(shards ...uint64) QueryOption {
 	return func(options *QueryOptions) error {
-		options.Slices = append(options.Slices, slices...)
+		options.Shards = append(options.Shards, shards...)
 		return nil
 	}
-}
-
-// Slices restricts the set of slices on which a query operates.
-// *DEPRECATED* Use OptQuerySlices instead.
-func Slices(slices ...uint64) QueryOption {
-	log.Println("The Slices query option is deprecated and will be removed.")
-	return OptQuerySlices(slices...)
 }
 
 // OptQueryExcludeAttrs enables discarding attributes from a result,
 func OptQueryExcludeAttrs(enable bool) QueryOption {
 	return func(options *QueryOptions) error {
-		options.ExcludeAttrs = enable
+		options.ExcludeRowAttrs = enable
 		return nil
 	}
 }
 
-// ExcludeAttrs enables discarding attributes from a result,
-// *DEPRECATED* Use OptQueryExcludeAttrs instead.
-func ExcludeAttrs(enable bool) QueryOption {
-	log.Println("The ExcludeAttrs query option is deprecated and will be removed.")
-	return OptQueryExcludeAttrs(enable)
-}
-
-// OptQueryExcludeBits enables discarding bits from a result,
-func OptQueryExcludeBits(enable bool) QueryOption {
+// OptQueryExcludeColumns enables discarding columns from a result,
+func OptQueryExcludeColumns(enable bool) QueryOption {
 	return func(options *QueryOptions) error {
-		options.ExcludeBits = enable
-		return nil
-	}
-}
-
-// ExcludeBits enables discarding bits from a result,
-// *DEPRECATED* Use OptQueryExcludeBits instead.
-func ExcludeBits(enable bool) QueryOption {
-	log.Println("The ExcludeBits query option is deprecated and will be removed.")
-	return OptQueryExcludeBits(enable)
-}
-
-// SkipVersionCheck disables version checking
-// *DEPRECATED*
-func SkipVersionCheck() ClientOption {
-	return func(options *ClientOptions) error {
-		log.Println("The SkipVersionCheck client option is deprecated and will be removed - it has no effect and should be removed from your code")
-		return nil
-	}
-}
-
-// LegacyMode enables legacy mode
-// *DEPRECATED*
-func LegacyMode(enable bool) ClientOption {
-	return func(options *ClientOptions) error {
-		log.Println("The LegacyMode client option is deprecated and will be removed - it has no effect and should be removed from your code")
+		options.ExcludeColumns = enable
 		return nil
 	}
 }
@@ -986,17 +840,17 @@ const (
 
 type ImportOptions struct {
 	threadCount           int
-	sliceWidth            uint64
+	shardWidth            uint64
 	timeout               time.Duration
 	batchSize             int
 	strategy              ImportWorkerStrategy
 	statusChan            chan<- ImportStatusUpdate
-	importRecordsFunction func(indexName string, frameName string, slice uint64, records []Record) error
+	importRecordsFunction func(indexName string, fieldName string, shard uint64, records []Record) error
 }
 
 func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
 	updated = *opt
-	updated.sliceWidth = 1048576
+	updated.shardWidth = 1048576
 
 	if updated.threadCount <= 0 {
 		updated.threadCount = 1
@@ -1008,7 +862,7 @@ func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
 		updated.batchSize = 100000
 	}
 	if updated.strategy == DefaultImport {
-		updated.strategy = TimeoutImport
+		updated.strategy = BatchImport
 	}
 	return
 }
@@ -1051,7 +905,7 @@ func OptImportStatusChannel(statusChan chan<- ImportStatusUpdate) ImportOption {
 	}
 }
 
-func importRecordsFunction(fun func(indexName string, frameName string, slice uint64, records []Record) error) ImportOption {
+func importRecordsFunction(fun func(indexName string, fieldName string, shard uint64, records []Record) error) ImportOption {
 	return func(options *ImportOptions) error {
 		options.importRecordsFunction = fun
 		return nil
@@ -1071,7 +925,7 @@ type fragmentNode struct {
 // Status contains the status information from a Pilosa server.
 type Status struct {
 	Nodes         []StatusNode `json:"nodes"`
-	indexMaxSlice map[string]uint64
+	indexMaxShard map[string]uint64
 }
 
 // StatusNode contains node information.
@@ -1090,64 +944,76 @@ type SchemaInfo struct {
 type StatusIndex struct {
 	Name    string        `json:"name"`
 	Options StatusOptions `json:"options"`
-	Frames  []StatusFrame `json:"frames"`
-	Slices  []uint64      `json:"slices"`
+	Fields  []StatusField `json:"fields"`
+	Shards  []uint64      `json:"shards"`
 }
 
-// StatusFrame contains frame information.
-type StatusFrame struct {
+// StatusField contains field information.
+type StatusField struct {
 	Name    string        `json:"name"`
 	Options StatusOptions `json:"options"`
 }
 
-// StatusOptions contains options for a frame or an index.
+// StatusOptions contains options for a field or an index.
 type StatusOptions struct {
-	CacheType   string        `json:"cacheType"`
-	CacheSize   uint          `json:"cacheSize"`
-	Fields      []StatusField `json:"fields"`
-	TimeQuantum string        `json:"timeQuantum"`
+	FieldType   FieldType `json:"type"`
+	CacheType   string    `json:"cacheType"`
+	CacheSize   uint      `json:"cacheSize"`
+	TimeQuantum string    `json:"timeQuantum"`
+	Min         int64     `json:"min"`
+	Max         int64     `json:"max"`
+	Keys        bool      `json:"keys"`
 }
 
-// StatusField contains a field in the status.
-type StatusField struct {
-	Name string
-	Type string
-	Max  int64
-	Min  int64
+func (so StatusOptions) asIndexOptions() *IndexOptions {
+	return &IndexOptions{
+		keys: so.Keys,
+	}
+}
+
+func (so StatusOptions) asFieldOptions() *FieldOptions {
+	return &FieldOptions{
+		fieldType:   so.FieldType,
+		cacheSize:   int(so.CacheSize),
+		cacheType:   CacheType(so.CacheType),
+		timeQuantum: TimeQuantum(so.TimeQuantum),
+		min:         so.Min,
+		max:         so.Max,
+	}
 }
 
 type exportReader struct {
 	client       *Client
-	sliceURIs    map[uint64]*URI
-	frame        *Frame
+	shardURIs    map[uint64]*URI
+	field        *Field
 	body         []byte
 	bodyIndex    int
-	currentSlice uint64
-	sliceCount   uint64
+	currentShard uint64
+	shardCount   uint64
 }
 
-func newExportReader(client *Client, sliceURIs map[uint64]*URI, frame *Frame) *exportReader {
+func newExportReader(client *Client, shardURIs map[uint64]*URI, field *Field) *exportReader {
 	return &exportReader{
 		client:     client,
-		sliceURIs:  sliceURIs,
-		frame:      frame,
-		sliceCount: uint64(len(sliceURIs)),
+		shardURIs:  shardURIs,
+		field:      field,
+		shardCount: uint64(len(shardURIs)),
 	}
 }
 
 // Read updates the passed array with the exported CSV data and returns the number of bytes read
 func (r *exportReader) Read(p []byte) (n int, err error) {
-	if r.currentSlice >= r.sliceCount {
+	if r.currentShard >= r.shardCount {
 		err = io.EOF
 		return
 	}
 	if r.body == nil {
-		uri, _ := r.sliceURIs[r.currentSlice]
+		uri, _ := r.shardURIs[r.currentShard]
 		headers := map[string]string{
 			"Accept": "text/csv",
 		}
-		path := fmt.Sprintf("/export?index=%s&frame=%s&slice=%d",
-			r.frame.index.Name(), r.frame.Name(), r.currentSlice)
+		path := fmt.Sprintf("/export?index=%s&field=%s&shard=%d",
+			r.field.index.Name(), r.field.Name(), r.currentShard)
 		resp, err := r.client.doRequest(uri, "GET", path, headers, nil)
 		if err = anyError(resp, err); err != nil {
 			return 0, errors.Wrap(err, "doing export request")
@@ -1163,7 +1029,7 @@ func (r *exportReader) Read(p []byte) (n int, err error) {
 	r.bodyIndex += n
 	if n >= len(r.body) {
 		r.body = nil
-		r.currentSlice++
+		r.currentShard++
 	}
 	return
 }

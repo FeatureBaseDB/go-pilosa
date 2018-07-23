@@ -44,7 +44,7 @@ import (
 )
 
 type Record interface {
-	Slice(sliceWidth uint64) uint64
+	Shard(shardWidth uint64) uint64
 	Less(other Record) bool
 }
 
@@ -66,19 +66,19 @@ type RecordIterator interface {
 	NextRecord() (Record, error)
 }
 
-// Bit defines a single Pilosa bit.
-type Bit struct {
+// Column defines a single Pilosa column.
+type Column struct {
 	RowID     uint64
 	ColumnID  uint64
 	Timestamp int64
 }
 
-func (b Bit) Slice(sliceWidth uint64) uint64 {
-	return b.ColumnID / sliceWidth
+func (b Column) Shard(shardWidth uint64) uint64 {
+	return b.ColumnID / shardWidth
 }
 
-func (b Bit) Less(other Record) bool {
-	if ob, ok := other.(Bit); ok {
+func (b Column) Less(other Record) bool {
+	if ob, ok := other.(Column); ok {
 		if b.RowID == ob.RowID {
 			return b.ColumnID < ob.ColumnID
 		}
@@ -87,11 +87,11 @@ func (b Bit) Less(other Record) bool {
 	return false
 }
 
-func BitCSVUnmarshaller() CSVRecordUnmarshaller {
-	return BitCSVUnmarshallerWithTimestamp("")
+func ColumnCSVUnmarshaller() CSVRecordUnmarshaller {
+	return ColumnCSVUnmarshallerWithTimestamp("")
 }
 
-func BitCSVUnmarshallerWithTimestamp(timestampFormat string) CSVRecordUnmarshaller {
+func ColumnCSVUnmarshallerWithTimestamp(timestampFormat string) CSVRecordUnmarshaller {
 	return func(text string) (Record, error) {
 		parts := strings.Split(text, ",")
 		if len(parts) < 2 {
@@ -120,12 +120,12 @@ func BitCSVUnmarshallerWithTimestamp(timestampFormat string) CSVRecordUnmarshall
 				timestamp = int(t.Unix())
 			}
 		}
-		bit := Bit{
+		column := Column{
 			RowID:     uint64(rowID),
 			ColumnID:  uint64(columnID),
 			Timestamp: int64(timestamp),
 		}
-		return bit, nil
+		return column, nil
 	}
 }
 
@@ -151,12 +151,12 @@ func NewCSVIterator(reader io.Reader, unmarshaller CSVRecordUnmarshaller) *CSVIt
 	}
 }
 
-func NewCSVBitIterator(reader io.Reader) *CSVIterator {
-	return NewCSVIterator(reader, BitCSVUnmarshaller())
+func NewCSVColumnIterator(reader io.Reader) *CSVIterator {
+	return NewCSVIterator(reader, ColumnCSVUnmarshaller())
 }
 
-func NewCSVBitIteratorWithTimestampFormat(reader io.Reader, timestampFormat string) *CSVIterator {
-	return NewCSVIterator(reader, BitCSVUnmarshallerWithTimestamp(timestampFormat))
+func NewCSVColumnIteratorWithTimestampFormat(reader io.Reader, timestampFormat string) *CSVIterator {
+	return NewCSVIterator(reader, ColumnCSVUnmarshallerWithTimestamp(timestampFormat))
 }
 
 func NewCSVValueIterator(reader io.Reader) *CSVIterator {
@@ -185,15 +185,15 @@ func (c *CSVIterator) NextRecord() (Record, error) {
 }
 
 // FieldValue represents the value for a column within a
-// range-encoded frame.
+// range-encoded field.
 type FieldValue struct {
 	ColumnID  uint64
 	ColumnKey string
 	Value     int64
 }
 
-func (v FieldValue) Slice(sliceWidth uint64) uint64 {
-	return v.ColumnID / sliceWidth
+func (v FieldValue) Shard(shardWidth uint64) uint64 {
+	return v.ColumnID / shardWidth
 }
 
 func (v FieldValue) Less(other Record) bool {

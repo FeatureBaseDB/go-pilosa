@@ -18,11 +18,17 @@ func newRecordImportManager(client *Client) *recordImportManager {
 	}
 }
 
-func (rim recordImportManager) Run(frame *Frame, iterator RecordIterator, options ImportOptions) error {
-	sliceWidth := options.sliceWidth
+type importWorkerChannels struct {
+	records <-chan Record
+	errs    chan<- error
+	status  chan<- ImportStatusUpdate
+}
+
+func (rim recordImportManager) Run(field *Field, iterator RecordIterator, options ImportOptions) error {
+	shardWidth := options.shardWidth
 	threadCount := uint64(options.threadCount)
 	recordChans := make([]chan Record, threadCount)
-	errChans := make([]chan error, threadCount)
+	errChan := make(chan error)
 	statusChan := options.statusChan
 
 	if options.importRecordsFunction == nil {
@@ -31,8 +37,12 @@ func (rim recordImportManager) Run(frame *Frame, iterator RecordIterator, option
 
 	for i := range recordChans {
 		recordChans[i] = make(chan Record, options.batchSize)
-		errChans[i] = make(chan error)
-		go recordImportWorker(i, rim.client, frame, recordChans[i], errChans[i], statusChan, options)
+		chans := importWorkerChannels{
+			records: recordChans[i],
+			errs:    errChan,
+			status:  statusChan,
+		}
+		go recordImportWorker(i, rim.client, field, chans, options)
 	}
 
 	var record Record
@@ -46,49 +56,46 @@ func (rim recordImportManager) Run(frame *Frame, iterator RecordIterator, option
 			}
 			break
 		}
-		slice := record.Slice(sliceWidth)
-		recordChans[slice%threadCount] <- record
+		shard := record.Shard(shardWidth)
+		recordChans[shard%threadCount] <- record
 	}
 
 	for _, q := range recordChans {
 		close(q)
 	}
 
-	// wait for workers to stop
-	var workerErr error
-	for _, q := range errChans {
-		workerErr = <-q
-		if workerErr != nil {
-			break
-		}
-	}
-
-	// TODO: Closing this channel will panic if the frame has multiple fields.
-	if statusChan != nil {
-		close(statusChan)
-	}
-
 	if recordIteratorError != nil {
 		return recordIteratorError
 	}
 
-	if workerErr != nil {
-		return workerErr
+	done := uint64(0)
+	for {
+		select {
+		case workerErr := <-errChan:
+			if workerErr != nil {
+				return workerErr
+			}
+			done += 1
+			if done == threadCount {
+				return nil
+			}
+		}
 	}
-
-	return nil
 }
 
-func recordImportWorker(id int, client *Client, frame *Frame, recordChan <-chan Record, errChan chan<- error, statusChan chan<- ImportStatusUpdate, options ImportOptions) {
-	batchForSlice := map[uint64][]Record{}
-	frameName := frame.Name()
-	indexName := frame.index.Name()
+func recordImportWorker(id int, client *Client, field *Field, chans importWorkerChannels, options ImportOptions) {
+	batchForShard := map[uint64][]Record{}
+	fieldName := field.Name()
+	indexName := field.index.Name()
 	importFun := options.importRecordsFunction
+	statusChan := chans.status
+	recordChan := chans.records
+	errChan := chans.errs
 
-	importRecords := func(slice uint64, records []Record) error {
+	importRecords := func(shard uint64, records []Record) error {
 		tic := time.Now()
 		sort.Sort(recordSort(records))
-		err := importFun(indexName, frameName, slice, records)
+		err := importFun(indexName, fieldName, shard, records)
 		if err != nil {
 			return err
 		}
@@ -96,7 +103,7 @@ func recordImportWorker(id int, client *Client, frame *Frame, recordChan <-chan 
 		if statusChan != nil {
 			statusChan <- ImportStatusUpdate{
 				ThreadID:      id,
-				Slice:         slice,
+				Shard:         shard,
 				ImportedCount: len(records),
 				Time:          took,
 			}
@@ -104,16 +111,16 @@ func recordImportWorker(id int, client *Client, frame *Frame, recordChan <-chan 
 		return nil
 	}
 
-	largestSlice := func() uint64 {
+	largestShard := func() uint64 {
 		largest := 0
-		resultSlice := uint64(0)
-		for slice, records := range batchForSlice {
+		resultShard := uint64(0)
+		for shard, records := range batchForShard {
 			if len(records) > largest {
 				largest = len(records)
-				resultSlice = slice
+				resultShard = shard
 			}
 		}
-		return resultSlice
+		return resultShard
 	}
 
 	var err error
@@ -122,33 +129,33 @@ func recordImportWorker(id int, client *Client, frame *Frame, recordChan <-chan 
 	recordCount := 0
 	timeout := options.timeout
 	batchSize := options.batchSize
-	sliceWidth := options.sliceWidth
+	shardWidth := options.shardWidth
 
 	for record := range recordChan {
 		recordCount += 1
-		slice := record.Slice(sliceWidth)
-		batchForSlice[slice] = append(batchForSlice[slice], record)
+		shard := record.Shard(shardWidth)
+		batchForShard[shard] = append(batchForShard[shard], record)
 
 		if strategy == BatchImport && recordCount >= batchSize {
-			for slice, records := range batchForSlice {
+			for shard, records := range batchForShard {
 				if len(records) == 0 {
 					continue
 				}
-				err = importRecords(slice, records)
+				err = importRecords(shard, records)
 				if err != nil {
 					break
 				}
-				batchForSlice[slice] = nil
+				batchForShard[shard] = nil
 			}
 			recordCount = 0
 			tic = time.Now()
 		} else if strategy == TimeoutImport && time.Since(tic) >= timeout {
-			slice := largestSlice()
-			err = importRecords(slice, batchForSlice[slice])
+			shard := largestShard()
+			err = importRecords(shard, batchForShard[shard])
 			if err != nil {
 				break
 			}
-			batchForSlice[slice] = nil
+			batchForShard[shard] = nil
 			recordCount = 0
 			tic = time.Now()
 		}
@@ -160,11 +167,11 @@ func recordImportWorker(id int, client *Client, frame *Frame, recordChan <-chan 
 	}
 
 	// import remaining records
-	for slice, records := range batchForSlice {
+	for shard, records := range batchForShard {
 		if len(records) == 0 {
 			continue
 		}
-		err = importRecords(slice, records)
+		err = importRecords(shard, records)
 		if err != nil {
 			break
 		}
@@ -175,7 +182,7 @@ func recordImportWorker(id int, client *Client, frame *Frame, recordChan <-chan 
 
 type ImportStatusUpdate struct {
 	ThreadID      int
-	Slice         uint64
+	Shard         uint64
 	ImportedCount int
 	Time          time.Duration
 }

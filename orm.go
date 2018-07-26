@@ -383,8 +383,8 @@ func (idx *Index) Count(row *PQLRowQuery) *PQLBaseQuery {
 // SetColumnAttrs creates a SetColumnAttrs query.
 // SetColumnAttrs associates arbitrary key/value pairs with a column in an index.
 // Following types are accepted: integer, float, string and boolean types.
-func (idx *Index) SetColumnAttrs(col interface{}, attrs map[string]interface{}) *PQLBaseQuery {
-	colStr, err := formatIDKey(col)
+func (idx *Index) SetColumnAttrs(colIDOrKey interface{}, attrs map[string]interface{}) *PQLBaseQuery {
+	colStr, err := formatIDKey(colIDOrKey)
 	if err != nil {
 		return NewPQLBaseQuery("", idx, err)
 	}
@@ -571,8 +571,8 @@ func (f *Field) copy() *Field {
 // Row creates a Row query.
 // Row retrieves the indices of all the set columns in a row.
 // It also retrieves any attributes set on that row or column.
-func (f *Field) Row(row interface{}) *PQLRowQuery {
-	rowStr, err := formatIDKey(row)
+func (f *Field) Row(rowIDOrKey interface{}) *PQLRowQuery {
+	rowStr, err := formatIDKey(rowIDOrKey)
 	if err != nil {
 		return NewPQLRowQuery("", f.index, err)
 	}
@@ -582,8 +582,8 @@ func (f *Field) Row(row interface{}) *PQLRowQuery {
 
 // Set creates a Set query.
 // Set, assigns a value of 1 to a bit in the binary matrix, thus associating the given row in the given field with the given column.
-func (f *Field) Set(row, col interface{}) *PQLBaseQuery {
-	rowStr, colStr, err := formatRowColIDKey(row, col)
+func (f *Field) Set(rowIDOrKey, colIDOrKey interface{}) *PQLBaseQuery {
+	rowStr, colStr, err := formatRowColIDKey(rowIDOrKey, colIDOrKey)
 	if err != nil {
 		return NewPQLBaseQuery("", f.index, err)
 	}
@@ -594,8 +594,8 @@ func (f *Field) Set(row, col interface{}) *PQLBaseQuery {
 // SetTimestamp creates a Set query with timestamp.
 // Set, assigns a value of 1 to a column in the binary matrix,
 // thus associating the given row in the given field with the given column.
-func (f *Field) SetTimestamp(row, col interface{}, timestamp time.Time) *PQLBaseQuery {
-	rowStr, colStr, err := formatRowColIDKey(row, col)
+func (f *Field) SetTimestamp(rowIDOrKey, colIDOrKey interface{}, timestamp time.Time) *PQLBaseQuery {
+	rowStr, colStr, err := formatRowColIDKey(rowIDOrKey, colIDOrKey)
 	if err != nil {
 		return NewPQLBaseQuery("", f.index, err)
 	}
@@ -605,8 +605,8 @@ func (f *Field) SetTimestamp(row, col interface{}, timestamp time.Time) *PQLBase
 
 // Clear creates a Clear query.
 // Clear, assigns a value of 0 to a bit in the binary matrix, thus disassociating the given row in the given field from the given column.
-func (f *Field) Clear(row, col interface{}) *PQLBaseQuery {
-	rowStr, colStr, err := formatRowColIDKey(row, col)
+func (f *Field) Clear(rowIDOrKey, colIDOrKey interface{}) *PQLBaseQuery {
+	rowStr, colStr, err := formatRowColIDKey(rowIDOrKey, colIDOrKey)
 	if err != nil {
 		return NewPQLBaseQuery("", f.index, err)
 	}
@@ -651,8 +651,8 @@ func (f *Field) filterFieldTopN(n uint64, row *PQLRowQuery, field string, values
 
 // Range creates a Range query.
 // Similar to Row, but only returns columns which were set with timestamps between the given start and end timestamps.
-func (f *Field) Range(row interface{}, start time.Time, end time.Time) *PQLRowQuery {
-	rowStr, err := formatIDKey(row)
+func (f *Field) Range(rowIDOrKey interface{}, start time.Time, end time.Time) *PQLRowQuery {
+	rowStr, err := formatIDKey(rowIDOrKey)
 	if err != nil {
 		return NewPQLRowQuery("", f.index, err)
 	}
@@ -663,8 +663,8 @@ func (f *Field) Range(row interface{}, start time.Time, end time.Time) *PQLRowQu
 // SetRowAttrs creates a SetRowAttrs query.
 // SetRowAttrs associates arbitrary key/value pairs with a row in a field.
 // Following types are accepted: integer, float, string and boolean types.
-func (f *Field) SetRowAttrs(row interface{}, attrs map[string]interface{}) *PQLBaseQuery {
-	rowStr, err := formatIDKey(row)
+func (f *Field) SetRowAttrs(rowIDOrKey interface{}, attrs map[string]interface{}) *PQLBaseQuery {
+	rowStr, err := formatIDKey(rowIDOrKey)
 	if err != nil {
 		return NewPQLBaseQuery("", f.index, err)
 	}
@@ -695,25 +695,33 @@ func createAttributesString(attrs map[string]interface{}) (string, error) {
 
 func formatIDKey(idKey interface{}) (string, error) {
 	switch v := idKey.(type) {
+	case uint:
+		return strconv.FormatUint(uint64(v), 10), nil
+	case uint32:
+		return strconv.FormatUint(uint64(v), 10), nil
 	case uint64:
 		return strconv.FormatUint(v, 10), nil
-	case string:
-		return fmt.Sprintf(`'%s'`, v), nil
 	case int:
 		return strconv.FormatInt(int64(v), 10), nil
+	case int32:
+		return strconv.FormatInt(int64(v), 10), nil
+	case int64:
+		return strconv.FormatInt(v, 10), nil
+	case string:
+		return fmt.Sprintf(`'%s'`, v), nil
 	default:
-		return "", errors.New("Uknown type for id/key")
+		return "", errors.Errorf("id/key is not a string or integer type: %#v", idKey)
 	}
 }
 
-func formatRowColIDKey(row, col interface{}) (string, string, error) {
-	rowStr, err := formatIDKey(row)
+func formatRowColIDKey(rowIDOrKey, colIDOrKey interface{}) (string, string, error) {
+	rowStr, err := formatIDKey(rowIDOrKey)
 	if err != nil {
-		return "", "", err
+		return "", "", errors.Wrap(err, "formatting row")
 	}
-	colStr, err := formatIDKey(col)
+	colStr, err := formatIDKey(colIDOrKey)
 	if err != nil {
-		return "", "", err
+		return "", "", errors.Wrap(err, "formatting row")
 	}
 	return rowStr, colStr, err
 }
@@ -824,8 +832,8 @@ func (field *Field) Max(row *PQLRowQuery) *PQLBaseQuery {
 }
 
 // SetIntValue creates a Set query.
-func (field *Field) SetIntValue(col interface{}, value int) *PQLBaseQuery {
-	colStr, err := formatIDKey(col)
+func (field *Field) SetIntValue(colIDOrKey interface{}, value int) *PQLBaseQuery {
+	colStr, err := formatIDKey(colIDOrKey)
 	if err != nil {
 		return NewPQLBaseQuery("", field.index, err)
 	}

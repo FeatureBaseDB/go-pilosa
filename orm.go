@@ -721,7 +721,7 @@ func formatRowColIDKey(rowIDOrKey, colIDOrKey interface{}) (string, string, erro
 	}
 	colStr, err := formatIDKey(colIDOrKey)
 	if err != nil {
-		return "", "", errors.Wrap(err, "formatting row")
+		return "", "", errors.Wrap(err, "formatting column")
 	}
 	return rowStr, colStr, err
 }

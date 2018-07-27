@@ -624,8 +624,12 @@ func TestEncodeMapPanicsOnMarshalFailure(t *testing.T) {
 
 func TestFormatIDKey(t *testing.T) {
 	testCase := [][]interface{}{
-		{10, "10", nil},
+		{uint(42), "42", nil},
+		{uint32(42), "42", nil},
 		{uint64(42), "42", nil},
+		{42, "42", nil},
+		{int32(42), "42", nil},
+		{int64(42), "42", nil},
 		{"foo", `'foo'`, nil},
 		{false, "", errors.New("error")},
 	}

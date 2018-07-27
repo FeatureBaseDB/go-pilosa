@@ -36,8 +36,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 const timeFormat = "2006-01-02T15:04"
@@ -380,13 +383,17 @@ func (idx *Index) Count(row *PQLRowQuery) *PQLBaseQuery {
 // SetColumnAttrs creates a SetColumnAttrs query.
 // SetColumnAttrs associates arbitrary key/value pairs with a column in an index.
 // Following types are accepted: integer, float, string and boolean types.
-func (idx *Index) SetColumnAttrs(columnID uint64, attrs map[string]interface{}) *PQLBaseQuery {
+func (idx *Index) SetColumnAttrs(colIDOrKey interface{}, attrs map[string]interface{}) *PQLBaseQuery {
+	colStr, err := formatIDKey(colIDOrKey)
+	if err != nil {
+		return NewPQLBaseQuery("", idx, err)
+	}
 	attrsString, err := createAttributesString(attrs)
 	if err != nil {
 		return NewPQLBaseQuery("", idx, err)
 	}
-	return NewPQLBaseQuery(fmt.Sprintf("SetColumnAttrs(%d,%s)",
-		columnID, attrsString), idx, nil)
+	q := fmt.Sprintf("SetColumnAttrs(%s,%s)", colStr, attrsString)
+	return NewPQLBaseQuery(q, idx, nil)
 }
 
 func (idx *Index) rowOperation(name string, rows ...*PQLRowQuery) *PQLRowQuery {
@@ -564,60 +571,47 @@ func (f *Field) copy() *Field {
 // Row creates a Row query.
 // Row retrieves the indices of all the set columns in a row.
 // It also retrieves any attributes set on that row or column.
-func (f *Field) Row(rowID uint64) *PQLRowQuery {
-	return NewPQLRowQuery(fmt.Sprintf("Row(%s=%d)",
-		f.name, rowID), f.index, nil)
-}
-
-// RowK creates a Row query using a string key instead of an integer
-// rowID. This will only work against a Pilosa Enterprise server.
-func (f *Field) RowK(rowKey string) *PQLRowQuery {
-	return NewPQLRowQuery(fmt.Sprintf("Row(%s='%s')",
-		f.name, rowKey), f.index, nil)
+func (f *Field) Row(rowIDOrKey interface{}) *PQLRowQuery {
+	rowStr, err := formatIDKey(rowIDOrKey)
+	if err != nil {
+		return NewPQLRowQuery("", f.index, err)
+	}
+	q := fmt.Sprintf("Row(%s=%s)", f.name, rowStr)
+	return NewPQLRowQuery(q, f.index, nil)
 }
 
 // Set creates a Set query.
 // Set, assigns a value of 1 to a bit in the binary matrix, thus associating the given row in the given field with the given column.
-func (f *Field) Set(rowID uint64, columnID uint64) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("Set(%d,%s=%d)",
-		columnID, f.name, rowID), f.index, nil)
-}
-
-// SetK creates a Set query using string row and column keys. This will
-// only work against a Pilosa Enterprise server.
-func (f *Field) SetK(rowKey string, columnKey string) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf(`Set("%s",%s='%s')`,
-		columnKey, f.name, rowKey), f.index, nil)
+func (f *Field) Set(rowIDOrKey, colIDOrKey interface{}) *PQLBaseQuery {
+	rowStr, colStr, err := formatRowColIDKey(rowIDOrKey, colIDOrKey)
+	if err != nil {
+		return NewPQLBaseQuery("", f.index, err)
+	}
+	q := fmt.Sprintf("Set(%s,%s=%s)", colStr, f.name, rowStr)
+	return NewPQLBaseQuery(q, f.index, nil)
 }
 
 // SetTimestamp creates a Set query with timestamp.
 // Set, assigns a value of 1 to a column in the binary matrix,
 // thus associating the given row in the given field with the given column.
-func (f *Field) SetTimestamp(rowID uint64, columnID uint64, timestamp time.Time) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("Set(%d,%s=%d,%s)",
-		columnID, f.name, rowID, timestamp.Format(timeFormat)),
-		f.index, nil)
-}
-
-// SetTimestampK creates a SetK query with timestamp.
-func (f *Field) SetTimestampK(rowKey string, columnKey string, timestamp time.Time) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("Set('%s',%s='%s',%s)",
-		columnKey, f.name, rowKey, timestamp.Format(timeFormat)),
-		f.index, nil)
+func (f *Field) SetTimestamp(rowIDOrKey, colIDOrKey interface{}, timestamp time.Time) *PQLBaseQuery {
+	rowStr, colStr, err := formatRowColIDKey(rowIDOrKey, colIDOrKey)
+	if err != nil {
+		return NewPQLBaseQuery("", f.index, err)
+	}
+	q := fmt.Sprintf("Set(%s,%s=%s,%s)", colStr, f.name, rowStr, timestamp.Format(timeFormat))
+	return NewPQLBaseQuery(q, f.index, nil)
 }
 
 // Clear creates a Clear query.
 // Clear, assigns a value of 0 to a bit in the binary matrix, thus disassociating the given row in the given field from the given column.
-func (f *Field) Clear(rowID uint64, columnID uint64) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("Clear(%d,%s=%d)",
-		columnID, f.name, rowID), f.index, nil)
-}
-
-// ClearK creates a Clear query using string row and column keys. This
-// will only work against a Pilosa Enterprise server.
-func (f *Field) ClearK(rowKey string, columnKey string) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("Clear('%s',%s='%s')",
-		columnKey, f.name, rowKey), f.index, nil)
+func (f *Field) Clear(rowIDOrKey, colIDOrKey interface{}) *PQLBaseQuery {
+	rowStr, colStr, err := formatRowColIDKey(rowIDOrKey, colIDOrKey)
+	if err != nil {
+		return NewPQLBaseQuery("", f.index, err)
+	}
+	q := fmt.Sprintf("Clear(%s,%s=%s)", colStr, f.name, rowStr)
+	return NewPQLBaseQuery(q, f.index, nil)
 }
 
 // TopN creates a TopN query with the given item count.
@@ -657,39 +651,29 @@ func (f *Field) filterFieldTopN(n uint64, row *PQLRowQuery, field string, values
 
 // Range creates a Range query.
 // Similar to Row, but only returns columns which were set with timestamps between the given start and end timestamps.
-func (f *Field) Range(rowID uint64, start time.Time, end time.Time) *PQLRowQuery {
-	return NewPQLRowQuery(fmt.Sprintf("Range(%s=%d,%s,%s)",
-		f.name, rowID, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
-}
-
-// RangeK creates a Range query using a string row key. This will only work
-// against a Pilosa Enterprise server.
-func (f *Field) RangeK(rowKey string, start time.Time, end time.Time) *PQLRowQuery {
-	return NewPQLRowQuery(fmt.Sprintf("Range(%s='%s',%s,%s)",
-		f.name, rowKey, start.Format(timeFormat), end.Format(timeFormat)), f.index, nil)
+func (f *Field) Range(rowIDOrKey interface{}, start time.Time, end time.Time) *PQLRowQuery {
+	rowStr, err := formatIDKey(rowIDOrKey)
+	if err != nil {
+		return NewPQLRowQuery("", f.index, err)
+	}
+	q := fmt.Sprintf("Range(%s=%s,%s,%s)", f.name, rowStr, start.Format(timeFormat), end.Format(timeFormat))
+	return NewPQLRowQuery(q, f.index, nil)
 }
 
 // SetRowAttrs creates a SetRowAttrs query.
 // SetRowAttrs associates arbitrary key/value pairs with a row in a field.
 // Following types are accepted: integer, float, string and boolean types.
-func (f *Field) SetRowAttrs(rowID uint64, attrs map[string]interface{}) *PQLBaseQuery {
+func (f *Field) SetRowAttrs(rowIDOrKey interface{}, attrs map[string]interface{}) *PQLBaseQuery {
+	rowStr, err := formatIDKey(rowIDOrKey)
+	if err != nil {
+		return NewPQLBaseQuery("", f.index, err)
+	}
 	attrsString, err := createAttributesString(attrs)
 	if err != nil {
 		return NewPQLBaseQuery("", f.index, err)
 	}
-	return NewPQLBaseQuery(fmt.Sprintf("SetRowAttrs(%s,%d,%s)",
-		f.name, rowID, attrsString), f.index, nil)
-}
-
-// SetRowAttrsK creates a SetRowAttrs query using a string row key. This will
-// only work against a Pilosa Enterprise server.
-func (f *Field) SetRowAttrsK(rowKey string, attrs map[string]interface{}) *PQLBaseQuery {
-	attrsString, err := createAttributesString(attrs)
-	if err != nil {
-		return NewPQLBaseQuery("", f.index, err)
-	}
-	return NewPQLBaseQuery(fmt.Sprintf("SetRowAttrs('%s','%s',%s)",
-		f.name, rowKey, attrsString), f.index, nil)
+	q := fmt.Sprintf("SetRowAttrs(%s,%s,%s)", f.name, rowStr, attrsString)
+	return NewPQLBaseQuery(q, f.index, nil)
 }
 
 func createAttributesString(attrs map[string]interface{}) (string, error) {
@@ -707,6 +691,39 @@ func createAttributesString(attrs map[string]interface{}) (string, error) {
 	}
 	sort.Strings(attrsList)
 	return strings.Join(attrsList, ","), nil
+}
+
+func formatIDKey(idKey interface{}) (string, error) {
+	switch v := idKey.(type) {
+	case uint:
+		return strconv.FormatUint(uint64(v), 10), nil
+	case uint32:
+		return strconv.FormatUint(uint64(v), 10), nil
+	case uint64:
+		return strconv.FormatUint(v, 10), nil
+	case int:
+		return strconv.FormatInt(int64(v), 10), nil
+	case int32:
+		return strconv.FormatInt(int64(v), 10), nil
+	case int64:
+		return strconv.FormatInt(v, 10), nil
+	case string:
+		return fmt.Sprintf(`'%s'`, v), nil
+	default:
+		return "", errors.Errorf("id/key is not a string or integer type: %#v", idKey)
+	}
+}
+
+func formatRowColIDKey(rowIDOrKey, colIDOrKey interface{}) (string, string, error) {
+	rowStr, err := formatIDKey(rowIDOrKey)
+	if err != nil {
+		return "", "", errors.Wrap(err, "formatting row")
+	}
+	colStr, err := formatIDKey(colIDOrKey)
+	if err != nil {
+		return "", "", errors.Wrap(err, "formatting column")
+	}
+	return rowStr, colStr, err
 }
 
 // FieldType
@@ -815,16 +832,13 @@ func (field *Field) Max(row *PQLRowQuery) *PQLBaseQuery {
 }
 
 // SetIntValue creates a Set query.
-func (field *Field) SetIntValue(columnID uint64, value int) *PQLBaseQuery {
-	qry := fmt.Sprintf("Set(%d, %s=%d)", columnID, field.name, value)
-	return NewPQLBaseQuery(qry, field.index, nil)
-}
-
-// SetIntValueK creates a Set query using a string column key. This will
-// only work against a Pilosa Enterprise server.
-func (field *Field) SetIntValueK(columnKey string, value int) *PQLBaseQuery {
-	qry := fmt.Sprintf("Set('%s', %s=%d)", columnKey, field.name, value)
-	return NewPQLBaseQuery(qry, field.index, nil)
+func (field *Field) SetIntValue(colIDOrKey interface{}, value int) *PQLBaseQuery {
+	colStr, err := formatIDKey(colIDOrKey)
+	if err != nil {
+		return NewPQLBaseQuery("", field.index, err)
+	}
+	q := fmt.Sprintf("Set(%s, %s=%d)", colStr, field.name, value)
+	return NewPQLBaseQuery(q, field.index, nil)
 }
 
 func (field *Field) binaryOperation(op string, n int) *PQLRowQuery {

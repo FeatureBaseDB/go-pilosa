@@ -39,6 +39,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 var schema = NewSchema()
@@ -212,24 +214,34 @@ func TestRow(t *testing.T) {
 	comparePQL(t,
 		"Row(collaboration=5)",
 		collabField.Row(5))
-}
 
-func TestRowK(t *testing.T) {
 	comparePQL(t,
 		"Row(collaboration='b7feb014-8ea7-49a8-9cd8-19709161ab63')",
-		collabField.RowK("b7feb014-8ea7-49a8-9cd8-19709161ab63"))
+		collabField.Row("b7feb014-8ea7-49a8-9cd8-19709161ab63"))
+
+	q := collabField.Row(false)
+	if q.err == nil {
+		t.Fatalf("should have failed")
+	}
 }
 
 func TestSet(t *testing.T) {
 	comparePQL(t,
 		"Set(10,collaboration=5)",
 		collabField.Set(5, 10))
-}
 
-func TestSetK(t *testing.T) {
 	comparePQL(t,
-		`Set("some_id",collaboration='b7feb014-8ea7-49a8-9cd8-19709161ab63')`,
-		collabField.SetK("b7feb014-8ea7-49a8-9cd8-19709161ab63", "some_id"))
+		`Set('some_id',collaboration='b7feb014-8ea7-49a8-9cd8-19709161ab63')`,
+		collabField.Set("b7feb014-8ea7-49a8-9cd8-19709161ab63", "some_id"))
+
+	q := collabField.Set(false, 10)
+	if q.err == nil {
+		t.Fatalf("should have failed")
+	}
+	q = collabField.Set(5, false)
+	if q.err == nil {
+		t.Fatalf("should have failed")
+	}
 }
 
 func TestTimestamp(t *testing.T) {
@@ -237,37 +249,34 @@ func TestTimestamp(t *testing.T) {
 	comparePQL(t,
 		"Set(20,collaboration=10,2017-04-24T12:14)",
 		collabField.SetTimestamp(10, 20, timestamp))
-}
 
-func TestSetTimestampK(t *testing.T) {
-	timestamp := time.Date(2017, time.April, 24, 12, 14, 0, 0, time.UTC)
 	comparePQL(t,
 		"Set('mycol',collaboration='myrow',2017-04-24T12:14)",
-		collabField.SetTimestampK("myrow", "mycol", timestamp))
+		collabField.SetTimestamp("myrow", "mycol", timestamp))
+
+	q := collabField.SetTimestamp(false, 20, timestamp)
+	if q.err == nil {
+		t.Fatalf("should have failed")
+	}
 }
 
 func TestClear(t *testing.T) {
 	comparePQL(t,
 		"Clear(10,collaboration=5)",
 		collabField.Clear(5, 10))
-}
 
-func TestClearK(t *testing.T) {
 	comparePQL(t,
 		"Clear('some_id',collaboration='b7feb014-8ea7-49a8-9cd8-19709161ab63')",
-		collabField.ClearK("b7feb014-8ea7-49a8-9cd8-19709161ab63", "some_id"))
-}
+		collabField.Clear("b7feb014-8ea7-49a8-9cd8-19709161ab63", "some_id"))
 
-func TestSetValue(t *testing.T) {
-	comparePQL(t,
-		"Set(50, collaboration=15)",
-		collabField.SetIntValue(50, 15))
-}
-
-func TestSetValueK(t *testing.T) {
-	comparePQL(t,
-		"Set('mycol', sample-field=22)",
-		sampleField.SetIntValueK("mycol", 22))
+	q := collabField.Clear(false, 10)
+	if q.err == nil {
+		t.Fatalf("should have failed")
+	}
+	q = collabField.Clear(5, false)
+	if q.err == nil {
+		t.Fatalf("should have failed")
+	}
 }
 
 func TestUnion(t *testing.T) {
@@ -402,10 +411,19 @@ func TestFieldSum(t *testing.T) {
 		collabField.Sum(nil))
 }
 
-func TestFieldBSetIntValue(t *testing.T) {
+func TestSetValue(t *testing.T) {
 	comparePQL(t,
-		"Set(10, collaboration=20)",
-		collabField.SetIntValue(10, 20))
+		"Set(50, collaboration=15)",
+		collabField.SetIntValue(50, 15))
+
+	comparePQL(t,
+		"Set('mycol', sample-field=22)",
+		sampleField.SetIntValue("mycol", 22))
+
+	q := sampleField.SetIntValue(false, 22)
+	if q.err == nil {
+		t.Fatalf("should have failed")
+	}
 }
 
 func TestFilterFieldTopNInvalidField(t *testing.T) {
@@ -465,6 +483,11 @@ func TestSetColumnAttrsTest(t *testing.T) {
 	comparePQL(t,
 		"SetColumnAttrs(5,happy=true,quote=\"\\\"Don't worry, be happy\\\"\")",
 		projectIndex.SetColumnAttrs(5, attrs))
+
+	q := projectIndex.SetColumnAttrs(false, attrs)
+	if q.err == nil {
+		t.Fatalf("should have failed")
+	}
 }
 
 func TestSetColumnAttrsInvalidAttr(t *testing.T) {
@@ -485,6 +508,15 @@ func TestSetRowAttrsTest(t *testing.T) {
 	comparePQL(t,
 		`SetRowAttrs(collaboration,5,active=true,quote="\"Don't worry, be happy\"")`,
 		collabField.SetRowAttrs(5, attrs))
+
+	comparePQL(t,
+		"SetRowAttrs(collaboration,'foo',active=true,quote=\"\\\"Don't worry, be happy\\\"\")",
+		collabField.SetRowAttrs("foo", attrs))
+
+	q := collabField.SetRowAttrs(false, attrs)
+	if q.err == nil {
+		t.Fatalf("should have failed")
+	}
 }
 
 func TestSetRowAttrsInvalidAttr(t *testing.T) {
@@ -495,25 +527,8 @@ func TestSetRowAttrsInvalidAttr(t *testing.T) {
 	if collabField.SetRowAttrs(5, attrs).Error() == nil {
 		t.Fatalf("Should have failed")
 	}
-}
 
-func TestSetRowAttrsKTest(t *testing.T) {
-	attrs := map[string]interface{}{
-		"quote":  "\"Don't worry, be happy\"",
-		"active": true,
-	}
-
-	comparePQL(t,
-		"SetRowAttrs('collaboration','foo',active=true,quote=\"\\\"Don't worry, be happy\\\"\")",
-		collabField.SetRowAttrsK("foo", attrs))
-}
-
-func TestSetRowAttrsKInvalidAttr(t *testing.T) {
-	attrs := map[string]interface{}{
-		"color":     "blue",
-		"$invalid$": true,
-	}
-	if collabField.SetRowAttrsK("foo", attrs).Error() == nil {
+	if collabField.SetRowAttrs("foo", attrs).Error() == nil {
 		t.Fatalf("Should have failed")
 	}
 }
@@ -529,6 +544,11 @@ func TestBatchQuery(t *testing.T) {
 		t.Fatalf("Error should be nil")
 	}
 	comparePQL(t, "Row(sample-field=44)Row(sample-field=10101)", q)
+
+	q2 := sampleField.Row(false)
+	if q2.err == nil {
+		t.Fatalf("should have failed")
+	}
 }
 
 func TestBatchQueryWithError(t *testing.T) {
@@ -550,14 +570,15 @@ func TestRange(t *testing.T) {
 	comparePQL(t,
 		"Range(collaboration=10,1970-01-01T00:00,2000-02-02T03:04)",
 		collabField.Range(10, start, end))
-}
 
-func TestRangeK(t *testing.T) {
-	start := time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC)
-	end := time.Date(2000, time.February, 2, 3, 4, 0, 0, time.UTC)
 	comparePQL(t,
 		"Range(collaboration='foo',1970-01-01T00:00,2000-02-02T03:04)",
-		collabField.RangeK("foo", start, end))
+		collabField.Range("foo", start, end))
+
+	q := collabField.Range(false, start, end)
+	if q.err == nil {
+		t.Fatalf("should have failed")
+	}
 }
 
 func TestSetFieldOptions(t *testing.T) {
@@ -599,6 +620,31 @@ func TestEncodeMapPanicsOnMarshalFailure(t *testing.T) {
 	}
 	encodeMap(m)
 	t.Fatal("Should have panicked")
+}
+
+func TestFormatIDKey(t *testing.T) {
+	testCase := [][]interface{}{
+		{uint(42), "42", nil},
+		{uint32(42), "42", nil},
+		{uint64(42), "42", nil},
+		{42, "42", nil},
+		{int32(42), "42", nil},
+		{int64(42), "42", nil},
+		{"foo", `'foo'`, nil},
+		{false, "", errors.New("error")},
+	}
+	for i, item := range testCase {
+		s, err := formatIDKey(item[0])
+		if item[2] != nil {
+			if err == nil {
+				t.Fatalf("Should have failed: %d", i)
+			}
+			continue
+		}
+		if item[1] != s {
+			t.Fatalf("%s != %s", item[1], s)
+		}
+	}
 }
 
 func comparePQL(t *testing.T, target string, q PQLQuery) {

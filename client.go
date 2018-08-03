@@ -309,8 +309,8 @@ func (c *Client) ImportField(field *Field, iterator RecordIterator, options ...I
 	return c.importManager.Run(field, iterator, importOptions.withDefaults())
 }
 
-func (c *Client) importColumns(indexName string, fieldName string, shard uint64, records []Record) error {
-	nodes, err := c.fetchFragmentNodes(indexName, shard)
+func (c *Client) importColumns(field *Field, shard uint64, records []Record) error {
+	nodes, err := c.fetchFragmentNodes(field.index.name, shard)
 	if err != nil {
 		return errors.Wrap(err, "fetching fragment nodes")
 	}
@@ -322,15 +322,15 @@ func (c *Client) importColumns(indexName string, fieldName string, shard uint64,
 			port:   node.Port,
 		}
 		eg.Go(func() error {
-			return c.importNode(uri, columnsToImportRequest(indexName, fieldName, shard, records))
+			return c.importNode(uri, columnsToImportRequest(field, shard, records))
 		})
 	}
 	err = eg.Wait()
 	return errors.Wrap(err, "importing columns to nodes")
 }
 
-func (c *Client) importValues(indexName string, fieldName string, shard uint64, vals []Record) error {
-	nodes, err := c.fetchFragmentNodes(indexName, shard)
+func (c *Client) importValues(field *Field, shard uint64, vals []Record) error {
+	nodes, err := c.fetchFragmentNodes(field.index.name, shard)
 	if err != nil {
 		return err
 	}
@@ -342,7 +342,7 @@ func (c *Client) importValues(indexName string, fieldName string, shard uint64, 
 			port:   node.Port,
 		}
 		eg.Go(func() error {
-			return c.importValueNode(uri, valsToImportRequest(indexName, fieldName, shard, vals))
+			return c.importValueNode(uri, valsToImportRequest(field, shard, vals))
 		})
 	}
 	err = eg.Wait()
@@ -422,7 +422,21 @@ func (c *Client) ExportField(field *Field) (RecordIterator, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewCSVColumnIterator(newExportReader(c, shardURIs, field)), nil
+	hasRowKeys := field.options.keys
+	hasColKeys := field.index.options.keys
+	if hasRowKeys && hasColKeys {
+		// rowKey,columnKey
+		return NewCSVColumnIterator(CSVRowKeyColumnKey, newExportReader(c, shardURIs, field)), nil
+	} else if hasRowKeys && !hasColKeys {
+		// rowKey, columnID
+		return NewCSVColumnIterator(CSVRowKeyColumnID, newExportReader(c, shardURIs, field)), nil
+	} else if !hasRowKeys && hasColKeys {
+		// rowID, columnKey
+		return NewCSVColumnIterator(CSVRowIDColumnKey, newExportReader(c, shardURIs, field)), nil
+	} else {
+		// rowID, columnID
+		return NewCSVColumnIterator(CSVRowIDColumnID, newExportReader(c, shardURIs, field)), nil
+	}
 }
 
 // Status returns the serves status.
@@ -632,27 +646,76 @@ func makeRequestData(query string, options *QueryOptions) ([]byte, error) {
 	return r, nil
 }
 
-func columnsToImportRequest(indexName string, fieldName string, shard uint64, records []Record) *pbuf.ImportRequest {
-	rowIDs := make([]uint64, 0, len(records))
-	columnIDs := make([]uint64, 0, len(records))
-	timestamps := make([]int64, 0, len(records))
-	for _, record := range records {
-		column := record.(Column)
-		rowIDs = append(rowIDs, column.RowID)
-		columnIDs = append(columnIDs, column.ColumnID)
-		timestamps = append(timestamps, column.Timestamp)
+func columnsToImportRequest(field *Field, shard uint64, records []Record) *pbuf.ImportRequest {
+	var rowIDs []uint64
+	var columnIDs []uint64
+	var rowKeys []string
+	var columnKeys []string
+
+	recordCount := len(records)
+	timestamps := make([]int64, 0, recordCount)
+	hasRowKeys := field.options.keys
+	hasColKeys := field.index.options.keys
+
+	if hasRowKeys {
+		rowKeys = make([]string, 0, recordCount)
+	} else {
+		rowIDs = make([]uint64, 0, recordCount)
 	}
+
+	if hasColKeys {
+		columnKeys = make([]string, 0, recordCount)
+	} else {
+		columnIDs = make([]uint64, 0, recordCount)
+	}
+
+	if hasRowKeys && hasColKeys {
+		// rowKey, colKey
+		for _, record := range records {
+			column := record.(Column)
+			rowKeys = append(rowKeys, column.RowKey)
+			columnKeys = append(columnKeys, column.ColumnKey)
+			timestamps = append(timestamps, column.Timestamp)
+		}
+	} else if hasRowKeys && !hasColKeys {
+		// rowKey, colID
+		for _, record := range records {
+			column := record.(Column)
+			rowKeys = append(rowKeys, column.RowKey)
+			columnIDs = append(columnIDs, column.ColumnID)
+			timestamps = append(timestamps, column.Timestamp)
+		}
+	} else if !hasRowKeys && hasColKeys {
+		// rowID, colKey
+		for _, record := range records {
+			column := record.(Column)
+			rowIDs = append(rowIDs, column.RowID)
+			columnKeys = append(columnKeys, column.ColumnKey)
+			timestamps = append(timestamps, column.Timestamp)
+		}
+	} else {
+		// rowID, colID
+		for _, record := range records {
+			column := record.(Column)
+			rowIDs = append(rowIDs, column.RowID)
+			columnIDs = append(columnIDs, column.ColumnID)
+			timestamps = append(timestamps, column.Timestamp)
+		}
+	}
+
 	return &pbuf.ImportRequest{
-		Index:      indexName,
-		Field:      fieldName,
+		Index:      field.index.name,
+		Field:      field.name,
 		Shard:      shard,
 		RowIDs:     rowIDs,
 		ColumnIDs:  columnIDs,
+		RowKeys:    rowKeys,
+		ColumnKeys: columnKeys,
 		Timestamps: timestamps,
 	}
 }
 
-func valsToImportRequest(indexName string, fieldName string, shard uint64, vals []Record) *pbuf.ImportValueRequest {
+func valsToImportRequest(field *Field, shard uint64, vals []Record) *pbuf.ImportValueRequest {
 	columnIDs := make([]uint64, 0, len(vals))
 	values := make([]int64, 0, len(vals))
 	for _, record := range vals {
@@ -661,8 +724,8 @@ func valsToImportRequest(indexName string, fieldName string, shard uint64, vals 
 		values = append(values, val.Value)
 	}
 	return &pbuf.ImportValueRequest{
-		Index:     indexName,
-		Field:     fieldName,
+		Index:     field.index.name,
+		Field:     field.name,
 		Shard:     shard,
 		ColumnIDs: columnIDs,
 		Values:    values,
@@ -845,7 +908,7 @@ type ImportOptions struct {
 	batchSize             int
 	strategy              ImportWorkerStrategy
 	statusChan            chan<- ImportStatusUpdate
-	importRecordsFunction func(indexName string, fieldName string, shard uint64, records []Record) error
+	importRecordsFunction func(field *Field, shard uint64, records []Record) error
 }
 
 func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
@@ -905,7 +968,7 @@ func OptImportStatusChannel(statusChan chan<- ImportStatusUpdate) ImportOption {
 	}
 }
 
-func importRecordsFunction(fun func(indexName string, fieldName string, shard uint64, records []Record) error) ImportOption {
+func importRecordsFunction(fun func(field *Field, shard uint64, records []Record) error) ImportOption {
 	return func(options *ImportOptions) error {
 		options.importRecordsFunction = fun
 		return nil

@@ -70,6 +70,8 @@ type RecordIterator interface {
 type Column struct {
 	RowID     uint64
 	ColumnID  uint64
+	RowKey    string
+	ColumnKey string
 	Timestamp int64
 }
 
@@ -87,24 +89,49 @@ func (b Column) Less(other Record) bool {
 	return false
 }
 
-func ColumnCSVUnmarshaller() CSVRecordUnmarshaller {
-	return ColumnCSVUnmarshallerWithTimestamp("")
+type CSVFormat uint
+
+const (
+	CSVRowIDColumnID CSVFormat = iota
+	CSVRowIDColumnKey
+	CSVRowKeyColumnID
+	CSVRowKeyColumnKey
+)
+
+func ColumnCSVUnmarshaller(format CSVFormat) CSVRecordUnmarshaller {
+	return ColumnCSVUnmarshallerWithTimestamp(format, "")
 }
 
-func ColumnCSVUnmarshallerWithTimestamp(timestampFormat string) CSVRecordUnmarshaller {
+func ColumnCSVUnmarshallerWithTimestamp(format CSVFormat, timestampFormat string) CSVRecordUnmarshaller {
 	return func(text string) (Record, error) {
+		var err error
+		column := Column{}
 		parts := strings.Split(text, ",")
 		if len(parts) < 2 {
 			return nil, errors.New("Invalid CSV line")
 		}
-		rowID, err := strconv.ParseInt(parts[0], 10, 64)
-		if err != nil {
-			return nil, errors.New("Invalid row ID")
+
+		hasRowKey := format == CSVRowKeyColumnID || format == CSVRowKeyColumnKey
+		hasColumnKey := format == CSVRowIDColumnKey || format == CSVRowKeyColumnKey
+
+		if hasRowKey {
+			column.RowKey = parts[0]
+		} else {
+			column.RowID, err = strconv.ParseUint(parts[0], 10, 64)
+			if err != nil {
+				return nil, errors.New("Invalid row ID")
+			}
 		}
-		columnID, err := strconv.ParseInt(parts[1], 10, 64)
-		if err != nil {
-			return nil, errors.New("Invalid column ID")
+
+		if hasColumnKey {
+			column.ColumnKey = parts[1]
+		} else {
+			column.ColumnID, err = strconv.ParseUint(parts[1], 10, 64)
+			if err != nil {
+				return nil, errors.New("Invalid column ID")
+			}
 		}
+
 		timestamp := 0
 		if len(parts) == 3 {
 			if timestampFormat == "" {
@@ -120,11 +147,8 @@ func ColumnCSVUnmarshallerWithTimestamp(timestampFormat string) CSVRecordUnmarsh
 				timestamp = int(t.Unix())
 			}
 		}
-		column := Column{
-			RowID:     uint64(rowID),
-			ColumnID:  uint64(columnID),
-			Timestamp: int64(timestamp),
-		}
+		column.Timestamp = int64(timestamp)
+
 		return column, nil
 	}
 }
@@ -151,12 +175,12 @@ func NewCSVIterator(reader io.Reader, unmarshaller CSVRecordUnmarshaller) *CSVIt
 	}
 }
 
-func NewCSVColumnIterator(reader io.Reader) *CSVIterator {
-	return NewCSVIterator(reader, ColumnCSVUnmarshaller())
+func NewCSVColumnIterator(format CSVFormat, reader io.Reader) *CSVIterator {
+	return NewCSVIterator(reader, ColumnCSVUnmarshaller(format))
 }
 
-func NewCSVColumnIteratorWithTimestampFormat(reader io.Reader, timestampFormat string) *CSVIterator {
-	return NewCSVIterator(reader, ColumnCSVUnmarshallerWithTimestamp(timestampFormat))
+func NewCSVColumnIteratorWithTimestampFormat(format CSVFormat, reader io.Reader, timestampFormat string) *CSVIterator {
+	return NewCSVIterator(reader, ColumnCSVUnmarshallerWithTimestamp(format, timestampFormat))
 }
 
 func NewCSVValueIterator(reader io.Reader) *CSVIterator {

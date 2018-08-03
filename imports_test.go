@@ -46,7 +46,7 @@ func TestCSVColumnIterator(t *testing.T) {
 	reader := strings.NewReader(`1,10,683793200
 		5,20,683793300
 		3,41,683793385`)
-	iterator := pilosa.NewCSVColumnIterator(reader)
+	iterator := pilosa.NewCSVColumnIterator(pilosa.CSVRowIDColumnID, reader)
 	columns := []pilosa.Record{}
 	for {
 		column, err := iterator.NextRecord()
@@ -78,7 +78,7 @@ func TestCSVColumnIteratorWithTimestampFormat(t *testing.T) {
 	reader := strings.NewReader(`1,10,1991-09-02T09:33
 		5,20,1991-09-02T09:35
 		3,41,1991-09-02T09:36`)
-	iterator := pilosa.NewCSVColumnIteratorWithTimestampFormat(reader, format)
+	iterator := pilosa.NewCSVColumnIteratorWithTimestampFormat(pilosa.CSVRowIDColumnID, reader, format)
 	records := []pilosa.Record{}
 	for {
 		record, err := iterator.NextRecord()
@@ -108,7 +108,7 @@ func TestCSVColumnIteratorWithTimestampFormat(t *testing.T) {
 func TestCSVColumnIteratorWithTimestampFormatFail(t *testing.T) {
 	format := "2014-07-16"
 	reader := strings.NewReader(`1,10,X`)
-	iterator := pilosa.NewCSVColumnIteratorWithTimestampFormat(reader, format)
+	iterator := pilosa.NewCSVColumnIteratorWithTimestampFormat(pilosa.CSVRowIDColumnID, reader, format)
 	_, err := iterator.NextRecord()
 	if err == nil {
 		t.Fatalf("Should have failed")
@@ -159,7 +159,7 @@ func TestCSVColumnIteratorInvalidInput(t *testing.T) {
 		"155,255,a5",
 	}
 	for _, text := range invalidInputs {
-		iterator := pilosa.NewCSVColumnIterator(strings.NewReader(text))
+		iterator := pilosa.NewCSVColumnIterator(pilosa.CSVRowIDColumnID, strings.NewReader(text))
 		_, err := iterator.NextRecord()
 		if err == nil {
 			t.Fatalf("CSVColumnIterator input: %s should fail", text)
@@ -186,7 +186,7 @@ func TestCSVValueIteratorInvalidInput(t *testing.T) {
 }
 
 func TestCSVColumnIteratorError(t *testing.T) {
-	iterator := pilosa.NewCSVColumnIterator(&BrokenReader{})
+	iterator := pilosa.NewCSVColumnIterator(pilosa.CSVRowIDColumnID, &BrokenReader{})
 	_, err := iterator.NextRecord()
 	if err == nil {
 		t.Fatal("CSVColumnIterator should fail with error")

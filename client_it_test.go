@@ -569,8 +569,7 @@ func TestCSVRowIDColumnIDImport(t *testing.T) {
 
 func TestCSVRowIDColumnKeyImport(t *testing.T) {
 	client := getClient()
-	text := `10,seven
-		10,five
+	text := `10,five
 		2,three
 		7,one`
 	iterator := NewCSVColumnIterator(CSVRowIDColumnKey, strings.NewReader(text))
@@ -585,11 +584,12 @@ func TestCSVRowIDColumnKeyImport(t *testing.T) {
 	}
 
 	target := []string{"three", "one", "five"}
-	bq := index.BatchQuery(
+	bq := keysIndex.BatchQuery(
 		field.Row(2),
 		field.Row(7),
 		field.Row(10),
 	)
+
 	response, err := client.Query(bq)
 	if err != nil {
 		t.Fatal(err)
@@ -614,7 +614,7 @@ func TestCSVRowKeyColumnIDImport(t *testing.T) {
 		ten,5
 		two,3
 		seven,1`
-	iterator := NewCSVColumnIterator(CSVRowIDColumnID, strings.NewReader(text))
+	iterator := NewCSVColumnIterator(CSVRowKeyColumnID, strings.NewReader(text))
 	field := index.Field("importfield-rowkey-colid", OptFieldKeys(true))
 	err := client.EnsureField(field)
 	if err != nil {
@@ -651,11 +651,10 @@ func TestCSVRowKeyColumnIDImport(t *testing.T) {
 
 func TestCSVRowKeyColumnKeyImport(t *testing.T) {
 	client := getClient()
-	text := `ten,seven
-		ten,five
+	text := `ten,five
 		two,three
 		seven,one`
-	iterator := NewCSVColumnIterator(CSVRowIDColumnID, strings.NewReader(text))
+	iterator := NewCSVColumnIterator(CSVRowKeyColumnKey, strings.NewReader(text))
 	field := keysIndex.Field("importfield-rowkey-colkey", OptFieldKeys(true))
 	err := client.EnsureField(field)
 	if err != nil {
@@ -667,7 +666,7 @@ func TestCSVRowKeyColumnKeyImport(t *testing.T) {
 	}
 
 	target := []string{"three", "one", "five"}
-	bq := index.BatchQuery(
+	bq := keysIndex.BatchQuery(
 		field.Row("two"),
 		field.Row("seven"),
 		field.Row("ten"),
@@ -908,9 +907,9 @@ func TestValueCSVImportFailure(t *testing.T) {
 	}
 }
 
-func TestCSVExport(t *testing.T) {
+func TestCSVExportRowIDColumnID(t *testing.T) {
 	client := getClient()
-	field := index.Field("exportfield")
+	field := index.Field("exportfield-rowid-colid")
 	client.EnsureField(field)
 	_, err := client.Query(index.BatchQuery(
 		field.Set(1, 1),
@@ -924,6 +923,133 @@ func TestCSVExport(t *testing.T) {
 		{RowID: 1, ColumnID: 1},
 		{RowID: 1, ColumnID: 10},
 		{RowID: 2, ColumnID: 1048577},
+	}
+	columns := []Record{}
+	iterator, err := client.ExportField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		column, err := iterator.NextRecord()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		columns = append(columns, column)
+	}
+	if len(columns) != len(target) {
+		t.Fatalf("There should be %d columns", len(target))
+	}
+	for i := range target {
+		if !reflect.DeepEqual(target[i], columns[i]) {
+			t.Fatalf("%v != %v", target, columns)
+		}
+	}
+}
+
+func TestCSVExportRowIDColumnKey(t *testing.T) {
+	client := getClient()
+	field := keysIndex.Field("exportfield-rowid-colkey")
+	client.EnsureField(field)
+	_, err := client.Query(keysIndex.BatchQuery(
+		field.Set(1, "one"),
+		field.Set(1, "ten"),
+		field.Set(2, "big-number"),
+	), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	target := []Column{
+		{RowID: 1, ColumnKey: "one"},
+		{RowID: 1, ColumnKey: "ten"},
+		{RowID: 2, ColumnKey: "big-number"},
+	}
+	columns := []Record{}
+	iterator, err := client.ExportField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		column, err := iterator.NextRecord()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		columns = append(columns, column)
+	}
+	if len(columns) != len(target) {
+		t.Fatalf("There should be %d columns", len(target))
+	}
+	for i := range target {
+		if !reflect.DeepEqual(target[i], columns[i]) {
+			t.Fatalf("%v != %v", target, columns)
+		}
+	}
+}
+
+func TestCSVExportRowKeyColumnID(t *testing.T) {
+	client := getClient()
+	field := index.Field("exportfield-rowkey-colid", OptFieldKeys(true))
+	client.EnsureField(field)
+	_, err := client.Query(index.BatchQuery(
+		field.Set("one", 1),
+		field.Set("one", 10),
+		field.Set("two", 1048577),
+	), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := []Column{
+		{RowKey: "one", ColumnID: 1},
+		{RowKey: "one", ColumnID: 10},
+		{RowKey: "two", ColumnID: 1048577},
+	}
+	columns := []Record{}
+	iterator, err := client.ExportField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		column, err := iterator.NextRecord()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		columns = append(columns, column)
+	}
+	if len(columns) != len(target) {
+		t.Fatalf("There should be %d columns", len(target))
+	}
+	for i := range target {
+		if !reflect.DeepEqual(target[i], columns[i]) {
+			t.Fatalf("%v != %v", target, columns)
+		}
+	}
+}
+
+func TestCSVExportRowKeyColumnKey(t *testing.T) {
+	client := getClient()
+	field := keysIndex.Field("exportfield-rowkey-colkey", OptFieldKeys(true))
+	client.EnsureField(field)
+	_, err := client.Query(keysIndex.BatchQuery(
+		field.Set("one", "one"),
+		field.Set("one", "ten"),
+		field.Set("two", "big-number"),
+	), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := []Column{
+		{RowKey: "one", ColumnKey: "one"},
+		{RowKey: "one", ColumnKey: "ten"},
+		{RowKey: "two", ColumnKey: "big-number"},
 	}
 	columns := []Record{}
 	iterator, err := client.ExportField(field)

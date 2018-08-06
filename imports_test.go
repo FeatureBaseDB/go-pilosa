@@ -115,12 +115,12 @@ func TestCSVColumnIteratorWithTimestampFormatFail(t *testing.T) {
 	}
 }
 
-func TestCSVValueIterator(t *testing.T) {
+func TestCSVValueIteratorWithColumnID(t *testing.T) {
 	reader := strings.NewReader(`1,10
 		5,-20
 		3,41
 	`)
-	iterator := pilosa.NewCSVValueIterator(reader)
+	iterator := pilosa.NewCSVValueIterator(pilosa.CSVColumnID, reader)
 	values := []pilosa.Record{}
 	for {
 		value, err := iterator.NextRecord()
@@ -144,6 +144,47 @@ func TestCSVValueIterator(t *testing.T) {
 		if !reflect.DeepEqual(values[i], target[i]) {
 			t.Fatalf("%v != %v", target[i], values[i])
 		}
+	}
+}
+
+func TestCSVValueIteratorWithColumnKey(t *testing.T) {
+	reader := strings.NewReader(`one,10
+		five,-20
+		three,41
+	`)
+	iterator := pilosa.NewCSVValueIterator(pilosa.CSVColumnKey, reader)
+	values := []pilosa.Record{}
+	for {
+		value, err := iterator.NextRecord()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		values = append(values, value)
+	}
+	target := []pilosa.FieldValue{
+		{ColumnKey: "one", Value: 10},
+		{ColumnKey: "five", Value: -20},
+		{ColumnKey: "three", Value: 41},
+	}
+	if len(values) != len(target) {
+		t.Fatalf("There should be %d values, got %d", len(target), len(values))
+	}
+	for i := range target {
+		if !reflect.DeepEqual(values[i], target[i]) {
+			t.Fatalf("%v != %v", target[i], values[i])
+		}
+	}
+}
+
+func TestCSValueIteratorWithInvalidFormat(t *testing.T) {
+	reader := strings.NewReader("1,2")
+	iterator := pilosa.NewCSVValueIterator(pilosa.CSVRowIDColumnID, reader)
+	_, err := iterator.NextRecord()
+	if err == nil {
+		t.Fatalf("should have failed")
 	}
 }
 
@@ -177,7 +218,7 @@ func TestCSVValueIteratorInvalidInput(t *testing.T) {
 		"155,a5",
 	}
 	for _, text := range invalidInputs {
-		iterator := pilosa.NewCSVValueIterator(strings.NewReader(text))
+		iterator := pilosa.NewCSVValueIterator(pilosa.CSVColumnID, strings.NewReader(text))
 		_, err := iterator.NextRecord()
 		if err == nil {
 			t.Fatalf("CSVValueIterator input: %s should fail", text)
@@ -194,7 +235,7 @@ func TestCSVColumnIteratorError(t *testing.T) {
 }
 
 func TestCSVValueIteratorError(t *testing.T) {
-	iterator := pilosa.NewCSVValueIterator(&BrokenReader{})
+	iterator := pilosa.NewCSVValueIterator(pilosa.CSVColumnID, &BrokenReader{})
 	_, err := iterator.NextRecord()
 	if err == nil {
 		t.Fatal("CSVValueIterator should fail with error")

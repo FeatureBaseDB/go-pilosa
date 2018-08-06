@@ -863,7 +863,7 @@ func TestValueCSVImport(t *testing.T) {
 	client := getClient()
 	text := `10,7
 		7,1`
-	iterator := NewCSVValueIterator(strings.NewReader(text))
+	iterator := NewCSVValueIterator(CSVColumnID, strings.NewReader(text))
 	field := index.Field("importvaluefield", OptFieldTypeInt(0, 100))
 	err := client.EnsureField(field)
 	if err != nil {
@@ -1306,7 +1306,7 @@ func TestImportColumnIteratorError(t *testing.T) {
 func TestImportValueIteratorError(t *testing.T) {
 	client := getClient()
 	field := index.Field("not-important", OptFieldTypeInt(0, 100))
-	iterator := NewCSVValueIterator(&BrokenReader{})
+	iterator := NewCSVValueIterator(CSVColumnID, &BrokenReader{})
 	err := client.ImportField(field, iterator, OptImportBatchSize(100))
 	if err == nil {
 		t.Fatalf("import value field should fail with broken reader")
@@ -1355,7 +1355,7 @@ func TestImportIntFieldFailsIfImportValuesFails(t *testing.T) {
 	server := getMockServer(200, data, len(data))
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	iterator := NewCSVValueIterator(strings.NewReader("10,7"))
+	iterator := NewCSVValueIterator(CSVColumnID, strings.NewReader("10,7"))
 	field := index.Field("import-values-field", OptFieldTypeInt(0, 100))
 	err := client.ImportField(field, iterator, OptImportBatchSize(10))
 	if err == nil {

@@ -96,6 +96,8 @@ const (
 	CSVRowIDColumnKey
 	CSVRowKeyColumnID
 	CSVRowKeyColumnKey
+	CSVColumnID
+	CSVColumnKey
 )
 
 func ColumnCSVUnmarshaller(format CSVFormat) CSVRecordUnmarshaller {
@@ -183,8 +185,8 @@ func NewCSVColumnIteratorWithTimestampFormat(format CSVFormat, reader io.Reader,
 	return NewCSVIterator(reader, ColumnCSVUnmarshallerWithTimestamp(format, timestampFormat))
 }
 
-func NewCSVValueIterator(reader io.Reader) *CSVIterator {
-	return NewCSVIterator(reader, FieldValueCSVUnmarshaller)
+func NewCSVValueIterator(format CSVFormat, reader io.Reader) *CSVIterator {
+	return NewCSVIterator(reader, FieldValueCSVUnmarshaller(format))
 }
 
 // NextRecord iterates on lines of a Reader.
@@ -227,22 +229,33 @@ func (v FieldValue) Less(other Record) bool {
 	return false
 }
 
-func FieldValueCSVUnmarshaller(text string) (Record, error) {
-	parts := strings.Split(text, ",")
-	if len(parts) < 2 {
-		return nil, errors.New("Invalid CSV")
+func FieldValueCSVUnmarshaller(format CSVFormat) CSVRecordUnmarshaller {
+	return func(text string) (Record, error) {
+		parts := strings.Split(text, ",")
+		if len(parts) < 2 {
+			return nil, errors.New("Invalid CSV")
+		}
+		value, err := strconv.ParseInt(parts[1], 10, 64)
+		if err != nil {
+			return nil, errors.New("Invalid value")
+		}
+		switch format {
+		case CSVColumnID:
+			columnID, err := strconv.ParseUint(parts[0], 10, 64)
+			if err != nil {
+				return nil, errors.New("Invalid column ID at line: %d")
+			}
+			return FieldValue{
+				ColumnID: uint64(columnID),
+				Value:    value,
+			}, nil
+		case CSVColumnKey:
+			return FieldValue{
+				ColumnKey: parts[0],
+				Value:     value,
+			}, nil
+		default:
+			return nil, fmt.Errorf("Invalid format: %d", format)
+		}
 	}
-	columnID, err := strconv.ParseUint(parts[0], 10, 64)
-	if err != nil {
-		return nil, errors.New("Invalid column ID at line: %d")
-	}
-	value, err := strconv.ParseInt(parts[1], 10, 64)
-	if err != nil {
-		return nil, errors.New("Invalid value")
-	}
-	fieldValue := FieldValue{
-		ColumnID: uint64(columnID),
-		Value:    value,
-	}
-	return fieldValue, nil
 }

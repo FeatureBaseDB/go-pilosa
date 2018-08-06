@@ -12,7 +12,7 @@ Finally you should call `client.ImportField` with the necessary parameters to st
 
 ### A Simple Example
 
-Let's use the `CSVColumnIterator` which reads `Column` records from a `CSV` reader:
+Let's use the `CSVColumnIterator` which reads `Column` records from a `CSV` reader. We have to choose one of the CSV format hints, depending on the data: `CSVRowIDColumnID`, `CSVRowIDColumnKey`, `CSVRowKeyColumnID` or `CSVRowKeyColumnKey`. Here is an example with sample data, which is in the `ROW_ID,COLUMN_ID` format, hence uses `CSVRowIDColumnID`:
 ```go
 // Ensure field exists.
 // ...
@@ -22,7 +22,7 @@ text := `10,7
          2,3
          7,1`
 // Create the iterator
-iterator := pilosa.NewCSVColumnIterator(strings.NewReader(text))
+iterator := pilosa.NewCSVColumnIterator(pilosa.CSVRowIDColumnID, strings.NewReader(text))
 // Start the import
 err := client.ImportField(field, iterator)
 if err != nil {
@@ -54,10 +54,11 @@ We have three predefined `CSVRecordUnmarshaller`s in this library: `ColumnCSVUnm
 
 `CSVColumnIterator` is a `CSVIterator` which uses the `ColumnCSVUnmarshaller` as the unmarshaller. `ColumnCSVUnmarshaller` unmarshals CSV rows with the default timestamp format.
 
-A row with the following format is expected:
-```
-ROW_ID,COLUMN_ID
-```
+Depending on the data, the following format is expected:
+* `CSVRowIDColumnID`: `ROW_ID,COLUMN_ID`
+* `CSVRowIDColumnKey`: `ROW_ID,COLUMN_KEY`
+* `CSVRowKeyColumnID`: `ROW_KEY,COLUMN_ID`
+* `CSVRowKeyColumnKey`: `ROW_KEY,COLUMN_KEY`
 
 Optionally, a timestamp can be added. Note that Pilosa is not time zone aware:
 ```
@@ -66,7 +67,7 @@ ROW_ID,COLUMN_ID,TIMESTAMP
 
 Example:
 ```go
-iterator := pilosa.NewCSVColumnIterator(strings.NewReader(text))
+iterator := pilosa.NewCSVColumnIterator(pilosa.CSVRowIDColumnID, strings.NewReader(text))
 ```
 
 #### ColumnCSVUnmarshallerWithTimestamp and CSVColumnIteratorWithTimestamp
@@ -83,14 +84,13 @@ iterator := pilosa.NewCSVColumnIteratorWithTimestampFormat(strings.NewReader(tex
 
 `CSVFieldValueIterator` is a `ColumnCSVUnmarshaller` which can read CSV rows suitable to be imported into [BSI fields](https://www.pilosa.com/docs/latest/data-model/#bsi-range-encoding).
 
-A row with the following format is expected:
-```
-COLUMN_ID,INTEGER_VALUE
-```
+Depending on the data, the following format is expected:
+* `CSVColumnID`: `COLUMN_ID,INTEGER_VALUE`
+* `CSVColumnKey`: `COLUMN_KEY,INTEGER_VALUE`
 
 Example:
 ```go
-iterator := pilosa.NewCSVValueIterator(strings.NewReader(text))
+iterator := pilosa.NewCSVValueIterator(pilosa.CSVColumnID, strings.NewReader(text))
 ```
 
 ### RecordIterator

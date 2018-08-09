@@ -42,7 +42,6 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -59,12 +58,10 @@ type Client struct {
 	client  *http.Client
 	// User-Agent header cache. Not used until cluster-resize support branch is merged
 	// and user agent is saved here in NewClient
-	userAgent              string
-	importThreadCount      int
-	shardWidth             uint64
-	fragmentNodeCache      map[string][]fragmentNode
-	fragmentNodeCacheMutex *sync.RWMutex
-	importManager          *recordImportManager
+	userAgent         string
+	importThreadCount int
+	shardWidth        uint64
+	importManager     *recordImportManager
 }
 
 // DefaultClient creates a client with the default address and options.
@@ -92,10 +89,8 @@ func newClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 	}
 	options = options.withDefaults()
 	c := &Client{
-		cluster:                cluster,
-		client:                 newHTTPClient(options.withDefaults()),
-		fragmentNodeCache:      map[string][]fragmentNode{},
-		fragmentNodeCacheMutex: &sync.RWMutex{},
+		cluster: cluster,
+		client:  newHTTPClient(options.withDefaults()),
 	}
 	c.importManager = newRecordImportManager(c)
 	return c
@@ -278,7 +273,7 @@ func (c *Client) syncSchema(schema *Schema, serverSchema *Schema) error {
 
 // Schema returns the indexes and fields on the server.
 func (c *Client) Schema() (*Schema, error) {
-	var indexes []StatusIndex
+	var indexes []SchemaIndex
 	indexes, err := c.readSchema()
 	if err != nil {
 		return nil, err
@@ -309,11 +304,7 @@ func (c *Client) ImportField(field *Field, iterator RecordIterator, options ...I
 	return c.importManager.Run(field, iterator, importOptions.withDefaults())
 }
 
-func (c *Client) importColumns(field *Field, shard uint64, records []Record) error {
-	nodes, err := c.fetchFragmentNodes(field.index.name, shard)
-	if err != nil {
-		return errors.Wrap(err, "fetching fragment nodes")
-	}
+func (c *Client) importColumns(field *Field, shard uint64, records []Record, nodes []fragmentNode) error {
 	eg := errgroup.Group{}
 	for _, node := range nodes {
 		uri := &URI{
@@ -325,15 +316,11 @@ func (c *Client) importColumns(field *Field, shard uint64, records []Record) err
 			return c.importNode(uri, columnsToImportRequest(field, shard, records))
 		})
 	}
-	err = eg.Wait()
+	err := eg.Wait()
 	return errors.Wrap(err, "importing columns to nodes")
 }
 
-func (c *Client) importValues(field *Field, shard uint64, vals []Record) error {
-	nodes, err := c.fetchFragmentNodes(field.index.name, shard)
-	if err != nil {
-		return err
-	}
+func (c *Client) importValues(field *Field, shard uint64, vals []Record, nodes []fragmentNode) error {
 	eg := errgroup.Group{}
 	for _, node := range nodes {
 		uri := &URI{
@@ -345,18 +332,11 @@ func (c *Client) importValues(field *Field, shard uint64, vals []Record) error {
 			return c.importValueNode(uri, valsToImportRequest(field, shard, vals))
 		})
 	}
-	err = eg.Wait()
+	err := eg.Wait()
 	return errors.Wrap(err, "importing values to nodes")
 }
 
 func (c *Client) fetchFragmentNodes(indexName string, shard uint64) ([]fragmentNode, error) {
-	key := fmt.Sprintf("%s-%d", indexName, shard)
-	c.fragmentNodeCacheMutex.RLock()
-	nodes, ok := c.fragmentNodeCache[key]
-	c.fragmentNodeCacheMutex.RUnlock()
-	if ok {
-		return nodes, nil
-	}
 	path := fmt.Sprintf("/internal/fragment/nodes?shard=%d&index=%s", shard, indexName)
 	_, body, err := c.httpRequest("GET", path, []byte{}, nil)
 	if err != nil {
@@ -371,10 +351,25 @@ func (c *Client) fetchFragmentNodes(indexName string, shard uint64) ([]fragmentN
 	for _, nodeURI := range fragmentNodeURIs {
 		fragmentNodes = append(fragmentNodes, nodeURI.URI)
 	}
-	c.fragmentNodeCacheMutex.Lock()
-	c.fragmentNodeCache[key] = fragmentNodes
-	c.fragmentNodeCacheMutex.Unlock()
 	return fragmentNodes, nil
+}
+
+func (c *Client) fetchCoordinatorNode() (fragmentNode, error) {
+	status, err := c.Status()
+	if err != nil {
+		return fragmentNode{}, err
+	}
+	for _, node := range status.Nodes {
+		if node.IsCoordinator {
+			nodeURI := node.URI
+			return fragmentNode{
+				Scheme: nodeURI.Scheme,
+				Host:   nodeURI.Host,
+				Port:   nodeURI.Port,
+			}, nil
+		}
+	}
+	return fragmentNode{}, errors.New("Coordinator node not found")
 }
 
 func (c *Client) importNode(uri *URI, request *pbuf.ImportRequest) error {
@@ -453,7 +448,7 @@ func (c *Client) Status() (Status, error) {
 	return status, nil
 }
 
-func (c *Client) readSchema() ([]StatusIndex, error) {
+func (c *Client) readSchema() ([]SchemaIndex, error) {
 	_, data, err := c.httpRequest("GET", "/schema", nil, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "requesting /schema")
@@ -908,7 +903,7 @@ type ImportOptions struct {
 	batchSize             int
 	strategy              ImportWorkerStrategy
 	statusChan            chan<- ImportStatusUpdate
-	importRecordsFunction func(field *Field, shard uint64, records []Record) error
+	importRecordsFunction func(field *Field, shard uint64, records []Record, nodes []fragmentNode) error
 }
 
 func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
@@ -968,7 +963,7 @@ func OptImportStatusChannel(statusChan chan<- ImportStatusUpdate) ImportOption {
 	}
 }
 
-func importRecordsFunction(fun func(field *Field, shard uint64, records []Record) error) ImportOption {
+func importRecordsFunction(fun func(field *Field, shard uint64, records []Record, nodes []fragmentNode) error) ImportOption {
 	return func(options *ImportOptions) error {
 		options.importRecordsFunction = fun
 		return nil
@@ -991,34 +986,39 @@ type Status struct {
 	indexMaxShard map[string]uint64
 }
 
-// StatusNode contains node information.
 type StatusNode struct {
-	Scheme  string        `json:"scheme"`
-	Host    string        `json:"host"`
-	Port    int           `json:"port"`
-	Indexes []StatusIndex `json:"indexes"`
+	ID            string    `json:"id"`
+	URI           StatusURI `json:"uri"`
+	IsCoordinator bool      `json:"isCoordinator"`
+}
+
+// StatusURI contains node information.
+type StatusURI struct {
+	Scheme string `json:"scheme"`
+	Host   string `json:"host"`
+	Port   uint16 `json:"port"`
 }
 
 type SchemaInfo struct {
-	Indexes []StatusIndex `json:"indexes"`
+	Indexes []SchemaIndex `json:"indexes"`
 }
 
-// StatusIndex contains index information.
-type StatusIndex struct {
+// SchemaIndex contains index information.
+type SchemaIndex struct {
 	Name    string        `json:"name"`
-	Options StatusOptions `json:"options"`
-	Fields  []StatusField `json:"fields"`
+	Options SchemaOptions `json:"options"`
+	Fields  []SchemaField `json:"fields"`
 	Shards  []uint64      `json:"shards"`
 }
 
-// StatusField contains field information.
-type StatusField struct {
+// SchemaField contains field information.
+type SchemaField struct {
 	Name    string        `json:"name"`
-	Options StatusOptions `json:"options"`
+	Options SchemaOptions `json:"options"`
 }
 
-// StatusOptions contains options for a field or an index.
-type StatusOptions struct {
+// SchemaOptions contains options for a field or an index.
+type SchemaOptions struct {
 	FieldType   FieldType `json:"type"`
 	CacheType   string    `json:"cacheType"`
 	CacheSize   uint      `json:"cacheSize"`
@@ -1028,13 +1028,13 @@ type StatusOptions struct {
 	Keys        bool      `json:"keys"`
 }
 
-func (so StatusOptions) asIndexOptions() *IndexOptions {
+func (so SchemaOptions) asIndexOptions() *IndexOptions {
 	return &IndexOptions{
 		keys: so.Keys,
 	}
 }
 
-func (so StatusOptions) asFieldOptions() *FieldOptions {
+func (so SchemaOptions) asFieldOptions() *FieldOptions {
 	return &FieldOptions{
 		fieldType:   so.FieldType,
 		cacheSize:   int(so.CacheSize),

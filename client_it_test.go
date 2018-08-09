@@ -802,7 +802,7 @@ func TestImportWithBatchSizeExpectingZero(t *testing.T) {
 	}
 }
 
-func failingImportColumns(field *Field, shard uint64, records []Record) error {
+func failingImportColumns(field *Field, shard uint64, records []Record, nodes []fragmentNode) error {
 	if len(records) > 0 {
 		return errors.New("some error")
 	}
@@ -1319,7 +1319,8 @@ func TestImportFailsOnImportColumnsError(t *testing.T) {
 	client, _ := NewClient(server.URL)
 	index := NewIndex("foo")
 	field := index.Field("bar")
-	err := client.importColumns(field, 0, []Record{})
+	nodes := fragmentNodesFromURL(server.URL)
+	err := client.importColumns(field, 0, []Record{}, nodes)
 	if err == nil {
 		t.Fatalf("importColumns should fail when fetch fragment nodes fails")
 	}
@@ -1331,7 +1332,8 @@ func TestValueImportFailsOnImportValueError(t *testing.T) {
 	client, _ := NewClient(server.URL)
 	index := NewIndex("foo")
 	field := index.Field("bar")
-	err := client.importValues(field, 0, nil)
+	nodes := fragmentNodesFromURL(server.URL)
+	err := client.importValues(field, 0, nil, nodes)
 	if err == nil {
 		t.Fatalf("importValues should fail when fetch fragment nodes fails")
 	}
@@ -1370,7 +1372,8 @@ func TestImportColumnsFailInvalidNodeAddress(t *testing.T) {
 	client, _ := NewClient(server.URL)
 	index := NewIndex("foo")
 	field := index.Field("bar")
-	err := client.importColumns(field, 0, []Record{})
+	nodes := fragmentNodesFromURL("zzz://doesntmatter:10101")
+	err := client.importColumns(field, 0, []Record{}, nodes)
 	if err == nil {
 		t.Fatalf("importColumns should fail on invalid node host")
 	}
@@ -1383,7 +1386,8 @@ func TestImportValuesFailInvalidNodeAddress(t *testing.T) {
 	client, _ := NewClient(server.URL)
 	index := NewIndex("foo")
 	field := index.Field("bar")
-	err := client.importValues(field, 0, nil)
+	nodes := fragmentNodesFromURL("zzz://doesntmatter:10101")
+	err := client.importValues(field, 0, nil, nodes)
 	if err == nil {
 		t.Fatalf("importValues should fail on invalid node host")
 	}
@@ -1487,9 +1491,11 @@ func TestStatusToNodeShardsForIndex(t *testing.T) {
 	status := Status{
 		Nodes: []StatusNode{
 			{
-				Scheme: "https",
-				Host:   "localhost",
-				Port:   10101,
+				URI: StatusURI{
+					Scheme: "https",
+					Host:   "localhost",
+					Port:   10101,
+				},
 			},
 		},
 		indexMaxShard: map[string]uint64{
@@ -1669,6 +1675,26 @@ func TestImportFieldWithoutImportFunFails(t *testing.T) {
 	}
 }
 
+func TestFetchCoordinatorFails(t *testing.T) {
+	server := getMockServer(404, []byte(`[]`), -1)
+	defer server.Close()
+	client, _ := NewClient(server.URL)
+	_, err := client.fetchCoordinatorNode()
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func TestFetchCoordinatorCoordinatorNotFound(t *testing.T) {
+	server := getMockServer(200, []byte(`{"state":"NORMAL","nodes":[{"id":"0f5c2ffc-1244-47d0-a83d-f5a25abba9bc","uri":{"scheme":"http","host":"localhost","port":10101}}],"localID":"0f5c2ffc-1244-47d0-a83d-f5a25abba9bc"}`), -1)
+	defer server.Close()
+	client, _ := NewClient(server.URL)
+	_, err := client.fetchCoordinatorNode()
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
 func getClient() *Client {
 	var client *Client
 	var err error
@@ -1707,6 +1733,18 @@ func getMockServer(statusCode int, response []byte, contentLength int) *httptest
 		}
 	})
 	return httptest.NewServer(handler)
+}
+
+func fragmentNodesFromURL(url string) []fragmentNode {
+	serverURI := URIFromAddress(url)
+	nodes := []fragmentNode{
+		fragmentNode{
+			Scheme: serverURI.Scheme(),
+			Host:   serverURI.Host(),
+			Port:   serverURI.Port(),
+		},
+	}
+	return nodes
 }
 
 type mockResponseItem struct {

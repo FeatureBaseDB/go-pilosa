@@ -859,7 +859,7 @@ func TestErrorReturningImportOption(t *testing.T) {
 	}
 }
 
-func TestValueCSVImport(t *testing.T) {
+func TestValueCSVValueFieldImport(t *testing.T) {
 	client := getClient()
 	text := `10,7
 		7,1`
@@ -893,6 +893,43 @@ func TestValueCSVImport(t *testing.T) {
 	target := int64(8)
 	if target != response.Result().Value() {
 		t.Fatalf("%d != %#v", target, response.Result())
+	}
+}
+
+func TestValueCSVValueFieldWithKeysImport(t *testing.T) {
+	client := getClient()
+	text := `ten,7
+			 seven,1`
+	iterator := NewCSVValueIterator(CSVColumnKey, strings.NewReader(text))
+	field := keysIndex.Field("importvaluefield", OptFieldTypeInt(0, 100))
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	field2 := keysIndex.Field("importvaluefield-set")
+	err = client.EnsureField(field2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bq := keysIndex.BatchQuery(
+		field2.Set(1, "ten"),
+		field2.Set(1, "seven"),
+	)
+	response, err := client.Query(bq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.ImportField(field, iterator, OptImportBatchSize(10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err = client.Query(field.Sum(field2.Row(1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := int64(8)
+	if target != response.Result().Value() {
+		t.Fatalf("%d != %#v", target, response.Result().Value())
 	}
 }
 

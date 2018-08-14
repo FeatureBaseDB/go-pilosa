@@ -10,9 +10,20 @@ env:
     - GOARCH=amd64 PILOSA_VERSION=master
     - GOARCH=amd64 PILOSA_VERSION=v1.0
 before_install:
-  - go get github.com/mattn/goveralls
   - go get -u github.com/golang/dep/cmd/dep
 script:
   - make test-all-race TESTFLAGS=-v
-  - make cover TESTFLAGS=-v
-  - $HOME/gopath/bin/goveralls -service=travis-ci -ignore "gopilosa_pbuf/public.pb.go" -coverprofile=build/coverage.out
+jobs:
+  include:
+    - stage: deploy
+      script: skip
+      go: "1.10"
+      env:
+        - GOARCH=amd64 PILOSA_VERSION=master
+      deploy:
+        - provider: script
+          script: go get github.com/mattn/goveralls && make cover TESTFLAGS=-v && $HOME/gopath/bin/goveralls -service=travis-ci -ignore "gopilosa_pbuf/public.pb.go" -coverprofile=build/coverage.out
+          skip_cleanup: true
+stages:
+  - test
+  - deploy

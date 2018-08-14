@@ -11,8 +11,7 @@ all: test
 
 cover: vendor
 	$(MAKE) start-pilosa
-	sleep 1
-	go test -cover -tags="fullcoverage" $(TESTFLAGS) -covermode=count -coverprofile=build/coverage.out
+	PILOSA_BIND=https://:20101 go test -cover -tags="fullcoverage" $(TESTFLAGS) -covermode=count -coverprofile=build/coverage.out
 	$(MAKE) stop-pilosa
 
 fast-cover:

@@ -16,14 +16,10 @@ script:
 jobs:
   include:
     - stage: deploy
-      script: skip
+      script: go get github.com/mattn/goveralls && make cover TESTFLAGS=-v && $HOME/gopath/bin/goveralls -service=travis-ci -ignore "gopilosa_pbuf/public.pb.go" -coverprofile=build/coverage.out
       go: "1.10"
       env:
         - GOARCH=amd64 PILOSA_VERSION=master
-      deploy:
-        - provider: script
-          script: go get github.com/mattn/goveralls && make cover TESTFLAGS=-v && $HOME/gopath/bin/goveralls -service=travis-ci -ignore "gopilosa_pbuf/public.pb.go" -coverprofile=build/coverage.out
-          skip_cleanup: true
 stages:
   - test
   - deploy

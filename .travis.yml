@@ -14,4 +14,6 @@ before_install:
   - go get -u github.com/golang/dep/cmd/dep
 script:
   - make test-all-race TESTFLAGS=-v
-  - $HOME/gopath/bin/goveralls -service=travis-ci -ignore "gopilosa_pbuf/public.pb.go" -flags="-tags='fullcoverage nointegration'"
+  - make start-pilosa
+  - PILOSA_BIND=https://:20101 $HOME/gopath/bin/goveralls -service=travis-ci -ignore "gopilosa_pbuf/public.pb.go" -flags="-tags='fullcoverage'"
+  - make stop-pilosa

@@ -15,5 +15,6 @@ before_install:
 script:
   - make test-all-race TESTFLAGS=-v
   - make start-pilosa
+  - sleep 2
   - PILOSA_BIND=https://:20101 $HOME/gopath/bin/goveralls -service=travis-ci -ignore "gopilosa_pbuf/public.pb.go" -flags="-tags='fullcoverage'"
   - make stop-pilosa

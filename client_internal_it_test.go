@@ -1,4 +1,4 @@
-// +build -nointegration
+// +build !nointegration
 
 package pilosa
 

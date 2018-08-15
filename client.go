@@ -711,19 +711,31 @@ func columnsToImportRequest(field *Field, shard uint64, records []Record) *pbuf.
 }
 
 func valsToImportRequest(field *Field, shard uint64, vals []Record) *pbuf.ImportValueRequest {
-	columnIDs := make([]uint64, 0, len(vals))
+	var columnIDs []uint64
+	var columnKeys []string
 	values := make([]int64, 0, len(vals))
-	for _, record := range vals {
-		val := record.(FieldValue)
-		columnIDs = append(columnIDs, val.ColumnID)
-		values = append(values, val.Value)
+	if field.index.options.keys {
+		columnKeys = make([]string, 0, len(vals))
+		for _, record := range vals {
+			val := record.(FieldValue)
+			columnKeys = append(columnKeys, val.ColumnKey)
+			values = append(values, val.Value)
+		}
+	} else {
+		columnIDs = make([]uint64, 0, len(vals))
+		for _, record := range vals {
+			val := record.(FieldValue)
+			columnIDs = append(columnIDs, val.ColumnID)
+			values = append(values, val.Value)
+		}
 	}
 	return &pbuf.ImportValueRequest{
-		Index:     field.index.name,
-		Field:     field.name,
-		Shard:     shard,
-		ColumnIDs: columnIDs,
-		Values:    values,
+		Index:      field.index.name,
+		Field:      field.name,
+		Shard:      shard,
+		ColumnIDs:  columnIDs,
+		ColumnKeys: columnKeys,
+		Values:     values,
 	}
 }
 

@@ -100,7 +100,7 @@ func newClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 		client:                 newHTTPClient(options.withDefaults()),
 		fragmentNodeCache:      map[string][]fragmentNode{},
 		fragmentNodeCacheMutex: &sync.RWMutex{},
-		logger:                 log.New(os.Stderr, "go-pilosa", log.Flags()),
+		logger:                 log.New(os.Stderr, "go-pilosa ", log.Flags()),
 	}
 	c.importManager = newRecordImportManager(c)
 	return c

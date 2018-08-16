@@ -140,12 +140,14 @@ func (c *Client) Query(query PQLQuery, options ...interface{}) (*QueryResponse, 
 	if err != nil {
 		return nil, err
 	}
-	data, err := makeRequestData(query.serialize(), queryOptions)
+	serializedQuery := query.serialize()
+	data, err := makeRequestData(serializedQuery.String(), queryOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "making request data")
 	}
+	useCoordinator := serializedQuery.HasKeys
 	path := fmt.Sprintf("/index/%s/query", query.Index().name)
-	_, buf, err := c.httpRequest("POST", path, data, defaultProtobufHeaders())
+	_, buf, err := c.httpRequest("POST", path, data, defaultProtobufHeaders(), useCoordinator)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +167,7 @@ func (c *Client) Query(query PQLQuery, options ...interface{}) (*QueryResponse, 
 func (c *Client) CreateIndex(index *Index) error {
 	data := []byte(index.options.String())
 	path := fmt.Sprintf("/index/%s", index.name)
-	response, _, err := c.httpRequest("POST", path, data, nil)
+	response, _, err := c.httpRequest("POST", path, data, nil, false)
 	if err != nil {
 		if response != nil && response.StatusCode == 409 {
 			return ErrIndexExists
@@ -180,7 +182,7 @@ func (c *Client) CreateIndex(index *Index) error {
 func (c *Client) CreateField(field *Field) error {
 	data := []byte(field.options.String())
 	path := fmt.Sprintf("/index/%s/field/%s", field.index.name, field.name)
-	response, _, err := c.httpRequest("POST", path, data, nil)
+	response, _, err := c.httpRequest("POST", path, data, nil, false)
 	if err != nil {
 		if response != nil && response.StatusCode == 409 {
 			return ErrFieldExists
@@ -211,7 +213,7 @@ func (c *Client) EnsureField(field *Field) error {
 // DeleteIndex deletes an index on the server.
 func (c *Client) DeleteIndex(index *Index) error {
 	path := fmt.Sprintf("/index/%s", index.name)
-	_, _, err := c.httpRequest("DELETE", path, nil, nil)
+	_, _, err := c.httpRequest("DELETE", path, nil, nil, false)
 	return err
 
 }
@@ -219,7 +221,7 @@ func (c *Client) DeleteIndex(index *Index) error {
 // DeleteField deletes a field on the server.
 func (c *Client) DeleteField(field *Field) error {
 	path := fmt.Sprintf("/index/%s/field/%s", field.index.name, field.name)
-	_, _, err := c.httpRequest("DELETE", path, nil, nil)
+	_, _, err := c.httpRequest("DELETE", path, nil, nil, false)
 	return err
 }
 
@@ -338,7 +340,7 @@ func (c *Client) importValues(field *Field, shard uint64, vals []Record, nodes [
 
 func (c *Client) fetchFragmentNodes(indexName string, shard uint64) ([]fragmentNode, error) {
 	path := fmt.Sprintf("/internal/fragment/nodes?shard=%d&index=%s", shard, indexName)
-	_, body, err := c.httpRequest("GET", path, []byte{}, nil)
+	_, body, err := c.httpRequest("GET", path, []byte{}, nil, false)
 	if err != nil {
 		return nil, err
 	}
@@ -436,7 +438,7 @@ func (c *Client) ExportField(field *Field) (RecordIterator, error) {
 
 // Status returns the serves status.
 func (c *Client) Status() (Status, error) {
-	_, data, err := c.httpRequest("GET", "/status", nil, nil)
+	_, data, err := c.httpRequest("GET", "/status", nil, nil, false)
 	if err != nil {
 		return Status{}, errors.Wrap(err, "requesting /status")
 	}
@@ -449,7 +451,7 @@ func (c *Client) Status() (Status, error) {
 }
 
 func (c *Client) readSchema() ([]SchemaIndex, error) {
-	_, data, err := c.httpRequest("GET", "/schema", nil, nil)
+	_, data, err := c.httpRequest("GET", "/schema", nil, nil, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "requesting /schema")
 	}
@@ -462,7 +464,7 @@ func (c *Client) readSchema() ([]SchemaIndex, error) {
 }
 
 func (c *Client) shardsMax() (map[string]uint64, error) {
-	_, data, err := c.httpRequest("GET", "/internal/shards/max", nil, nil)
+	_, data, err := c.httpRequest("GET", "/internal/shards/max", nil, nil, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "requesting /internal/shards/max")
 	}
@@ -477,13 +479,13 @@ func (c *Client) shardsMax() (map[string]uint64, error) {
 // HttpRequest sends an HTTP request to the Pilosa server.
 // **NOTE**: This function is experimental and may be removed in later revisions.
 func (c *Client) HttpRequest(method string, path string, data []byte, headers map[string]string) (*http.Response, []byte, error) {
-	return c.httpRequest(method, path, data, headers)
+	return c.httpRequest(method, path, data, headers, false)
 }
 
 // httpRequest makes a request to the cluster - use this when you want the
 // client to choose a host, and it doesn't matter if the request goes to a
 // specific host
-func (c *Client) httpRequest(method string, path string, data []byte, headers map[string]string) (*http.Response, []byte, error) {
+func (c *Client) httpRequest(method string, path string, data []byte, headers map[string]string, useCoordinator bool) (*http.Response, []byte, error) {
 	if data == nil {
 		data = []byte{}
 	}

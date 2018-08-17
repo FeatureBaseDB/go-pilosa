@@ -495,10 +495,21 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 	var err error
 	for i := 0; i < maxHosts; i++ {
 		reader := bytes.NewReader(data)
-		// get a host from the cluster
-		host := c.cluster.Host()
-		if host == nil {
-			return nil, nil, ErrEmptyCluster
+		var host *URI
+
+		if useCoordinator {
+			// TODO: we shouldn't need to fetch the coordinator every time
+			node, err := c.fetchCoordinatorNode()
+			if err != nil {
+				return nil, nil, errors.Wrap(err, "fetching coordinator node")
+			}
+			host = URIFromAddress(fmt.Sprintf("%s://%s:%d", node.Scheme, node.Host, node.Port))
+		} else {
+			// get a host from the cluster
+			host = c.cluster.Host()
+			if host == nil {
+				return nil, nil, ErrEmptyCluster
+			}
 		}
 
 		response, err = c.doRequest(host, method, path, c.augmentHeaders(headers), reader)

@@ -357,7 +357,8 @@ func TestIndexAlreadyExists(t *testing.T) {
 
 func TestQueryWithEmptyClusterFails(t *testing.T) {
 	client, _ := NewClient(DefaultCluster())
-	_, err := client.Query(index.RawQuery("won't run"))
+	attrs := map[string]interface{}{"a": 1}
+	_, err := client.Query(index.SetColumnAttrs(0, attrs))
 	if err != ErrEmptyCluster {
 		t.Fatal(err)
 	}
@@ -367,7 +368,8 @@ func TestMaxHostsFail(t *testing.T) {
 	uri, _ := NewURIFromAddress("does-not-resolve.foo.bar")
 	cluster := NewClusterWithHost(uri, uri, uri, uri)
 	client, _ := NewClient(cluster)
-	_, err := client.Query(index.RawQuery("foo"))
+	attrs := map[string]interface{}{"a": 1}
+	_, err := client.Query(index.SetColumnAttrs(0, attrs))
 	if err != ErrTriedMaxHosts {
 		t.Fatalf("ErrTriedMaxHosts error should be returned")
 	}

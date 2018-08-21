@@ -428,16 +428,6 @@ func TestResponseNotRead(t *testing.T) {
 	}
 }
 
-func TestInvalidResponse(t *testing.T) {
-	server := getMockServer(200, []byte("unmarshal this!"), -1)
-	defer server.Close()
-	client, _ := NewClient(server.URL)
-	response, err := client.Query(index.RawQuery("don't care"))
-	if err == nil {
-		t.Fatalf("Got response: %v", response)
-	}
-}
-
 func TestSchema(t *testing.T) {
 	client := getClient()
 	schema, err := client.Schema()
@@ -1504,6 +1494,17 @@ func TestImportNodeProtobufMarshalFails(t *testing.T) {
 	err = client.importNode(uri, nil)
 	if err == nil {
 		t.Fatalf("Should have failed")
+	}
+}
+
+func TestQueryUnmarshalFails(t *testing.T) {
+	server := getMockServer(200, []byte(`{}`), -1)
+	defer server.Close()
+	client, _ := NewClient(server.URL)
+	field := NewSchema().Index("foo").Field("bar")
+	_, err := client.Query(field.Row(1))
+	if err == nil {
+		t.Fatalf("should have failed")
 	}
 }
 

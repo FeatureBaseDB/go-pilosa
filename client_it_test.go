@@ -569,6 +569,22 @@ func TestCSVRowIDColumnIDImport(t *testing.T) {
 	}
 }
 
+func TestCSVRowIDColumnIDImportFails(t *testing.T) {
+	server := getMockServer(200, []byte(`{}`), -1)
+	defer server.Close()
+	client, _ := NewClient(server.URL)
+	text := `10,7
+		10,5
+		2,3
+		7,1`
+	iterator := NewCSVColumnIterator(CSVRowIDColumnID, strings.NewReader(text))
+	field := NewSchema().Index("foo").Field("bar")
+	err := client.ImportField(field, iterator)
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
 func TestCSVRowIDColumnKeyImport(t *testing.T) {
 	client := getClient()
 	text := `10,five
@@ -607,6 +623,21 @@ func TestCSVRowIDColumnKeyImport(t *testing.T) {
 		if target[i] != br.Keys[0] {
 			t.Fatalf("%s != %s", target[i], br.Keys[0])
 		}
+	}
+}
+
+func TestCSVRowIDColumnKeyImportFails(t *testing.T) {
+	server := getMockServer(200, []byte(`{}`), -1)
+	defer server.Close()
+	client, _ := NewClient(server.URL)
+	text := `10,five
+		2,three
+		7,one`
+	iterator := NewCSVColumnIterator(CSVRowIDColumnKey, strings.NewReader(text))
+	field := NewSchema().Index("foo", OptIndexKeys(true)).Field("bar")
+	err := client.ImportField(field, iterator)
+	if err == nil {
+		t.Fatalf("Should have failed")
 	}
 }
 

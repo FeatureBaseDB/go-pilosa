@@ -1734,6 +1734,25 @@ func TestFetchCoordinatorCoordinatorNotFound(t *testing.T) {
 	}
 }
 
+func TestServerWarning(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		content, err := proto.Marshal(&pbuf.QueryResponse{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("warning", `299 pilosa/2.0 "FAKE WARNING: Deprecated PQL version: PQL v2 will remove support for SetBit() in Pilosa 2.1. Please update your client to support Set() (See https://docs.pilosa.com/pql#versioning)." "Sat, 25 Aug 2019 23:34:45 GMT"`)
+		w.WriteHeader(200)
+		io.Copy(w, bytes.NewReader(content))
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	client, _ := NewClient(server.URL)
+	_, err := client.Query(testField.Row(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func getClient() *Client {
 	var client *Client
 	var err error

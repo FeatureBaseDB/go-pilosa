@@ -39,8 +39,10 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -50,6 +52,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const PqlVersion = "1.0"
 const maxHosts = 10
 
 // Client is the HTTP client for Pilosa server.
@@ -62,6 +65,7 @@ type Client struct {
 	importThreadCount int
 	shardWidth        uint64
 	importManager     *recordImportManager
+	logger            *log.Logger
 }
 
 // DefaultClient creates a client with the default address and options.
@@ -91,6 +95,7 @@ func newClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 	c := &Client{
 		cluster: cluster,
 		client:  newHTTPClient(options.withDefaults()),
+		logger:  log.New(os.Stderr, "go-pilosa ", log.Flags()),
 	}
 	c.importManager = newRecordImportManager(c)
 	return c
@@ -522,6 +527,10 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 		return nil, nil, ErrTriedMaxHosts
 	}
 	defer response.Body.Close()
+	warning := response.Header.Get("warning")
+	if warning != "" {
+		c.logger.Println(warning)
+	}
 	// TODO: Optimize buffer creation
 	buf, err := ioutil.ReadAll(response.Body)
 	if err != nil {
@@ -608,6 +617,7 @@ func defaultProtobufHeaders() map[string]string {
 	return map[string]string{
 		"Content-Type": "application/x-protobuf",
 		"Accept":       "application/x-protobuf",
+		"PQL-Version":  PqlVersion,
 	}
 }
 

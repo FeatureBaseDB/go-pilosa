@@ -279,6 +279,21 @@ func TestTopNReturns(t *testing.T) {
 	if item.Count != 3 {
 		t.Fatalf("Item[0] Count should be 3")
 	}
+
+	client.Query(field.SetRowAttrs(10, map[string]interface{}{"foo": "bar"}))
+	response, err = client.Query(field.FilterAttrTopN(5, nil, "foo", "bar"))
+	items = response.Result().CountItems()
+	if len(items) != 1 {
+		t.Fatalf("There should be 1 count item: %v", items)
+	}
+	item = items[0]
+	if item.ID != 10 {
+		t.Fatalf("Item[0] ID should be 10")
+	}
+	if item.Count != 3 {
+		t.Fatalf("Item[0] Count should be 3")
+	}
+
 }
 
 func TestCreateDeleteIndexField(t *testing.T) {

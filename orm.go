@@ -627,10 +627,10 @@ func (f *Field) RowTopN(n uint64, row *PQLRowQuery) *PQLRowQuery {
 		f.name, row.serialize(), n), f.index, nil)
 }
 
-// FilterFieldTopN creates a TopN query with the given item count, row, field and the filter for that field
-// The field and filters arguments work together to only return Rows which have the attribute specified by field with one of the values specified in filters.
-func (f *Field) FilterFieldTopN(n uint64, row *PQLRowQuery, field string, values ...interface{}) *PQLRowQuery {
-	return f.filterFieldTopN(n, row, field, values...)
+// FilterAttrTopN creates a TopN query with the given item count, row, attribute name and filter values for that field
+// The attrName and attrValues arguments work together to only return Rows which have the attribute specified by attrName with one of the values specified in attrValues.
+func (f *Field) FilterAttrTopN(n uint64, row *PQLRowQuery, attrName string, attrValues ...interface{}) *PQLRowQuery {
+	return f.filterFieldTopN(n, row, attrName, attrValues...)
 }
 
 func (f *Field) filterFieldTopN(n uint64, row *PQLRowQuery, field string, values ...interface{}) *PQLRowQuery {
@@ -642,10 +642,10 @@ func (f *Field) filterFieldTopN(n uint64, row *PQLRowQuery, field string, values
 		return NewPQLRowQuery("", f.index, err)
 	}
 	if row == nil {
-		return NewPQLRowQuery(fmt.Sprintf("TopN(%s,n=%d,field='%s',filters=%s)",
+		return NewPQLRowQuery(fmt.Sprintf("TopN(%s,n=%d,attrName='%s',attrValues=%s)",
 			f.name, n, field, string(b)), f.index, nil)
 	}
-	return NewPQLRowQuery(fmt.Sprintf("TopN(%s,%s,n=%d,field='%s',filters=%s)",
+	return NewPQLRowQuery(fmt.Sprintf("TopN(%s,%s,n=%d,attrName='%s',attrValues=%s)",
 		f.name, row.serialize(), n, field, string(b)), f.index, nil)
 }
 

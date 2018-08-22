@@ -630,10 +630,10 @@ func (f *Field) RowTopN(n uint64, row *PQLRowQuery) *PQLRowQuery {
 // FilterAttrTopN creates a TopN query with the given item count, row, attribute name and filter values for that field
 // The attrName and attrValues arguments work together to only return Rows which have the attribute specified by attrName with one of the values specified in attrValues.
 func (f *Field) FilterAttrTopN(n uint64, row *PQLRowQuery, attrName string, attrValues ...interface{}) *PQLRowQuery {
-	return f.filterFieldTopN(n, row, attrName, attrValues...)
+	return f.filterAttrTopN(n, row, attrName, attrValues...)
 }
 
-func (f *Field) filterFieldTopN(n uint64, row *PQLRowQuery, field string, values ...interface{}) *PQLRowQuery {
+func (f *Field) filterAttrTopN(n uint64, row *PQLRowQuery, field string, values ...interface{}) *PQLRowQuery {
 	if err := validateLabel(field); err != nil {
 		return NewPQLRowQuery("", f.index, err)
 	}

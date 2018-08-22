@@ -347,11 +347,11 @@ func TestTopN(t *testing.T) {
 		"TopN(collaboration,Row(collaboration=3),n=10)",
 		collabField.RowTopN(10, collabField.Row(3)))
 	comparePQL(t,
-		"TopN(sample-field,Row(collaboration=7),n=12,field='category',filters=[80,81])",
-		sampleField.FilterFieldTopN(12, collabField.Row(7), "category", 80, 81))
+		"TopN(sample-field,Row(collaboration=7),n=12,attrName='category',attrValues=[80,81])",
+		sampleField.FilterAttrTopN(12, collabField.Row(7), "category", 80, 81))
 	comparePQL(t,
-		"TopN(sample-field,n=12,field='category',filters=[80,81])",
-		sampleField.FilterFieldTopN(12, nil, "category", 80, 81))
+		"TopN(sample-field,n=12,attrName='category',attrValues=[80,81])",
+		sampleField.FilterAttrTopN(12, nil, "category", 80, 81))
 }
 
 func TestFieldLT(t *testing.T) {
@@ -427,21 +427,21 @@ func TestSetValue(t *testing.T) {
 }
 
 func TestFilterFieldTopNInvalidField(t *testing.T) {
-	q := sampleField.FilterFieldTopN(12, collabField.Row(7), "$invalid$", 80, 81)
+	q := sampleField.FilterAttrTopN(12, collabField.Row(7), "$invalid$", 80, 81)
 	if q.Error() == nil {
 		t.Fatalf("should have failed")
 	}
 }
 
 func TestFilterFieldTopNInvalidValue(t *testing.T) {
-	q := sampleField.FilterFieldTopN(12, collabField.Row(7), "category", 80, func() {})
+	q := sampleField.FilterAttrTopN(12, collabField.Row(7), "category", 80, func() {})
 	if q.Error() == nil {
 		t.Fatalf("should have failed")
 	}
 }
 
 func TestRowOperationInvalidArg(t *testing.T) {
-	invalid := sampleField.FilterFieldTopN(12, collabField.Row(7), "$invalid$", 80, 81)
+	invalid := sampleField.FilterAttrTopN(12, collabField.Row(7), "$invalid$", 80, 81)
 	// invalid argument in pos 1
 	q := sampleIndex.Union(invalid, b1)
 	if q.Error() == nil {
@@ -553,7 +553,7 @@ func TestBatchQuery(t *testing.T) {
 
 func TestBatchQueryWithError(t *testing.T) {
 	q := sampleIndex.BatchQuery()
-	q.Add(sampleField.FilterFieldTopN(12, collabField.Row(7), "$invalid$", 80, 81))
+	q.Add(sampleField.FilterAttrTopN(12, collabField.Row(7), "$invalid$", 80, 81))
 	if q.Error() == nil {
 		t.Fatalf("The error must be set")
 	}

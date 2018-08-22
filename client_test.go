@@ -44,7 +44,7 @@ func TestQueryWithError(t *testing.T) {
 	client := DefaultClient()
 	index := NewIndex("foo")
 	field := index.Field("foo")
-	invalid := field.FilterFieldTopN(12, field.Row(7), "$invalid$", 80, 81)
+	invalid := field.FilterAttrTopN(12, field.Row(7), "$invalid$", 80, 81)
 	_, err = client.Query(invalid, nil)
 	if err == nil {
 		t.Fatalf("Should have failed")

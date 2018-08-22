@@ -52,7 +52,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const PqlVersion = "1.0"
+const PQLVersion = "1.0"
 const maxHosts = 10
 
 // Client is the HTTP client for Pilosa server.
@@ -617,7 +617,7 @@ func defaultProtobufHeaders() map[string]string {
 	return map[string]string{
 		"Content-Type": "application/x-protobuf",
 		"Accept":       "application/x-protobuf",
-		"PQL-Version":  PqlVersion,
+		"PQL-Version":  PQLVersion,
 	}
 }
 

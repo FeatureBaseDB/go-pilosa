@@ -117,7 +117,7 @@ type serializedQuery struct {
 	HasKeys bool
 }
 
-func NewSerializedQuery(query string, hasKeys bool) serializedQuery {
+func newSerializedQuery(query string, hasKeys bool) serializedQuery {
 	return serializedQuery{
 		Query:   query,
 		HasKeys: hasKeys,
@@ -159,7 +159,7 @@ func (q *PQLBaseQuery) Index() *Index {
 }
 
 func (q *PQLBaseQuery) serialize() serializedQuery {
-	return NewSerializedQuery(q.pql, q.hasKeys)
+	return newSerializedQuery(q.pql, q.hasKeys)
 }
 
 // Error returns the error or nil for this query.
@@ -181,7 +181,7 @@ func (q *PQLRowQuery) Index() *Index {
 }
 
 func (q *PQLRowQuery) serialize() serializedQuery {
-	return NewSerializedQuery(q.pql, q.hasKeys)
+	return newSerializedQuery(q.pql, q.hasKeys)
 }
 
 // Error returns the error or nil for this query.
@@ -214,7 +214,7 @@ func (q *PQLBatchQuery) Index() *Index {
 
 func (q *PQLBatchQuery) serialize() serializedQuery {
 	query := strings.Join(q.queries, "")
-	return NewSerializedQuery(query, q.hasKeys)
+	return newSerializedQuery(query, q.hasKeys)
 }
 
 func (q *PQLBatchQuery) Error() error {

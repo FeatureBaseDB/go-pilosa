@@ -112,26 +112,26 @@ func (s *Schema) diff(other *Schema) *Schema {
 	return result
 }
 
-type SerializedQuery struct {
+type serializedQuery struct {
 	Query   string
 	HasKeys bool
 }
 
-func NewSerializedQuery(query string, hasKeys bool) SerializedQuery {
-	return SerializedQuery{
+func NewSerializedQuery(query string, hasKeys bool) serializedQuery {
+	return serializedQuery{
 		Query:   query,
 		HasKeys: hasKeys,
 	}
 }
 
-func (s SerializedQuery) String() string {
+func (s serializedQuery) String() string {
 	return s.Query
 }
 
 // PQLQuery is an interface for PQL queries.
 type PQLQuery interface {
 	Index() *Index
-	serialize() SerializedQuery
+	serialize() serializedQuery
 	Error() error
 }
 
@@ -158,7 +158,7 @@ func (q *PQLBaseQuery) Index() *Index {
 	return q.index
 }
 
-func (q *PQLBaseQuery) serialize() SerializedQuery {
+func (q *PQLBaseQuery) serialize() serializedQuery {
 	return NewSerializedQuery(q.pql, q.hasKeys)
 }
 
@@ -180,7 +180,7 @@ func (q *PQLRowQuery) Index() *Index {
 	return q.index
 }
 
-func (q *PQLRowQuery) serialize() SerializedQuery {
+func (q *PQLRowQuery) serialize() serializedQuery {
 	return NewSerializedQuery(q.pql, q.hasKeys)
 }
 
@@ -212,7 +212,7 @@ func (q *PQLBatchQuery) Index() *Index {
 	return q.index
 }
 
-func (q *PQLBatchQuery) serialize() SerializedQuery {
+func (q *PQLBatchQuery) serialize() serializedQuery {
 	query := strings.Join(q.queries, "")
 	return NewSerializedQuery(query, q.hasKeys)
 }

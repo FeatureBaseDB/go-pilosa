@@ -39,8 +39,10 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -50,6 +52,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const PQLVersion = "1.0"
 const maxHosts = 10
 
 // Client is the HTTP client for Pilosa server.
@@ -62,6 +65,7 @@ type Client struct {
 	importThreadCount int
 	shardWidth        uint64
 	importManager     *recordImportManager
+	logger            *log.Logger
 }
 
 // DefaultClient creates a client with the default address and options.
@@ -91,6 +95,7 @@ func newClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 	c := &Client{
 		cluster: cluster,
 		client:  newHTTPClient(options.withDefaults()),
+		logger:  log.New(os.Stderr, "go-pilosa ", log.Flags()),
 	}
 	c.importManager = newRecordImportManager(c)
 	return c
@@ -140,12 +145,14 @@ func (c *Client) Query(query PQLQuery, options ...interface{}) (*QueryResponse, 
 	if err != nil {
 		return nil, err
 	}
-	data, err := makeRequestData(query.serialize(), queryOptions)
+	serializedQuery := query.serialize()
+	data, err := makeRequestData(serializedQuery.String(), queryOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "making request data")
 	}
+	useCoordinator := serializedQuery.HasKeys
 	path := fmt.Sprintf("/index/%s/query", query.Index().name)
-	_, buf, err := c.httpRequest("POST", path, data, defaultProtobufHeaders())
+	_, buf, err := c.httpRequest("POST", path, data, defaultProtobufHeaders(), useCoordinator)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +172,7 @@ func (c *Client) Query(query PQLQuery, options ...interface{}) (*QueryResponse, 
 func (c *Client) CreateIndex(index *Index) error {
 	data := []byte(index.options.String())
 	path := fmt.Sprintf("/index/%s", index.name)
-	response, _, err := c.httpRequest("POST", path, data, nil)
+	response, _, err := c.httpRequest("POST", path, data, nil, false)
 	if err != nil {
 		if response != nil && response.StatusCode == 409 {
 			return ErrIndexExists
@@ -180,7 +187,7 @@ func (c *Client) CreateIndex(index *Index) error {
 func (c *Client) CreateField(field *Field) error {
 	data := []byte(field.options.String())
 	path := fmt.Sprintf("/index/%s/field/%s", field.index.name, field.name)
-	response, _, err := c.httpRequest("POST", path, data, nil)
+	response, _, err := c.httpRequest("POST", path, data, nil, false)
 	if err != nil {
 		if response != nil && response.StatusCode == 409 {
 			return ErrFieldExists
@@ -211,7 +218,7 @@ func (c *Client) EnsureField(field *Field) error {
 // DeleteIndex deletes an index on the server.
 func (c *Client) DeleteIndex(index *Index) error {
 	path := fmt.Sprintf("/index/%s", index.name)
-	_, _, err := c.httpRequest("DELETE", path, nil, nil)
+	_, _, err := c.httpRequest("DELETE", path, nil, nil, false)
 	return err
 
 }
@@ -219,7 +226,7 @@ func (c *Client) DeleteIndex(index *Index) error {
 // DeleteField deletes a field on the server.
 func (c *Client) DeleteField(field *Field) error {
 	path := fmt.Sprintf("/index/%s/field/%s", field.index.name, field.name)
-	_, _, err := c.httpRequest("DELETE", path, nil, nil)
+	_, _, err := c.httpRequest("DELETE", path, nil, nil, false)
 	return err
 }
 
@@ -338,7 +345,7 @@ func (c *Client) importValues(field *Field, shard uint64, vals []Record, nodes [
 
 func (c *Client) fetchFragmentNodes(indexName string, shard uint64) ([]fragmentNode, error) {
 	path := fmt.Sprintf("/internal/fragment/nodes?shard=%d&index=%s", shard, indexName)
-	_, body, err := c.httpRequest("GET", path, []byte{}, nil)
+	_, body, err := c.httpRequest("GET", path, []byte{}, nil, false)
 	if err != nil {
 		return nil, err
 	}
@@ -436,7 +443,7 @@ func (c *Client) ExportField(field *Field) (RecordIterator, error) {
 
 // Status returns the serves status.
 func (c *Client) Status() (Status, error) {
-	_, data, err := c.httpRequest("GET", "/status", nil, nil)
+	_, data, err := c.httpRequest("GET", "/status", nil, nil, false)
 	if err != nil {
 		return Status{}, errors.Wrap(err, "requesting /status")
 	}
@@ -449,7 +456,7 @@ func (c *Client) Status() (Status, error) {
 }
 
 func (c *Client) readSchema() ([]SchemaIndex, error) {
-	_, data, err := c.httpRequest("GET", "/schema", nil, nil)
+	_, data, err := c.httpRequest("GET", "/schema", nil, nil, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "requesting /schema")
 	}
@@ -462,7 +469,7 @@ func (c *Client) readSchema() ([]SchemaIndex, error) {
 }
 
 func (c *Client) shardsMax() (map[string]uint64, error) {
-	_, data, err := c.httpRequest("GET", "/internal/shards/max", nil, nil)
+	_, data, err := c.httpRequest("GET", "/internal/shards/max", nil, nil, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "requesting /internal/shards/max")
 	}
@@ -477,13 +484,13 @@ func (c *Client) shardsMax() (map[string]uint64, error) {
 // HttpRequest sends an HTTP request to the Pilosa server.
 // **NOTE**: This function is experimental and may be removed in later revisions.
 func (c *Client) HttpRequest(method string, path string, data []byte, headers map[string]string) (*http.Response, []byte, error) {
-	return c.httpRequest(method, path, data, headers)
+	return c.httpRequest(method, path, data, headers, false)
 }
 
 // httpRequest makes a request to the cluster - use this when you want the
 // client to choose a host, and it doesn't matter if the request goes to a
 // specific host
-func (c *Client) httpRequest(method string, path string, data []byte, headers map[string]string) (*http.Response, []byte, error) {
+func (c *Client) httpRequest(method string, path string, data []byte, headers map[string]string, useCoordinator bool) (*http.Response, []byte, error) {
 	if data == nil {
 		data = []byte{}
 	}
@@ -493,10 +500,21 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 	var err error
 	for i := 0; i < maxHosts; i++ {
 		reader := bytes.NewReader(data)
-		// get a host from the cluster
-		host := c.cluster.Host()
-		if host == nil {
-			return nil, nil, ErrEmptyCluster
+		var host *URI
+
+		if useCoordinator {
+			// TODO: we shouldn't need to fetch the coordinator every time
+			node, err := c.fetchCoordinatorNode()
+			if err != nil {
+				return nil, nil, errors.Wrap(err, "fetching coordinator node")
+			}
+			host = URIFromAddress(fmt.Sprintf("%s://%s:%d", node.Scheme, node.Host, node.Port))
+		} else {
+			// get a host from the cluster
+			host = c.cluster.Host()
+			if host == nil {
+				return nil, nil, ErrEmptyCluster
+			}
 		}
 
 		response, err = c.doRequest(host, method, path, c.augmentHeaders(headers), reader)
@@ -509,6 +527,10 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 		return nil, nil, ErrTriedMaxHosts
 	}
 	defer response.Body.Close()
+	warning := response.Header.Get("warning")
+	if warning != "" {
+		c.logger.Println(warning)
+	}
 	// TODO: Optimize buffer creation
 	buf, err := ioutil.ReadAll(response.Body)
 	if err != nil {
@@ -595,6 +617,7 @@ func defaultProtobufHeaders() map[string]string {
 	return map[string]string{
 		"Content-Type": "application/x-protobuf",
 		"Accept":       "application/x-protobuf",
+		"PQL-Version":  PQLVersion,
 	}
 }
 
@@ -711,19 +734,31 @@ func columnsToImportRequest(field *Field, shard uint64, records []Record) *pbuf.
 }
 
 func valsToImportRequest(field *Field, shard uint64, vals []Record) *pbuf.ImportValueRequest {
-	columnIDs := make([]uint64, 0, len(vals))
+	var columnIDs []uint64
+	var columnKeys []string
 	values := make([]int64, 0, len(vals))
-	for _, record := range vals {
-		val := record.(FieldValue)
-		columnIDs = append(columnIDs, val.ColumnID)
-		values = append(values, val.Value)
+	if field.index.options.keys {
+		columnKeys = make([]string, 0, len(vals))
+		for _, record := range vals {
+			val := record.(FieldValue)
+			columnKeys = append(columnKeys, val.ColumnKey)
+			values = append(values, val.Value)
+		}
+	} else {
+		columnIDs = make([]uint64, 0, len(vals))
+		for _, record := range vals {
+			val := record.(FieldValue)
+			columnIDs = append(columnIDs, val.ColumnID)
+			values = append(values, val.Value)
+		}
 	}
 	return &pbuf.ImportValueRequest{
-		Index:     field.index.name,
-		Field:     field.name,
-		Shard:     shard,
-		ColumnIDs: columnIDs,
-		Values:    values,
+		Index:      field.index.name,
+		Field:      field.name,
+		Shard:      shard,
+		ColumnIDs:  columnIDs,
+		ColumnKeys: columnKeys,
+		Values:     values,
 	}
 }
 

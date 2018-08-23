@@ -357,7 +357,8 @@ func TestIndexAlreadyExists(t *testing.T) {
 
 func TestQueryWithEmptyClusterFails(t *testing.T) {
 	client, _ := NewClient(DefaultCluster())
-	_, err := client.Query(index.RawQuery("won't run"))
+	attrs := map[string]interface{}{"a": 1}
+	_, err := client.Query(index.SetColumnAttrs(0, attrs))
 	if err != ErrEmptyCluster {
 		t.Fatal(err)
 	}
@@ -367,7 +368,8 @@ func TestMaxHostsFail(t *testing.T) {
 	uri, _ := NewURIFromAddress("does-not-resolve.foo.bar")
 	cluster := NewClusterWithHost(uri, uri, uri, uri)
 	client, _ := NewClient(cluster)
-	_, err := client.Query(index.RawQuery("foo"))
+	attrs := map[string]interface{}{"a": 1}
+	_, err := client.Query(index.SetColumnAttrs(0, attrs))
 	if err != ErrTriedMaxHosts {
 		t.Fatalf("ErrTriedMaxHosts error should be returned")
 	}
@@ -392,7 +394,7 @@ func TestQueryFails(t *testing.T) {
 
 func TestInvalidHttpRequest(t *testing.T) {
 	client := getClient()
-	_, _, err := client.httpRequest("INVALID METHOD", "/foo", nil, nil)
+	_, _, err := client.httpRequest("INVALID METHOD", "/foo", nil, nil, false)
 	if err == nil {
 		t.Fatal()
 	}
@@ -421,16 +423,6 @@ func TestResponseNotRead(t *testing.T) {
 	}
 	client, _ := NewClient(uri)
 	response, err := client.Query(testField.Row(1))
-	if err == nil {
-		t.Fatalf("Got response: %v", response)
-	}
-}
-
-func TestInvalidResponse(t *testing.T) {
-	server := getMockServer(200, []byte("unmarshal this!"), -1)
-	defer server.Close()
-	client, _ := NewClient(server.URL)
-	response, err := client.Query(index.RawQuery("don't care"))
 	if err == nil {
 		t.Fatalf("Got response: %v", response)
 	}
@@ -567,6 +559,22 @@ func TestCSVRowIDColumnIDImport(t *testing.T) {
 	}
 }
 
+func TestCSVRowIDColumnIDImportFails(t *testing.T) {
+	server := getMockServer(200, []byte(`{}`), -1)
+	defer server.Close()
+	client, _ := NewClient(server.URL)
+	text := `10,7
+		10,5
+		2,3
+		7,1`
+	iterator := NewCSVColumnIterator(CSVRowIDColumnID, strings.NewReader(text))
+	field := NewSchema().Index("foo").Field("bar")
+	err := client.ImportField(field, iterator)
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
 func TestCSVRowIDColumnKeyImport(t *testing.T) {
 	client := getClient()
 	text := `10,five
@@ -605,6 +613,21 @@ func TestCSVRowIDColumnKeyImport(t *testing.T) {
 		if target[i] != br.Keys[0] {
 			t.Fatalf("%s != %s", target[i], br.Keys[0])
 		}
+	}
+}
+
+func TestCSVRowIDColumnKeyImportFails(t *testing.T) {
+	server := getMockServer(200, []byte(`{}`), -1)
+	defer server.Close()
+	client, _ := NewClient(server.URL)
+	text := `10,five
+		2,three
+		7,one`
+	iterator := NewCSVColumnIterator(CSVRowIDColumnKey, strings.NewReader(text))
+	field := NewSchema().Index("foo", OptIndexKeys(true)).Field("bar")
+	err := client.ImportField(field, iterator)
+	if err == nil {
+		t.Fatalf("Should have failed")
 	}
 }
 
@@ -859,7 +882,7 @@ func TestErrorReturningImportOption(t *testing.T) {
 	}
 }
 
-func TestValueCSVImport(t *testing.T) {
+func TestValueCSVValueFieldImport(t *testing.T) {
 	client := getClient()
 	text := `10,7
 		7,1`
@@ -893,6 +916,43 @@ func TestValueCSVImport(t *testing.T) {
 	target := int64(8)
 	if target != response.Result().Value() {
 		t.Fatalf("%d != %#v", target, response.Result())
+	}
+}
+
+func TestValueCSVValueFieldWithKeysImport(t *testing.T) {
+	client := getClient()
+	text := `ten,7
+			 seven,1`
+	iterator := NewCSVValueIterator(CSVColumnKey, strings.NewReader(text))
+	field := keysIndex.Field("importvaluefield", OptFieldTypeInt(0, 100))
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	field2 := keysIndex.Field("importvaluefield-set")
+	err = client.EnsureField(field2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bq := keysIndex.BatchQuery(
+		field2.Set(1, "ten"),
+		field2.Set(1, "seven"),
+	)
+	response, err := client.Query(bq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.ImportField(field, iterator, OptImportBatchSize(10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err = client.Query(field.Sum(field2.Row(1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := int64(8)
+	if target != response.Result().Value() {
+		t.Fatalf("%d != %#v", target, response.Result().Value())
 	}
 }
 
@@ -1437,6 +1497,17 @@ func TestImportNodeProtobufMarshalFails(t *testing.T) {
 	}
 }
 
+func TestQueryUnmarshalFails(t *testing.T) {
+	server := getMockServer(200, []byte(`{}`), -1)
+	defer server.Close()
+	client, _ := NewClient(server.URL)
+	field := NewSchema().Index("foo").Field("bar")
+	_, err := client.Query(field.Row(1))
+	if err == nil {
+		t.Fatalf("should have failed")
+	}
+}
+
 func TestResponseWithInvalidType(t *testing.T) {
 	qr := &pbuf.QueryResponse{
 		Err: "",
@@ -1692,6 +1763,25 @@ func TestFetchCoordinatorCoordinatorNotFound(t *testing.T) {
 	_, err := client.fetchCoordinatorNode()
 	if err == nil {
 		t.Fatal("should have failed")
+	}
+}
+
+func TestServerWarning(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		content, err := proto.Marshal(&pbuf.QueryResponse{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("warning", `299 pilosa/2.0 "FAKE WARNING: Deprecated PQL version: PQL v2 will remove support for SetBit() in Pilosa 2.1. Please update your client to support Set() (See https://docs.pilosa.com/pql#versioning)." "Sat, 25 Aug 2019 23:34:45 GMT"`)
+		w.WriteHeader(200)
+		io.Copy(w, bytes.NewReader(content))
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	client, _ := NewClient(server.URL)
+	_, err := client.Query(testField.Row(1))
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 

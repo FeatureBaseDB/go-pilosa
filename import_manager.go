@@ -5,6 +5,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/pilosa/go-pilosa/imports"
 	"github.com/pkg/errors"
 )
 
@@ -19,15 +20,15 @@ func newRecordImportManager(client *Client) *recordImportManager {
 }
 
 type importWorkerChannels struct {
-	records <-chan Record
+	records <-chan imports.Record
 	errs    chan<- error
 	status  chan<- ImportStatusUpdate
 }
 
-func (rim recordImportManager) Run(field *Field, iterator RecordIterator, options ImportOptions) error {
+func (rim recordImportManager) Run(field *Field, iterator imports.RecordIterator, options ImportOptions) error {
 	shardWidth := options.shardWidth
 	threadCount := uint64(options.threadCount)
-	recordChans := make([]chan Record, threadCount)
+	recordChans := make([]chan imports.Record, threadCount)
 	errChan := make(chan error)
 	statusChan := options.statusChan
 
@@ -36,7 +37,7 @@ func (rim recordImportManager) Run(field *Field, iterator RecordIterator, option
 	}
 
 	for i := range recordChans {
-		recordChans[i] = make(chan Record, options.batchSize)
+		recordChans[i] = make(chan imports.Record, options.batchSize)
 		chans := importWorkerChannels{
 			records: recordChans[i],
 			errs:    errChan,
@@ -45,7 +46,7 @@ func (rim recordImportManager) Run(field *Field, iterator RecordIterator, option
 		go recordImportWorker(i, rim.client, field, chans, options)
 	}
 
-	var record Record
+	var record imports.Record
 	var recordIteratorError error
 
 	for {
@@ -84,14 +85,14 @@ func (rim recordImportManager) Run(field *Field, iterator RecordIterator, option
 }
 
 func recordImportWorker(id int, client *Client, field *Field, chans importWorkerChannels, options ImportOptions) {
-	batchForShard := map[uint64][]Record{}
+	batchForShard := map[uint64][]imports.Record{}
 	importFun := options.importRecordsFunction
 	statusChan := chans.status
 	recordChan := chans.records
 	errChan := chans.errs
 	shardNodes := map[uint64][]fragmentNode{}
 
-	importRecords := func(shard uint64, records []Record) error {
+	importRecords := func(shard uint64, records []imports.Record) error {
 		var nodes []fragmentNode
 		var ok bool
 		var err error
@@ -202,4 +203,18 @@ type ImportStatusUpdate struct {
 	Shard         uint64
 	ImportedCount int
 	Time          time.Duration
+}
+
+type recordSort []imports.Record
+
+func (rc recordSort) Len() int {
+	return len(rc)
+}
+
+func (rc recordSort) Swap(i, j int) {
+	rc[i], rc[j] = rc[j], rc[i]
+}
+
+func (rc recordSort) Less(i, j int) bool {
+	return rc[i].Less(rc[j])
 }

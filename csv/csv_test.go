@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	pilosa "github.com/pilosa/go-pilosa"
 	"github.com/pilosa/go-pilosa/csv"
-	"github.com/pilosa/go-pilosa/imports"
 )
 
 func TestCSVColumnIterator(t *testing.T) {
@@ -16,7 +16,7 @@ func TestCSVColumnIterator(t *testing.T) {
 		5,20,683793300
 		3,41,683793385`)
 	iterator := csv.NewColumnIterator(csv.RowIDColumnID, reader)
-	columns := []imports.Record{}
+	columns := []pilosa.Record{}
 	for {
 		column, err := iterator.NextRecord()
 		if err == io.EOF {
@@ -30,7 +30,7 @@ func TestCSVColumnIterator(t *testing.T) {
 	if len(columns) != 3 {
 		t.Fatalf("There should be 3 columns")
 	}
-	target := []imports.Column{
+	target := []pilosa.Column{
 		{RowID: 1, ColumnID: 10, Timestamp: 683793200},
 		{RowID: 5, ColumnID: 20, Timestamp: 683793300},
 		{RowID: 3, ColumnID: 41, Timestamp: 683793385},
@@ -48,7 +48,7 @@ func TestCSVColumnIteratorWithTimestampFormatRowIDColumnID(t *testing.T) {
 		5,20,1991-09-02T09:35
 		3,41,1991-09-02T09:36`)
 	iterator := csv.NewColumnIteratorWithTimestampFormat(csv.RowIDColumnID, reader, format)
-	records := []imports.Record{}
+	records := []pilosa.Record{}
 	for {
 		record, err := iterator.NextRecord()
 		if err == io.EOF {
@@ -59,7 +59,7 @@ func TestCSVColumnIteratorWithTimestampFormatRowIDColumnID(t *testing.T) {
 		}
 		records = append(records, record)
 	}
-	target := []imports.Column{
+	target := []pilosa.Column{
 		{RowID: 1, ColumnID: 10, Timestamp: 683803980},
 		{RowID: 5, ColumnID: 20, Timestamp: 683804100},
 		{RowID: 3, ColumnID: 41, Timestamp: 683804160},
@@ -80,7 +80,7 @@ func TestCSVColumnIteratorWithTimestampFormatRowKeyColumnKey(t *testing.T) {
 		five,twenty,1991-09-02T09:35
 		three,forty-one,1991-09-02T09:36`)
 	iterator := csv.NewColumnIteratorWithTimestampFormat(csv.RowKeyColumnKey, reader, format)
-	records := []imports.Record{}
+	records := []pilosa.Record{}
 	for {
 		record, err := iterator.NextRecord()
 		if err == io.EOF {
@@ -91,7 +91,7 @@ func TestCSVColumnIteratorWithTimestampFormatRowKeyColumnKey(t *testing.T) {
 		}
 		records = append(records, record)
 	}
-	target := []imports.Column{
+	target := []pilosa.Column{
 		{RowKey: "one", ColumnKey: "ten", Timestamp: 683803980},
 		{RowKey: "five", ColumnKey: "twenty", Timestamp: 683804100},
 		{RowKey: "three", ColumnKey: "forty-one", Timestamp: 683804160},
@@ -122,7 +122,7 @@ func TestCSVValueIteratorWithColumnID(t *testing.T) {
 		3,41
 	`)
 	iterator := csv.NewValueIterator(csv.ColumnID, reader)
-	values := []imports.Record{}
+	values := []pilosa.Record{}
 	for {
 		value, err := iterator.NextRecord()
 		if err == io.EOF {
@@ -133,7 +133,7 @@ func TestCSVValueIteratorWithColumnID(t *testing.T) {
 		}
 		values = append(values, value)
 	}
-	target := []imports.FieldValue{
+	target := []pilosa.FieldValue{
 		{ColumnID: 1, Value: 10},
 		{ColumnID: 5, Value: -20},
 		{ColumnID: 3, Value: 41},
@@ -154,7 +154,7 @@ func TestCSVValueIteratorWithColumnKey(t *testing.T) {
 		three,41
 	`)
 	iterator := csv.NewValueIterator(csv.ColumnKey, reader)
-	values := []imports.Record{}
+	values := []pilosa.Record{}
 	for {
 		value, err := iterator.NextRecord()
 		if err == io.EOF {
@@ -165,7 +165,7 @@ func TestCSVValueIteratorWithColumnKey(t *testing.T) {
 		}
 		values = append(values, value)
 	}
-	target := []imports.FieldValue{
+	target := []pilosa.FieldValue{
 		{ColumnKey: "one", Value: 10},
 		{ColumnKey: "five", Value: -20},
 		{ColumnKey: "three", Value: 41},

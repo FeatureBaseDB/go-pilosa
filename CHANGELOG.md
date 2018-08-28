@@ -1,6 +1,6 @@
 # Change Log
 
-* **v1.0.0** (2018-06-28)
+* **v1.0.0** (2018-08-28)
     * Compatible with Pilosa 1.0.
     * Following terminology was changed:
         * frame to field
@@ -12,6 +12,7 @@
         * Integer fields to store an integer in the given range.
         * Time fields which can store timestamps.
     * Experimental: Import strategies are experimental and may be removed in later versions.
+    * Moved CSV related functionality to the `csv` subpackge.
     * Renamed `FilterFieldTopN` function to `FilterAttrTopN`.
     * Removed all deprecated code.
     * Removed `Field` type and renamed `Frame` to `Field`.

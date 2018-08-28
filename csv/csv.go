@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pilosa/go-pilosa/imports"
+	pilosa "github.com/pilosa/go-pilosa"
 )
 
 type Format uint
@@ -28,9 +28,9 @@ func ColumnUnmarshaller(format Format) RecordUnmarshaller {
 }
 
 func ColumnUnmarshallerWithTimestamp(format Format, timestampFormat string) RecordUnmarshaller {
-	return func(text string) (imports.Record, error) {
+	return func(text string) (pilosa.Record, error) {
 		var err error
-		column := imports.Column{}
+		column := pilosa.Column{}
 		parts := strings.Split(text, ",")
 		if len(parts) < 2 {
 			return nil, errors.New("Invalid CSV line")
@@ -78,7 +78,7 @@ func ColumnUnmarshallerWithTimestamp(format Format, timestampFormat string) Reco
 	}
 }
 
-type RecordUnmarshaller func(text string) (imports.Record, error)
+type RecordUnmarshaller func(text string) (pilosa.Record, error)
 
 // Iterator reads records from a Reader.
 // Each line should contain a single record in the following form:
@@ -114,7 +114,7 @@ func NewValueIterator(format Format, reader io.Reader) *Iterator {
 
 // NextRecord iterates on lines of a Reader.
 // Returns io.EOF on end of iteration.
-func (c *Iterator) NextRecord() (imports.Record, error) {
+func (c *Iterator) NextRecord() (pilosa.Record, error) {
 	if ok := c.scanner.Scan(); ok {
 		c.line++
 		text := strings.TrimSpace(c.scanner.Text())
@@ -134,7 +134,7 @@ func (c *Iterator) NextRecord() (imports.Record, error) {
 }
 
 func FieldValueUnmarshaller(format Format) RecordUnmarshaller {
-	return func(text string) (imports.Record, error) {
+	return func(text string) (pilosa.Record, error) {
 		parts := strings.Split(text, ",")
 		if len(parts) < 2 {
 			return nil, errors.New("Invalid CSV")
@@ -149,12 +149,12 @@ func FieldValueUnmarshaller(format Format) RecordUnmarshaller {
 			if err != nil {
 				return nil, errors.New("Invalid column ID at line: %d")
 			}
-			return imports.FieldValue{
+			return pilosa.FieldValue{
 				ColumnID: uint64(columnID),
 				Value:    value,
 			}, nil
 		case ColumnKey:
-			return imports.FieldValue{
+			return pilosa.FieldValue{
 				ColumnKey: parts[0],
 				Value:     value,
 			}, nil

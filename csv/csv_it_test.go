@@ -30,69 +30,49 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 // DAMAGE.
 
-package imports_test
+// build integration
+
+package csv_test
 
 import (
+	"io"
+	"reflect"
+	"strings"
 	"testing"
 
-	"github.com/pilosa/go-pilosa/imports"
+	pilosa "github.com/pilosa/go-pilosa"
+	"github.com/pilosa/go-pilosa/csv"
 )
 
-func TestColumnShard(t *testing.T) {
-	a := imports.Column{RowID: 15, ColumnID: 55, Timestamp: 100101}
-	target := uint64(0)
-	if a.Shard(100) != target {
-		t.Fatalf("shard %d != %d", target, a.Shard(100))
+func TestCSVIterate(t *testing.T) {
+	text := `10,7
+		10,5
+		2,3
+		7,1`
+	iterator := csv.NewColumnIterator(csv.RowIDColumnID, strings.NewReader(text))
+	recs := consumeIterator(t, iterator)
+	target := []pilosa.Record{
+		pilosa.Column{RowID: 10, ColumnID: 7},
+		pilosa.Column{RowID: 10, ColumnID: 5},
+		pilosa.Column{RowID: 2, ColumnID: 3},
+		pilosa.Column{RowID: 7, ColumnID: 1},
 	}
-	target = 5
-	if a.Shard(10) != target {
-		t.Fatalf("shard %d != %d", target, a.Shard(10))
-	}
-}
-
-func TestColumnLess(t *testing.T) {
-	a := imports.Column{RowID: 10, ColumnID: 200}
-	a2 := imports.Column{RowID: 10, ColumnID: 1000}
-	b := imports.Column{RowID: 200, ColumnID: 10}
-	c := imports.FieldValue{ColumnID: 1}
-	if !a.Less(a2) {
-		t.Fatalf("%v should be less than %v", a, a2)
-	}
-	if !a.Less(b) {
-		t.Fatalf("%v should be less than %v", a, b)
-	}
-	if b.Less(a) {
-		t.Fatalf("%v should not be less than %v", b, a)
-	}
-	if c.Less(a) {
-		t.Fatalf("%v should not be less than %v", c, a)
+	if !reflect.DeepEqual(target, recs) {
+		t.Fatalf("%v != %v", target, recs)
 	}
 }
 
-func TestFieldValueShard(t *testing.T) {
-	a := imports.FieldValue{ColumnID: 55, Value: 125}
-	target := uint64(0)
-	if a.Shard(100) != target {
-		t.Fatalf("shard %d != %d", target, a.Shard(100))
+func consumeIterator(t *testing.T, it *csv.Iterator) []pilosa.Record {
+	recs := []pilosa.Record{}
+	for {
+		r, err := it.NextRecord()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		recs = append(recs, r)
 	}
-	target = 5
-	if a.Shard(10) != target {
-		t.Fatalf("shard %d != %d", target, a.Shard(10))
-	}
-
-}
-
-func TestFieldValueLess(t *testing.T) {
-	a := imports.FieldValue{ColumnID: 55, Value: 125}
-	b := imports.FieldValue{ColumnID: 100, Value: 125}
-	c := imports.Column{ColumnID: 1, RowID: 2}
-	if !a.Less(b) {
-		t.Fatalf("%v should be less than %v", a, b)
-	}
-	if b.Less(a) {
-		t.Fatalf("%v should not be less than %v", b, a)
-	}
-	if c.Less(a) {
-		t.Fatalf("%v should not be less than %v", c, a)
-	}
+	return recs
 }

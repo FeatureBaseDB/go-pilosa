@@ -1,4 +1,4 @@
-// +build integration
+// //build integration
 
 // Copyright 2017 Pilosa Corp.
 //
@@ -39,6 +39,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -49,9 +50,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/pilosa/go-pilosa/csv"
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
-	"github.com/pilosa/go-pilosa/imports"
 	"github.com/pkg/errors"
 )
 
@@ -535,200 +534,6 @@ func TestErrorRetrievingSchema(t *testing.T) {
 	}
 }
 
-func TestCSVRowIDColumnIDImport(t *testing.T) {
-	client := getClient()
-	text := `10,7
-		10,5
-		2,3
-		7,1`
-	iterator := csv.NewColumnIterator(csv.RowIDColumnID, strings.NewReader(text))
-	field := index.Field("importfield-rowid-colid")
-	err := client.EnsureField(field)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.ImportField(field, iterator)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	target := []uint64{3, 1, 5}
-	bq := index.BatchQuery(
-		field.Row(2),
-		field.Row(7),
-		field.Row(10),
-	)
-	response, err := client.Query(bq)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(response.Results()) != 3 {
-		t.Fatalf("Result count should be 3")
-	}
-	for i, result := range response.Results() {
-		br := result.Row()
-		if len(br.Columns) < 1 {
-			t.Fatalf("1 or more keys should be returned")
-		}
-		if target[i] != br.Columns[0] {
-			t.Fatalf("%d != %d", target[i], br.Columns[0])
-		}
-	}
-}
-
-func TestCSVRowIDColumnIDImportFails(t *testing.T) {
-	server := getMockServer(200, []byte(`{}`), -1)
-	defer server.Close()
-	client, _ := NewClient(server.URL)
-	text := `10,7
-		10,5
-		2,3
-		7,1`
-	iterator := csv.NewColumnIterator(csv.RowIDColumnID, strings.NewReader(text))
-	field := NewSchema().Index("foo").Field("bar")
-	err := client.ImportField(field, iterator)
-	if err == nil {
-		t.Fatalf("Should have failed")
-	}
-}
-
-func TestCSVRowIDColumnKeyImport(t *testing.T) {
-	client := getClient()
-	text := `10,five
-		2,three
-		7,one`
-	iterator := csv.NewColumnIterator(csv.RowIDColumnKey, strings.NewReader(text))
-	field := keysIndex.Field("importfield-rowid-colkey")
-	err := client.EnsureField(field)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.ImportField(field, iterator)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	target := []string{"three", "one", "five"}
-	bq := keysIndex.BatchQuery(
-		field.Row(2),
-		field.Row(7),
-		field.Row(10),
-	)
-
-	response, err := client.Query(bq)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(response.Results()) != 3 {
-		t.Fatalf("Result count should be 3")
-	}
-	for i, result := range response.Results() {
-		br := result.Row()
-		if len(br.Keys) < 1 {
-			t.Fatalf("1 or more keys should be returned")
-		}
-		if target[i] != br.Keys[0] {
-			t.Fatalf("%s != %s", target[i], br.Keys[0])
-		}
-	}
-}
-
-func TestCSVRowIDColumnKeyImportFails(t *testing.T) {
-	server := getMockServer(200, []byte(`{}`), -1)
-	defer server.Close()
-	client, _ := NewClient(server.URL)
-	text := `10,five
-		2,three
-		7,one`
-	iterator := csv.NewColumnIterator(csv.RowIDColumnKey, strings.NewReader(text))
-	field := NewSchema().Index("foo", OptIndexKeys(true)).Field("bar")
-	err := client.ImportField(field, iterator)
-	if err == nil {
-		t.Fatalf("Should have failed")
-	}
-}
-
-func TestCSVRowKeyColumnIDImport(t *testing.T) {
-	client := getClient()
-	text := `ten,7
-		ten,5
-		two,3
-		seven,1`
-	iterator := csv.NewColumnIterator(csv.RowKeyColumnID, strings.NewReader(text))
-	field := index.Field("importfield-rowkey-colid", OptFieldKeys(true))
-	err := client.EnsureField(field)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.ImportField(field, iterator)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	target := []uint64{3, 1, 5}
-	bq := index.BatchQuery(
-		field.Row("two"),
-		field.Row("seven"),
-		field.Row("ten"),
-	)
-	response, err := client.Query(bq)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(response.Results()) != 3 {
-		t.Fatalf("Result count should be 3")
-	}
-	for i, result := range response.Results() {
-		br := result.Row()
-		if len(br.Columns) < 1 {
-			t.Fatalf("1 or more columns should be returned")
-		}
-		if target[i] != br.Columns[0] {
-			t.Fatalf("%d != %d", target[i], br.Columns[0])
-		}
-	}
-}
-
-func TestCSVRowKeyColumnKeyImport(t *testing.T) {
-	client := getClient()
-	text := `ten,five
-		two,three
-		seven,one`
-	iterator := csv.NewColumnIterator(csv.RowKeyColumnKey, strings.NewReader(text))
-	field := keysIndex.Field("importfield-rowkey-colkey", OptFieldKeys(true))
-	err := client.EnsureField(field)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.ImportField(field, iterator)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	target := []string{"three", "one", "five"}
-	bq := keysIndex.BatchQuery(
-		field.Row("two"),
-		field.Row("seven"),
-		field.Row("ten"),
-	)
-	response, err := client.Query(bq)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(response.Results()) != 3 {
-		t.Fatalf("Result count should be 3")
-	}
-	for i, result := range response.Results() {
-		br := result.Row()
-		if len(br.Keys) < 1 {
-			t.Fatalf("1 or more keys should be returned")
-		}
-		if target[i] != br.Keys[0] {
-			t.Fatalf("%s != %s", target[i], br.Keys[0])
-		}
-	}
-}
-
 type ColumnGenerator struct {
 	numRows    uint64
 	numColumns uint64
@@ -736,10 +541,10 @@ type ColumnGenerator struct {
 	colIndex   uint64
 }
 
-func (gen *ColumnGenerator) NextRecord() (imports.Record, error) {
-	column := imports.Column{RowID: gen.rowIndex, ColumnID: gen.colIndex}
+func (gen *ColumnGenerator) NextRecord() (Record, error) {
+	column := Column{RowID: gen.rowIndex, ColumnID: gen.colIndex}
 	if gen.rowIndex >= gen.numRows {
-		return imports.Column{}, io.EOF
+		return Column{}, io.EOF
 	}
 	gen.colIndex += 1
 	if gen.colIndex >= gen.numColumns {
@@ -754,19 +559,19 @@ func (gen *ColumnGenerator) NextRecord() (imports.Record, error) {
 // when providing ColumnGenerator with a large number of columns (3 * shardWidth).
 type GivenColumnGenerator struct {
 	ii      int
-	records []imports.Record
+	records []Record
 }
 
-func (gen *GivenColumnGenerator) NextRecord() (imports.Record, error) {
+func (gen *GivenColumnGenerator) NextRecord() (Record, error) {
 	if len(gen.records) > gen.ii {
 		rec := gen.records[gen.ii]
 		gen.ii++
 		return rec, nil
 	}
-	return imports.Column{}, io.EOF
+	return Column{}, io.EOF
 }
 
-func NewGivenColumnGenerator(recs []imports.Record) *GivenColumnGenerator {
+func NewGivenColumnGenerator(recs []Record) *GivenColumnGenerator {
 	return &GivenColumnGenerator{
 		ii:      0,
 		records: recs,
@@ -813,20 +618,20 @@ func TestImportWithBatchSizeExpectingZero(t *testing.T) {
 	client := getClient()
 
 	iterator := NewGivenColumnGenerator(
-		[]imports.Record{
-			imports.Column{RowID: 1, ColumnID: 1},
-			imports.Column{RowID: 1, ColumnID: 2},
-			imports.Column{RowID: 1, ColumnID: 3},
-			imports.Column{RowID: 1, ColumnID: shardWidth + 1},
-			imports.Column{RowID: 1, ColumnID: shardWidth + 2},
-			imports.Column{RowID: 1, ColumnID: shardWidth + 3},
+		[]Record{
+			Column{RowID: 1, ColumnID: 1},
+			Column{RowID: 1, ColumnID: 2},
+			Column{RowID: 1, ColumnID: 3},
+			Column{RowID: 1, ColumnID: shardWidth + 1},
+			Column{RowID: 1, ColumnID: shardWidth + 2},
+			Column{RowID: 1, ColumnID: shardWidth + 3},
 
-			imports.Column{RowID: 1, ColumnID: shardWidth + 4},
-			imports.Column{RowID: 1, ColumnID: shardWidth + 5},
-			imports.Column{RowID: 1, ColumnID: shardWidth + 6},
-			imports.Column{RowID: 1, ColumnID: 2*shardWidth + 1},
-			imports.Column{RowID: 1, ColumnID: 2*shardWidth + 2},
-			imports.Column{RowID: 1, ColumnID: 2*shardWidth + 3},
+			Column{RowID: 1, ColumnID: shardWidth + 4},
+			Column{RowID: 1, ColumnID: shardWidth + 5},
+			Column{RowID: 1, ColumnID: shardWidth + 6},
+			Column{RowID: 1, ColumnID: 2*shardWidth + 1},
+			Column{RowID: 1, ColumnID: 2*shardWidth + 2},
+			Column{RowID: 1, ColumnID: 2*shardWidth + 3},
 		},
 	)
 
@@ -842,7 +647,7 @@ func TestImportWithBatchSizeExpectingZero(t *testing.T) {
 	}
 }
 
-func failingImportColumns(field *Field, shard uint64, records []imports.Record, nodes []fragmentNode) error {
+func failingImportColumns(field *Field, shard uint64, records []Record, nodes []fragmentNode) error {
 	if len(records) > 0 {
 		return errors.New("some error")
 	}
@@ -876,291 +681,6 @@ func TestImportWithBatchSizeFails(t *testing.T) {
 	err = client.ImportField(field, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(BatchImport), OptImportBatchSize(1000), importRecordsFunction(failingImportColumns))
 	if err == nil {
 		t.Fatalf("Should have failed")
-	}
-}
-
-func ErrorImportOption(err error) ImportOption {
-	return func(options *ImportOptions) error {
-		return err
-	}
-}
-func TestErrorReturningImportOption(t *testing.T) {
-	text := `10,7
-		10,5
-		2,3
-		7,1`
-	iterator := csv.NewColumnIterator(csv.RowIDColumnID, strings.NewReader(text))
-	field := index.Field("importfield")
-	client := getClient()
-	optionErr := errors.New("ERR")
-	err := client.ImportField(field, iterator, ErrorImportOption(optionErr))
-	if err != optionErr {
-		t.Fatal("ImportField should fail if an import option fails")
-	}
-}
-
-func TestValueCSVValueFieldImport(t *testing.T) {
-	client := getClient()
-	text := `10,7
-		7,1`
-	iterator := csv.NewValueIterator(csv.ColumnID, strings.NewReader(text))
-	field := index.Field("importvaluefield", OptFieldTypeInt(0, 100))
-	err := client.EnsureField(field)
-	if err != nil {
-		t.Fatal(err)
-	}
-	field2 := index.Field("importvaluefield-set")
-	err = client.EnsureField(field2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	bq := index.BatchQuery(
-		field2.Set(1, 10),
-		field2.Set(1, 7),
-	)
-	response, err := client.Query(bq)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.ImportField(field, iterator, OptImportBatchSize(10))
-	if err != nil {
-		t.Fatal(err)
-	}
-	response, err = client.Query(field.Sum(field2.Row(1)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	target := int64(8)
-	if target != response.Result().Value() {
-		t.Fatalf("%d != %#v", target, response.Result())
-	}
-}
-
-func TestValueCSVValueFieldWithKeysImport(t *testing.T) {
-	client := getClient()
-	text := `ten,7
-			 seven,1`
-	iterator := csv.NewValueIterator(csv.ColumnKey, strings.NewReader(text))
-	field := keysIndex.Field("importvaluefield", OptFieldTypeInt(0, 100))
-	err := client.EnsureField(field)
-	if err != nil {
-		t.Fatal(err)
-	}
-	field2 := keysIndex.Field("importvaluefield-set")
-	err = client.EnsureField(field2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	bq := keysIndex.BatchQuery(
-		field2.Set(1, "ten"),
-		field2.Set(1, "seven"),
-	)
-	response, err := client.Query(bq)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.ImportField(field, iterator, OptImportBatchSize(10))
-	if err != nil {
-		t.Fatal(err)
-	}
-	response, err = client.Query(field.Sum(field2.Row(1)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	target := int64(8)
-	if target != response.Result().Value() {
-		t.Fatalf("%d != %#v", target, response.Result().Value())
-	}
-}
-
-func TestValueCSVImportFailure(t *testing.T) {
-	server := getMockServer(404, []byte("sorry, not found"), -1)
-	defer server.Close()
-	client, _ := NewClient(server.URL)
-	uri := URIFromAddress(server.URL)
-	err := client.importValueNode(uri, nil)
-	if err == nil {
-		t.Fatal("should have failed")
-	}
-}
-
-func TestCSVExportRowIDColumnID(t *testing.T) {
-	client := getClient()
-	field := index.Field("exportfield-rowid-colid")
-	client.EnsureField(field)
-	_, err := client.Query(index.BatchQuery(
-		field.Set(1, 1),
-		field.Set(1, 10),
-		field.Set(2, 1048577),
-	), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	target := []imports.Column{
-		{RowID: 1, ColumnID: 1},
-		{RowID: 1, ColumnID: 10},
-		{RowID: 2, ColumnID: 1048577},
-	}
-	columns := []imports.Record{}
-	iterator, err := client.ExportField(field)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for {
-		column, err := iterator.NextRecord()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		columns = append(columns, column)
-	}
-	if len(columns) != len(target) {
-		t.Fatalf("There should be %d columns", len(target))
-	}
-	for i := range target {
-		if !reflect.DeepEqual(target[i], columns[i]) {
-			t.Fatalf("%v != %v", target, columns)
-		}
-	}
-}
-
-func TestCSVExportRowIDColumnKey(t *testing.T) {
-	client := getClient()
-	field := keysIndex.Field("exportfield-rowid-colkey")
-	client.EnsureField(field)
-	_, err := client.Query(keysIndex.BatchQuery(
-		field.Set(1, "one"),
-		field.Set(1, "ten"),
-		field.Set(2, "big-number"),
-	), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	target := []imports.Column{
-		{RowID: 1, ColumnKey: "one"},
-		{RowID: 1, ColumnKey: "ten"},
-		{RowID: 2, ColumnKey: "big-number"},
-	}
-	columns := []imports.Record{}
-	iterator, err := client.ExportField(field)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for {
-		column, err := iterator.NextRecord()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		columns = append(columns, column)
-	}
-	if len(columns) != len(target) {
-		t.Fatalf("There should be %d columns", len(target))
-	}
-	for i := range target {
-		if !reflect.DeepEqual(target[i], columns[i]) {
-			t.Fatalf("%v != %v", target, columns)
-		}
-	}
-}
-
-func TestCSVExportRowKeyColumnID(t *testing.T) {
-	client := getClient()
-	field := index.Field("exportfield-rowkey-colid", OptFieldKeys(true))
-	client.EnsureField(field)
-	_, err := client.Query(index.BatchQuery(
-		field.Set("one", 1),
-		field.Set("one", 10),
-		field.Set("two", 1048577),
-	), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	target := []imports.Column{
-		{RowKey: "one", ColumnID: 1},
-		{RowKey: "one", ColumnID: 10},
-		{RowKey: "two", ColumnID: 1048577},
-	}
-	columns := []imports.Record{}
-	iterator, err := client.ExportField(field)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for {
-		column, err := iterator.NextRecord()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		columns = append(columns, column)
-	}
-	if len(columns) != len(target) {
-		t.Fatalf("There should be %d columns", len(target))
-	}
-	for i := range target {
-		if !reflect.DeepEqual(target[i], columns[i]) {
-			t.Fatalf("%v != %v", target, columns)
-		}
-	}
-}
-
-func TestCSVExportRowKeyColumnKey(t *testing.T) {
-	client := getClient()
-	field := keysIndex.Field("exportfield-rowkey-colkey", OptFieldKeys(true))
-	client.EnsureField(field)
-	_, err := client.Query(keysIndex.BatchQuery(
-		field.Set("one", "one"),
-		field.Set("one", "ten"),
-		field.Set("two", "big-number"),
-	), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	target := []imports.Column{
-		{RowKey: "one", ColumnKey: "one"},
-		{RowKey: "one", ColumnKey: "ten"},
-		{RowKey: "two", ColumnKey: "big-number"},
-	}
-	columns := []imports.Record{}
-	iterator, err := client.ExportField(field)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for {
-		column, err := iterator.NextRecord()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		columns = append(columns, column)
-	}
-	if len(columns) != len(target) {
-		t.Fatalf("There should be %d columns", len(target))
-	}
-	for i := range target {
-		if !reflect.DeepEqual(target[i], columns[i]) {
-			t.Fatalf("%v != %v", target, columns)
-		}
-	}
-}
-
-func TestCSVExportFailure(t *testing.T) {
-	server := getMockServer(404, []byte("sorry, not found"), -1)
-	defer server.Close()
-	client, _ := NewClient(server.URL)
-	field := index.Field("exportfield")
-	_, err := client.ExportField(field)
-	if err == nil {
-		t.Fatal("should have failed")
 	}
 }
 
@@ -1370,26 +890,6 @@ func TestExcludeAttrsColumns(t *testing.T) {
 	}
 }
 
-func TestImportColumnIteratorError(t *testing.T) {
-	client := getClient()
-	field := index.Field("not-important")
-	iterator := csv.NewColumnIterator(csv.RowIDColumnID, &BrokenReader{})
-	err := client.ImportField(field, iterator)
-	if err == nil {
-		t.Fatalf("import field should fail with broken reader")
-	}
-}
-
-func TestImportValueIteratorError(t *testing.T) {
-	client := getClient()
-	field := index.Field("not-important", OptFieldTypeInt(0, 100))
-	iterator := csv.NewValueIterator(csv.ColumnID, &BrokenReader{})
-	err := client.ImportField(field, iterator, OptImportBatchSize(100))
-	if err == nil {
-		t.Fatalf("import value field should fail with broken reader")
-	}
-}
-
 func TestImportFailsOnImportColumnsError(t *testing.T) {
 	server := getMockServer(500, []byte{}, 0)
 	defer server.Close()
@@ -1397,7 +897,7 @@ func TestImportFailsOnImportColumnsError(t *testing.T) {
 	index := NewIndex("foo")
 	field := index.Field("bar")
 	nodes := fragmentNodesFromURL(server.URL)
-	err := client.importColumns(field, 0, []imports.Record{}, nodes)
+	err := client.importColumns(field, 0, []Record{}, nodes)
 	if err == nil {
 		t.Fatalf("importColumns should fail when fetch fragment nodes fails")
 	}
@@ -1416,32 +916,6 @@ func TestValueImportFailsOnImportValueError(t *testing.T) {
 	}
 }
 
-func TestImportFieldFailsIfImportColumnsFails(t *testing.T) {
-	data := []byte(`[{"host":"non-existing-domain:9999","internalHost":"10101"}]`)
-	server := getMockServer(200, data, len(data))
-	defer server.Close()
-	client, _ := NewClient(server.URL)
-	iterator := csv.NewColumnIterator(csv.RowIDColumnID, strings.NewReader("10,7"))
-	field := index.Field("importfield1")
-	err := client.ImportField(field, iterator)
-	if err == nil {
-		t.Fatalf("ImportField should fail if importColumns fails")
-	}
-}
-
-func TestImportIntFieldFailsIfImportValuesFails(t *testing.T) {
-	data := []byte(`[{"host":"non-existing-domain:9999","internalHost":"10101"}]`)
-	server := getMockServer(200, data, len(data))
-	defer server.Close()
-	client, _ := NewClient(server.URL)
-	iterator := csv.NewValueIterator(csv.ColumnID, strings.NewReader("10,7"))
-	field := index.Field("import-values-field", OptFieldTypeInt(0, 100))
-	err := client.ImportField(field, iterator, OptImportBatchSize(10))
-	if err == nil {
-		t.Fatalf("ImportField should fail if importValues fails")
-	}
-}
-
 func TestImportColumnsFailInvalidNodeAddress(t *testing.T) {
 	data := []byte(`[{"host":"10101:","internalHost":"doesn'tmatter"}]`)
 	server := getMockServer(200, data, len(data))
@@ -1450,7 +924,7 @@ func TestImportColumnsFailInvalidNodeAddress(t *testing.T) {
 	index := NewIndex("foo")
 	field := index.Field("bar")
 	nodes := fragmentNodesFromURL("zzz://doesntmatter:10101")
-	err := client.importColumns(field, 0, []imports.Record{}, nodes)
+	err := client.importColumns(field, 0, []Record{}, nodes)
 	if err == nil {
 		t.Fatalf("importColumns should fail on invalid node host")
 	}
@@ -1802,30 +1276,415 @@ func TestServerWarning(t *testing.T) {
 	}
 }
 
-func getClient() *Client {
-	var client *Client
-	var err error
-	uri, err := NewURIFromAddress(getPilosaBindAddress())
-	if err != nil {
-		panic(err)
+func TestValueCSVImportFailure(t *testing.T) {
+	server := getMockServer(404, []byte("sorry, not found"), -1)
+	defer server.Close()
+	client, _ := NewClient(server.URL)
+	uri := URIFromAddress(server.URL)
+	err := client.importValueNode(uri, nil)
+	if err == nil {
+		t.Fatal("should have failed")
 	}
-	client, err = NewClient(uri,
-		OptClientTLSConfig(&tls.Config{InsecureSkipVerify: true}),
-	)
-	if err != nil {
-		panic(err)
-	}
-	return client
 }
 
-func getPilosaBindAddress() string {
-	for _, kvStr := range os.Environ() {
-		kv := strings.SplitN(kvStr, "=", 2)
-		if kv[0] == "PILOSA_BIND" {
-			return kv[1]
+func TestRowIDColumnIDImport(t *testing.T) {
+	client := getClient()
+	iterator := NewArrayRecordIterator([]Record{
+		Column{RowID: 10, ColumnID: 7},
+		Column{RowID: 10, ColumnID: 5},
+		Column{RowID: 2, ColumnID: 3},
+		Column{RowID: 7, ColumnID: 1},
+	})
+	field := index.Field("importfield-rowid-colid")
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.ImportField(field, iterator)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	target := []uint64{3, 1, 5}
+	bq := index.BatchQuery(
+		field.Row(2),
+		field.Row(7),
+		field.Row(10),
+	)
+	response, err := client.Query(bq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Results()) != 3 {
+		t.Fatalf("Result count should be 3")
+	}
+	for i, result := range response.Results() {
+		br := result.Row()
+		if len(br.Columns) < 1 {
+			t.Fatalf("1 or more keys should be returned")
+		}
+		if target[i] != br.Columns[0] {
+			t.Fatalf("%d != %d", target[i], br.Columns[0])
 		}
 	}
-	return "http://:10101"
+}
+
+func TestRowIDColumnIDImportFails(t *testing.T) {
+	server := getMockServer(200, []byte(`{}`), -1)
+	defer server.Close()
+	client, _ := NewClient(server.URL)
+	iterator := NewArrayRecordIterator([]Record{
+		Column{RowID: 10, ColumnID: 7},
+		Column{RowID: 10, ColumnID: 5},
+		Column{RowID: 2, ColumnID: 3},
+		Column{RowID: 7, ColumnID: 1},
+	})
+	field := NewSchema().Index("foo").Field("bar")
+	err := client.ImportField(field, iterator)
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
+func TestCSVRowIDColumnKeyImport(t *testing.T) {
+	client := getClient()
+	iterator := NewArrayRecordIterator([]Record{
+		Column{RowID: 10, ColumnKey: "five"},
+		Column{RowID: 2, ColumnKey: "three"},
+		Column{RowID: 7, ColumnKey: "one"},
+	})
+	field := keysIndex.Field("importfield-rowid-colkey")
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.ImportField(field, iterator)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	target := []string{"three", "one", "five"}
+	bq := keysIndex.BatchQuery(
+		field.Row(2),
+		field.Row(7),
+		field.Row(10),
+	)
+
+	response, err := client.Query(bq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Results()) != 3 {
+		t.Fatalf("Result count should be 3")
+	}
+	for i, result := range response.Results() {
+		br := result.Row()
+		if len(br.Keys) < 1 {
+			t.Fatalf("1 or more keys should be returned")
+		}
+		if target[i] != br.Keys[0] {
+			t.Fatalf("%s != %s", target[i], br.Keys[0])
+		}
+	}
+}
+
+func TestRowIDColumnKeyImportFails(t *testing.T) {
+	server := getMockServer(200, []byte(`{}`), -1)
+	defer server.Close()
+	client, _ := NewClient(server.URL)
+	iterator := NewArrayRecordIterator([]Record{
+		Column{RowID: 10, ColumnKey: "five"},
+		Column{RowID: 2, ColumnKey: "three"},
+		Column{RowID: 7, ColumnKey: "one"},
+	})
+	field := NewSchema().Index("foo", OptIndexKeys(true)).Field("bar")
+	err := client.ImportField(field, iterator)
+	if err == nil {
+		t.Fatalf("Should have failed")
+	}
+}
+
+func TestRowKeyColumnIDImport(t *testing.T) {
+	client := getClient()
+	iterator := NewArrayRecordIterator([]Record{
+		Column{RowKey: "ten", ColumnID: 7},
+		Column{RowKey: "ten", ColumnID: 5},
+		Column{RowKey: "two", ColumnID: 3},
+		Column{RowKey: "seven", ColumnID: 1},
+	})
+	field := index.Field("importfield-rowkey-colid", OptFieldKeys(true))
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.ImportField(field, iterator)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	target := []uint64{3, 1, 5}
+	bq := index.BatchQuery(
+		field.Row("two"),
+		field.Row("seven"),
+		field.Row("ten"),
+	)
+	response, err := client.Query(bq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Results()) != 3 {
+		t.Fatalf("Result count should be 3")
+	}
+	for i, result := range response.Results() {
+		br := result.Row()
+		if len(br.Columns) < 1 {
+			t.Fatalf("1 or more columns should be returned")
+		}
+		if target[i] != br.Columns[0] {
+			t.Fatalf("%d != %d", target[i], br.Columns[0])
+		}
+	}
+}
+
+func TestRowKeyColumnKeyImport(t *testing.T) {
+	client := getClient()
+	iterator := NewArrayRecordIterator([]Record{
+		Column{RowKey: "ten", ColumnKey: "five"},
+		Column{RowKey: "two", ColumnKey: "three"},
+		Column{RowKey: "seven", ColumnKey: "one"},
+	})
+	field := keysIndex.Field("importfield-rowkey-colkey", OptFieldKeys(true))
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.ImportField(field, iterator)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	target := []string{"three", "one", "five"}
+	bq := keysIndex.BatchQuery(
+		field.Row("two"),
+		field.Row("seven"),
+		field.Row("ten"),
+	)
+	response, err := client.Query(bq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Results()) != 3 {
+		t.Fatalf("Result count should be 3")
+	}
+	for i, result := range response.Results() {
+		br := result.Row()
+		if len(br.Keys) < 1 {
+			t.Fatalf("1 or more keys should be returned")
+		}
+		if target[i] != br.Keys[0] {
+			t.Fatalf("%s != %s", target[i], br.Keys[0])
+		}
+	}
+}
+
+func TestValueFieldImport(t *testing.T) {
+	client := getClient()
+	iterator := NewArrayRecordIterator([]Record{
+		FieldValue{ColumnID: 10, Value: 7},
+		FieldValue{ColumnID: 7, Value: 1},
+	})
+	field := index.Field("importvaluefield", OptFieldTypeInt(0, 100))
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	field2 := index.Field("importvaluefield-set")
+	err = client.EnsureField(field2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bq := index.BatchQuery(
+		field2.Set(1, 10),
+		field2.Set(1, 7),
+	)
+	response, err := client.Query(bq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.ImportField(field, iterator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err = client.Query(field.Sum(field2.Row(1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := int64(8)
+	if target != response.Result().Value() {
+		t.Fatalf("%d != %#v", target, response.Result())
+	}
+}
+
+func TestValueFieldWithKeysImport(t *testing.T) {
+	client := getClient()
+	iterator := NewArrayRecordIterator([]Record{
+		FieldValue{ColumnKey: "ten", Value: 7},
+		FieldValue{ColumnKey: "seven", Value: 1},
+	})
+	field := keysIndex.Field("importvaluefield", OptFieldTypeInt(0, 100))
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	field2 := keysIndex.Field("importvaluefield-set")
+	err = client.EnsureField(field2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bq := keysIndex.BatchQuery(
+		field2.Set(1, "ten"),
+		field2.Set(1, "seven"),
+	)
+	response, err := client.Query(bq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.ImportField(field, iterator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err = client.Query(field.Sum(field2.Row(1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := int64(8)
+	if target != response.Result().Value() {
+		t.Fatalf("%d != %#v", target, response.Result().Value())
+	}
+}
+
+func TestExportRowIDColumnID(t *testing.T) {
+	client := getClient()
+	field := index.Field("exportfield-rowid-colid")
+	client.EnsureField(field)
+	_, err := client.Query(index.BatchQuery(
+		field.Set(1, 1),
+		field.Set(1, 10),
+		field.Set(2, 1048577),
+	), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := client.ExportField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := consumeReader(t, r)
+	target := "1,1\n1,10\n2,1048577\n"
+	if target != s {
+		t.Fatalf("%s != %s", target, s)
+	}
+}
+
+func TestExportRowIDColumnKey(t *testing.T) {
+	client := getClient()
+	field := keysIndex.Field("exportfield-rowid-colkey")
+	client.EnsureField(field)
+	_, err := client.Query(keysIndex.BatchQuery(
+		field.Set(1, "one"),
+		field.Set(1, "ten"),
+		field.Set(2, "big-number"),
+	), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := client.ExportField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := consumeReader(t, r)
+	target := "1,one\n1,ten\n2,big-number\n"
+	if target != s {
+		t.Fatalf("%s != %s", target, s)
+	}
+}
+
+func TestExportRowKeyColumnID(t *testing.T) {
+	client := getClient()
+	field := index.Field("exportfield-rowkey-colid", OptFieldKeys(true))
+	client.EnsureField(field)
+	_, err := client.Query(index.BatchQuery(
+		field.Set("one", 1),
+		field.Set("one", 10),
+		field.Set("two", 1048577),
+	), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := client.ExportField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := consumeReader(t, r)
+	target := "one,1\none,10\ntwo,1048577\n"
+	if target != s {
+		t.Fatalf("%s != %s", target, s)
+	}
+}
+
+func TestExportRowKeyColumnKey(t *testing.T) {
+	client := getClient()
+	field := keysIndex.Field("exportfield-rowkey-colkey", OptFieldKeys(true))
+	client.EnsureField(field)
+	_, err := client.Query(keysIndex.BatchQuery(
+		field.Set("one", "one"),
+		field.Set("one", "ten"),
+		field.Set("two", "big-number"),
+	), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := client.ExportField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := consumeReader(t, r)
+	target := "one,one\none,ten\ntwo,big-number\n"
+	if target != s {
+		t.Fatalf("%s != %s", target, s)
+	}
+}
+
+func TestCSVExportFailure(t *testing.T) {
+	server := getMockServer(404, []byte("sorry, not found"), -1)
+	defer server.Close()
+	client, _ := NewClient(server.URL)
+	field := index.Field("exportfield")
+	_, err := client.ExportField(field)
+	if err == nil {
+		t.Fatal("should have failed")
+	}
+}
+
+func TestImportColumnIteratorError(t *testing.T) {
+	client := getClient()
+	field := index.Field("not-important")
+	iterator := &BrokenRecordIterator{}
+	err := client.ImportField(field, iterator)
+	if err == nil {
+		t.Fatalf("import field should fail with broken reader")
+	}
+}
+
+func TestErrorReturningImportOption(t *testing.T) {
+	iterator := NewArrayRecordIterator([]Record{})
+	field := index.Field("importfield")
+	client := getClient()
+	optionErr := errors.New("ERR")
+	err := client.ImportField(field, iterator, ErrorImportOption(optionErr))
+	if err != optionErr {
+		t.Fatal("ImportField should fail if an import option fails")
+	}
 }
 
 func getMockServer(statusCode int, response []byte, contentLength int) *httptest.Server {
@@ -1885,8 +1744,68 @@ func getMockPathServer(responses map[string]mockResponseItem) *httptest.Server {
 	return httptest.NewServer(handler)
 }
 
-type BrokenReader struct{}
+func getClient() *Client {
+	var client *Client
+	var err error
+	uri, err := NewURIFromAddress(getPilosaBindAddress())
+	if err != nil {
+		panic(err)
+	}
+	client, err = NewClient(uri,
+		OptClientTLSConfig(&tls.Config{InsecureSkipVerify: true}),
+	)
+	if err != nil {
+		panic(err)
+	}
+	return client
+}
 
-func (r BrokenReader) Read(p []byte) (n int, err error) {
-	return 0, errors.New("broken reader")
+func getPilosaBindAddress() string {
+	for _, kvStr := range os.Environ() {
+		kv := strings.SplitN(kvStr, "=", 2)
+		if kv[0] == "PILOSA_BIND" {
+			return kv[1]
+		}
+	}
+	return "http://:10101"
+}
+
+type ArrayRecordIterator struct {
+	records   []Record
+	nextIndex int
+}
+
+func NewArrayRecordIterator(records []Record) *ArrayRecordIterator {
+	return &ArrayRecordIterator{
+		records: records,
+	}
+}
+
+func (ar *ArrayRecordIterator) NextRecord() (Record, error) {
+	if ar.nextIndex >= len(ar.records) {
+		return nil, io.EOF
+	}
+	rec := ar.records[ar.nextIndex]
+	ar.nextIndex += 1
+	return rec, nil
+}
+
+type BrokenRecordIterator struct{}
+
+func (it *BrokenRecordIterator) NextRecord() (Record, error) {
+	return nil, errors.New("some error")
+}
+
+func ErrorImportOption(err error) ImportOption {
+	return func(options *ImportOptions) error {
+		return err
+	}
+}
+
+func consumeReader(t *testing.T, r io.Reader) string {
+	b, err := ioutil.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
 }

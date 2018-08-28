@@ -30,55 +30,69 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 // DAMAGE.
 
-package imports
+package pilosa_test
 
-type Record interface {
-	Shard(shardWidth uint64) uint64
-	Less(other Record) bool
-}
+import (
+	"testing"
 
-type RecordIterator interface {
-	NextRecord() (Record, error)
-}
+	pilosa "github.com/pilosa/go-pilosa"
+)
 
-// Column defines a single Pilosa column.
-type Column struct {
-	RowID     uint64
-	ColumnID  uint64
-	RowKey    string
-	ColumnKey string
-	Timestamp int64
-}
-
-func (b Column) Shard(shardWidth uint64) uint64 {
-	return b.ColumnID / shardWidth
-}
-
-func (b Column) Less(other Record) bool {
-	if ob, ok := other.(Column); ok {
-		if b.RowID == ob.RowID {
-			return b.ColumnID < ob.ColumnID
-		}
-		return b.RowID < ob.RowID
+func TestColumnShard(t *testing.T) {
+	a := pilosa.Column{RowID: 15, ColumnID: 55, Timestamp: 100101}
+	target := uint64(0)
+	if a.Shard(100) != target {
+		t.Fatalf("shard %d != %d", target, a.Shard(100))
 	}
-	return false
-}
-
-// FieldValue represents the value for a column within a
-// range-encoded field.
-type FieldValue struct {
-	ColumnID  uint64
-	ColumnKey string
-	Value     int64
-}
-
-func (v FieldValue) Shard(shardWidth uint64) uint64 {
-	return v.ColumnID / shardWidth
-}
-
-func (v FieldValue) Less(other Record) bool {
-	if ov, ok := other.(FieldValue); ok {
-		return v.ColumnID < ov.ColumnID
+	target = 5
+	if a.Shard(10) != target {
+		t.Fatalf("shard %d != %d", target, a.Shard(10))
 	}
-	return false
+}
+
+func TestColumnLess(t *testing.T) {
+	a := pilosa.Column{RowID: 10, ColumnID: 200}
+	a2 := pilosa.Column{RowID: 10, ColumnID: 1000}
+	b := pilosa.Column{RowID: 200, ColumnID: 10}
+	c := pilosa.FieldValue{ColumnID: 1}
+	if !a.Less(a2) {
+		t.Fatalf("%v should be less than %v", a, a2)
+	}
+	if !a.Less(b) {
+		t.Fatalf("%v should be less than %v", a, b)
+	}
+	if b.Less(a) {
+		t.Fatalf("%v should not be less than %v", b, a)
+	}
+	if c.Less(a) {
+		t.Fatalf("%v should not be less than %v", c, a)
+	}
+}
+
+func TestFieldValueShard(t *testing.T) {
+	a := pilosa.FieldValue{ColumnID: 55, Value: 125}
+	target := uint64(0)
+	if a.Shard(100) != target {
+		t.Fatalf("shard %d != %d", target, a.Shard(100))
+	}
+	target = 5
+	if a.Shard(10) != target {
+		t.Fatalf("shard %d != %d", target, a.Shard(10))
+	}
+
+}
+
+func TestFieldValueLess(t *testing.T) {
+	a := pilosa.FieldValue{ColumnID: 55, Value: 125}
+	b := pilosa.FieldValue{ColumnID: 100, Value: 125}
+	c := pilosa.Column{ColumnID: 1, RowID: 2}
+	if !a.Less(b) {
+		t.Fatalf("%v should be less than %v", a, b)
+	}
+	if b.Less(a) {
+		t.Fatalf("%v should not be less than %v", b, a)
+	}
+	if c.Less(a) {
+		t.Fatalf("%v should not be less than %v", c, a)
+	}
 }

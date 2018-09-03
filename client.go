@@ -44,6 +44,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -66,6 +67,8 @@ type Client struct {
 	shardWidth        uint64
 	importManager     *recordImportManager
 	logger            *log.Logger
+	coordinatorURI    *URI
+	coordinatorLock   *sync.RWMutex
 }
 
 // DefaultClient creates a client with the default address and options.
@@ -93,9 +96,10 @@ func newClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 	}
 	options = options.withDefaults()
 	c := &Client{
-		cluster: cluster,
-		client:  newHTTPClient(options.withDefaults()),
-		logger:  log.New(os.Stderr, "go-pilosa ", log.Flags()),
+		cluster:         cluster,
+		client:          newHTTPClient(options.withDefaults()),
+		logger:          log.New(os.Stderr, "go-pilosa ", log.Flags()),
+		coordinatorLock: &sync.RWMutex{},
 	}
 	c.importManager = newRecordImportManager(c)
 	return c
@@ -490,12 +494,20 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 		var host *URI
 
 		if useCoordinator {
-			// TODO: we shouldn't need to fetch the coordinator every time
-			node, err := c.fetchCoordinatorNode()
-			if err != nil {
-				return nil, nil, errors.Wrap(err, "fetching coordinator node")
+			c.coordinatorLock.RLock()
+			coordinatorURI := c.coordinatorURI
+			c.coordinatorLock.RUnlock()
+			if coordinatorURI == nil {
+				node, err := c.fetchCoordinatorNode()
+				if err != nil {
+					return nil, nil, errors.Wrap(err, "fetching coordinator node")
+				}
+				coordinatorURI = URIFromAddress(fmt.Sprintf("%s://%s:%d", node.Scheme, node.Host, node.Port))
+				c.coordinatorLock.Lock()
+				c.coordinatorURI = coordinatorURI
+				c.coordinatorLock.Unlock()
 			}
-			host = URIFromAddress(fmt.Sprintf("%s://%s:%d", node.Scheme, node.Host, node.Port))
+			host = coordinatorURI
 		} else {
 			// get a host from the cluster
 			host = c.cluster.Host()
@@ -508,7 +520,11 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 		if err == nil {
 			break
 		}
-		c.cluster.RemoveHost(host)
+		if useCoordinator {
+			c.coordinatorURI = nil
+		} else {
+			c.cluster.RemoveHost(host)
+		}
 	}
 	if response == nil {
 		return nil, nil, ErrTriedMaxHosts

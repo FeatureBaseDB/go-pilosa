@@ -380,12 +380,23 @@ func TestQueryWithEmptyClusterFails(t *testing.T) {
 	}
 }
 
-func TestMaxHostsFail(t *testing.T) {
+func TestFailoverFail(t *testing.T) {
 	uri, _ := NewURIFromAddress("does-not-resolve.foo.bar")
 	cluster := NewClusterWithHost(uri, uri, uri, uri)
 	client, _ := NewClient(cluster)
 	attrs := map[string]interface{}{"a": 1}
 	_, err := client.Query(index.SetColumnAttrs(0, attrs))
+	if err != ErrTriedMaxHosts {
+		t.Fatalf("ErrTriedMaxHosts error should be returned")
+	}
+}
+
+func TestCoordinatorFailoverFail(t *testing.T) {
+	content := `{"state":"NORMAL","nodes":[{"id":"827c7196-8875-4467-bee2-3604a4346f2b","uri":{"scheme":"http","host":"nonexistent","port":15000},"isCoordinator":true}],"localID":"827c7196-8875-4467-bee2-3604a4346f2b"}`
+	server := getMockServer(200, []byte(content), -1)
+	defer server.Close()
+	client, _ := NewClient(server.URL)
+	_, err := client.Query(keysIndex.SetColumnAttrs("foo", map[string]interface{}{"foo": "bar"}))
 	if err != ErrTriedMaxHosts {
 		t.Fatalf("ErrTriedMaxHosts error should be returned")
 	}

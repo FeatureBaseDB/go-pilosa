@@ -12,6 +12,7 @@ fast-cover:
 	go test -cover -tags="integration" $(TESTFLAGS)
 
 generate:
+	# Rename the package name in the proto definition to match the package
 	sed -i -e 's/package internal;/package gopilosa_pbuf;/g' gopilosa_pbuf/public.proto
 	protoc --go_out=. gopilosa_pbuf/public.proto
 

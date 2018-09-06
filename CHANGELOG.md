@@ -1,6 +1,6 @@
 # Change Log
 
-* **v1.0.0** (2018-06-28)
+* **v0.10.0** (2018-09-05)
     * Compatible with Pilosa 1.0.
     * Following terminology was changed:
         * frame to field

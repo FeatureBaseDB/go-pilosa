@@ -1,6 +1,6 @@
 # Go Client for Pilosa
 
-<a href="https://github.com/pilosa"><img src="https://img.shields.io/badge/pilosa-master-blue.svg"></a>
+<a href="https://github.com/pilosa"><img src="https://img.shields.io/badge/pilosa-1.0-blue.svg"></a>
 <a href="https://godoc.org/github.com/pilosa/go-pilosa"><img src="https://godoc.org/github.com/pilosa/go-pilosa?status.svg" alt="GoDoc"></a>
 <a href="https://travis-ci.org/pilosa/go-pilosa"><img src="https://api.travis-ci.org/pilosa/go-pilosa.svg?branch=master"></a>
 <a href="https://goreportcard.com/report/github.com/pilosa/go-pilosa"><img src="https://goreportcard.com/badge/github.com/pilosa/go-pilosa?updated=1"></a>

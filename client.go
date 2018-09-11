@@ -491,37 +491,18 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 	var err error
 	for i := 0; i < maxHosts; i++ {
 		reader := bytes.NewReader(data)
-		var host *URI
-
-		if useCoordinator {
-			c.coordinatorLock.RLock()
-			coordinatorURI := c.coordinatorURI
-			c.coordinatorLock.RUnlock()
-			if coordinatorURI == nil {
-				node, err := c.fetchCoordinatorNode()
-				if err != nil {
-					return nil, nil, errors.Wrap(err, "fetching coordinator node")
-				}
-				coordinatorURI = URIFromAddress(fmt.Sprintf("%s://%s:%d", node.Scheme, node.Host, node.Port))
-				c.coordinatorLock.Lock()
-				c.coordinatorURI = coordinatorURI
-				c.coordinatorLock.Unlock()
-			}
-			host = coordinatorURI
-		} else {
-			// get a host from the cluster
-			host = c.cluster.Host()
-			if host == nil {
-				return nil, nil, ErrEmptyCluster
-			}
+		host, err := c.host(useCoordinator)
+		if err != nil {
+			return nil, nil, err
 		}
-
 		response, err = c.doRequest(host, method, path, c.augmentHeaders(headers), reader)
 		if err == nil {
 			break
 		}
 		if useCoordinator {
+			c.coordinatorLock.Lock()
 			c.coordinatorURI = nil
+			c.coordinatorLock.Unlock()
 		} else {
 			c.cluster.RemoveHost(host)
 		}
@@ -544,6 +525,33 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 		return response, buf, err
 	}
 	return response, buf, nil
+}
+
+func (c *Client) host(useCoordinator bool) (*URI, error) {
+	var host *URI
+	if useCoordinator {
+		c.coordinatorLock.RLock()
+		coordinatorURI := c.coordinatorURI
+		c.coordinatorLock.RUnlock()
+		if coordinatorURI == nil {
+			node, err := c.fetchCoordinatorNode()
+			if err != nil {
+				return nil, errors.Wrap(err, "fetching coordinator node")
+			}
+			coordinatorURI = URIFromAddress(fmt.Sprintf("%s://%s:%d", node.Scheme, node.Host, node.Port))
+			c.coordinatorLock.Lock()
+			c.coordinatorURI = coordinatorURI
+			c.coordinatorLock.Unlock()
+		}
+		host = coordinatorURI
+	} else {
+		// get a host from the cluster
+		host = c.cluster.Host()
+		if host == nil {
+			return nil, ErrEmptyCluster
+		}
+	}
+	return host, nil
 }
 
 // anyError checks an http Response and error to see if anything went wrong with

@@ -543,6 +543,8 @@ func (c *Client) host(useCoordinator bool) (*URI, error) {
 				}
 				coordinatorURI = URIFromAddress(fmt.Sprintf("%s://%s:%d", node.Scheme, node.Host, node.Port))
 				c.coordinatorURI = coordinatorURI
+			} else {
+				coordinatorURI = c.coordinatorURI
 			}
 			c.coordinatorLock.Unlock()
 		}

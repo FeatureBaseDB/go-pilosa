@@ -531,24 +531,19 @@ func (c *Client) host(useCoordinator bool) (*URI, error) {
 	var host *URI
 	if useCoordinator {
 		c.coordinatorLock.RLock()
-		coordinatorURI := c.coordinatorURI
+		host = c.coordinatorURI
 		c.coordinatorLock.RUnlock()
-		if coordinatorURI == nil {
+		if host == nil {
 			c.coordinatorLock.Lock()
-			if c.coordinatorURI == nil {
-				node, err := c.fetchCoordinatorNode()
-				if err != nil {
-					c.coordinatorLock.Unlock()
-					return nil, errors.Wrap(err, "fetching coordinator node")
-				}
-				coordinatorURI = URIFromAddress(fmt.Sprintf("%s://%s:%d", node.Scheme, node.Host, node.Port))
-				c.coordinatorURI = coordinatorURI
-			} else {
-				coordinatorURI = c.coordinatorURI
+			node, err := c.fetchCoordinatorNode()
+			if err != nil {
+				c.coordinatorLock.Unlock()
+				return nil, errors.Wrap(err, "fetching coordinator node")
 			}
+			host = URIFromAddress(fmt.Sprintf("%s://%s:%d", node.Scheme, node.Host, node.Port))
+			c.coordinatorURI = host
 			c.coordinatorLock.Unlock()
 		}
-		host = coordinatorURI
 	} else {
 		// get a host from the cluster
 		host = c.cluster.Host()

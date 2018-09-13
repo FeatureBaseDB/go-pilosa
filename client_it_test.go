@@ -46,6 +46,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -899,6 +900,31 @@ func TestExcludeAttrsColumns(t *testing.T) {
 	if len(resp.Result().Row().Attributes) != 0 {
 		t.Fatalf("attributes should be excluded")
 	}
+}
+
+func TestMultipleClientKeyQuery(t *testing.T) {
+	client := getClient()
+	field := keysIndex.Field("multiple-client-field")
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const goroutineCount = 10
+	wg := &sync.WaitGroup{}
+	wg.Add(10)
+	for i := 0; i < goroutineCount; i++ {
+		go func(rowID uint64) {
+			_, err := client.Query(field.Set(rowID, "col"))
+			if err != nil {
+				// TODO: the tests doesn't end when err != nil
+				t.Fatal(err)
+				wg.Done()
+			}
+			wg.Done()
+		}(uint64(i))
+	}
+	wg.Wait()
 }
 
 func TestImportFailsOnImportColumnsError(t *testing.T) {

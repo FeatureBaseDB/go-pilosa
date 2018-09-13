@@ -912,7 +912,7 @@ func TestMultipleClientKeyQuery(t *testing.T) {
 
 	const goroutineCount = 10
 	wg := &sync.WaitGroup{}
-	wg.Add(10)
+	wg.Add(goroutineCount)
 	for i := 0; i < goroutineCount; i++ {
 		go func(rowID uint64) {
 			_, err := client.Query(field.Set(rowID, "col"))

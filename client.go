@@ -534,16 +534,13 @@ func (c *Client) host(useCoordinator bool) (*URI, error) {
 		coordinatorURI := c.coordinatorURI
 		c.coordinatorLock.RUnlock()
 		if coordinatorURI == nil {
-			c.coordinatorLock.Lock()
-			if c.coordinatorURI == nil {
-				node, err := c.fetchCoordinatorNode()
-				if err != nil {
-					c.coordinatorLock.Unlock()
-					return nil, errors.Wrap(err, "fetching coordinator node")
-				}
-				coordinatorURI = URIFromAddress(fmt.Sprintf("%s://%s:%d", node.Scheme, node.Host, node.Port))
-				c.coordinatorURI = coordinatorURI
+			node, err := c.fetchCoordinatorNode()
+			if err != nil {
+				return nil, errors.Wrap(err, "fetching coordinator node")
 			}
+			c.coordinatorLock.Lock()
+			coordinatorURI = URIFromAddress(fmt.Sprintf("%s://%s:%d", node.Scheme, node.Host, node.Port))
+			c.coordinatorURI = coordinatorURI
 			c.coordinatorLock.Unlock()
 		}
 		host = coordinatorURI

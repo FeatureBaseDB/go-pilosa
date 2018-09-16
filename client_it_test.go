@@ -915,12 +915,7 @@ func TestMultipleClientKeyQuery(t *testing.T) {
 	wg.Add(goroutineCount)
 	for i := 0; i < goroutineCount; i++ {
 		go func(rowID uint64) {
-			_, err := client.Query(field.Set(rowID, "col"))
-			if err != nil {
-				// TODO: the tests doesn't end when err != nil
-				t.Fatal(err)
-				wg.Done()
-			}
+			client.Query(field.Set(rowID, "col"))
 			wg.Done()
 		}(uint64(i))
 	}

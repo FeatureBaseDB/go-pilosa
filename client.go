@@ -47,6 +47,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pilosa/pilosa/roaring"
+
 	"github.com/golang/protobuf/proto"
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
 	"github.com/pkg/errors"
@@ -314,7 +316,7 @@ func (c *Client) ImportField(field *Field, iterator RecordIterator, options ...I
 	return c.importManager.Run(field, iterator, importOptions.withDefaults())
 }
 
-func (c *Client) importColumns(indexName string, fieldName string, shard uint64, records []Record) error {
+func (c *Client) importColumns(indexName string, fieldName string, shard uint64, records []Record, fast bool) error {
 	nodes, err := c.fetchFragmentNodes(indexName, shard)
 	if err != nil {
 		return errors.Wrap(err, "fetching fragment nodes")
@@ -326,9 +328,15 @@ func (c *Client) importColumns(indexName string, fieldName string, shard uint64,
 			host:   node.Host,
 			port:   node.Port,
 		}
-		eg.Go(func() error {
-			return c.importNode(uri, columnsToImportRequest(indexName, fieldName, shard, records))
-		})
+		if fast {
+			eg.Go(func() error {
+				return c.importNode(uri, columnsToImportRequest(indexName, fieldName, shard, records))
+			})
+		} else {
+			eg.Go(func() error {
+				return c.importNode(uri, columnsToImportRequest(indexName, fieldName, shard, records))
+			})
+		}
 	}
 	err = eg.Wait()
 	return errors.Wrap(err, "importing columns to nodes")
@@ -660,6 +668,15 @@ func columnsToImportRequest(indexName string, fieldName string, shard uint64, re
 		ColumnIDs:  columnIDs,
 		Timestamps: timestamps,
 	}
+}
+
+func columnsToBitmap(shardWidth uint64, records []Record) *roaring.Bitmap {
+	arr := make([]uint64, len(records))
+	for i, record := range records {
+		c := record.(Column)
+		arr[i] = c.RowID*shardWidth + (c.ColumnID % shardWidth)
+	}
+	return roaring.NewBitmap(arr...)
 }
 
 func valsToImportRequest(indexName string, fieldName string, shard uint64, vals []Record) *pbuf.ImportValueRequest {

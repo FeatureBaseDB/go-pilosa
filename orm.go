@@ -288,7 +288,7 @@ func OptIndexKeys(keys bool) IndexOption {
 // OptIndexTrackExistence enables keeping track of existence of columns.
 func OptIndexTrackExistence(trackExistence bool) IndexOption {
 	return func(options *IndexOptions) {
-		options.keys = trackExistence
+		options.trackExistence = trackExistence
 	}
 }
 

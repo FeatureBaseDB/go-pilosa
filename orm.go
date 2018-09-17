@@ -112,26 +112,44 @@ func (s *Schema) diff(other *Schema) *Schema {
 	return result
 }
 
+type serializedQuery struct {
+	Query   string
+	HasKeys bool
+}
+
+func newSerializedQuery(query string, hasKeys bool) serializedQuery {
+	return serializedQuery{
+		Query:   query,
+		HasKeys: hasKeys,
+	}
+}
+
+func (s serializedQuery) String() string {
+	return s.Query
+}
+
 // PQLQuery is an interface for PQL queries.
 type PQLQuery interface {
 	Index() *Index
-	serialize() string
+	serialize() serializedQuery
 	Error() error
 }
 
 // PQLBaseQuery is the base implementation for PQLQuery.
 type PQLBaseQuery struct {
-	index *Index
-	pql   string
-	err   error
+	index   *Index
+	pql     string
+	err     error
+	hasKeys bool
 }
 
 // NewPQLBaseQuery creates a new PQLQuery with the given PQL and index.
 func NewPQLBaseQuery(pql string, index *Index, err error) *PQLBaseQuery {
 	return &PQLBaseQuery{
-		index: index,
-		pql:   pql,
-		err:   err,
+		index:   index,
+		pql:     pql,
+		err:     err,
+		hasKeys: index.options.keys,
 	}
 }
 
@@ -140,8 +158,8 @@ func (q *PQLBaseQuery) Index() *Index {
 	return q.index
 }
 
-func (q *PQLBaseQuery) serialize() string {
-	return q.pql
+func (q *PQLBaseQuery) serialize() serializedQuery {
+	return newSerializedQuery(q.pql, q.hasKeys)
 }
 
 // Error returns the error or nil for this query.
@@ -151,9 +169,10 @@ func (q PQLBaseQuery) Error() error {
 
 // PQLRowQuery is the return type for row queries.
 type PQLRowQuery struct {
-	index *Index
-	pql   string
-	err   error
+	index   *Index
+	pql     string
+	err     error
+	hasKeys bool
 }
 
 // Index returns the index for this query/
@@ -161,8 +180,8 @@ func (q *PQLRowQuery) Index() *Index {
 	return q.index
 }
 
-func (q *PQLRowQuery) serialize() string {
-	return q.pql
+func (q *PQLRowQuery) serialize() serializedQuery {
+	return newSerializedQuery(q.pql, q.hasKeys)
 }
 
 // Error returns the error or nil for this query.
@@ -185,6 +204,7 @@ type PQLBatchQuery struct {
 	index   *Index
 	queries []string
 	err     error
+	hasKeys bool
 }
 
 // Index returns the index for this query.
@@ -192,8 +212,9 @@ func (q *PQLBatchQuery) Index() *Index {
 	return q.index
 }
 
-func (q *PQLBatchQuery) serialize() string {
-	return strings.Join(q.queries, "")
+func (q *PQLBatchQuery) serialize() serializedQuery {
+	query := strings.Join(q.queries, "")
+	return newSerializedQuery(query, q.hasKeys)
 }
 
 func (q *PQLBatchQuery) Error() error {
@@ -206,15 +227,18 @@ func (q *PQLBatchQuery) Add(query PQLQuery) {
 	if err != nil {
 		q.err = err
 	}
-	q.queries = append(q.queries, query.serialize())
+	serializedQuery := query.serialize()
+	q.hasKeys = q.hasKeys || serializedQuery.HasKeys
+	q.queries = append(q.queries, serializedQuery.String())
 }
 
 // NewPQLRowQuery creates a new PqlRowQuery.
 func NewPQLRowQuery(pql string, index *Index, err error) *PQLRowQuery {
 	return &PQLRowQuery{
-		index: index,
-		pql:   pql,
-		err:   err,
+		index:   index,
+		pql:     pql,
+		err:     err,
+		hasKeys: index.options.keys,
 	}
 }
 
@@ -338,19 +362,26 @@ func (idx *Index) fieldWithOptions(name string, fieldOptions *FieldOptions) *Fie
 // BatchQuery creates a batch query with the given queries.
 func (idx *Index) BatchQuery(queries ...PQLQuery) *PQLBatchQuery {
 	stringQueries := make([]string, 0, len(queries))
+	hasKeys := false
 	for _, query := range queries {
-		stringQueries = append(stringQueries, query.serialize())
+		serializedQuery := query.serialize()
+		hasKeys = hasKeys || serializedQuery.HasKeys
+		stringQueries = append(stringQueries, serializedQuery.String())
 	}
 	return &PQLBatchQuery{
 		index:   idx,
 		queries: stringQueries,
+		hasKeys: hasKeys,
 	}
 }
 
 // RawQuery creates a query with the given string.
 // Note that the query is not validated before sending to the server.
 func (idx *Index) RawQuery(query string) *PQLBaseQuery {
-	return NewPQLBaseQuery(query, idx, nil)
+	q := NewPQLBaseQuery(query, idx, nil)
+	// NOTE: raw queries always assumed to have keys set
+	q.hasKeys = true
+	return q
 }
 
 // Union creates a Union query.
@@ -392,7 +423,10 @@ func (idx *Index) Not(row *PQLRowQuery) *PQLRowQuery {
 // Count creates a Count query.
 // Returns the number of set columns in the ROW_CALL passed in.
 func (idx *Index) Count(row *PQLRowQuery) *PQLBaseQuery {
-	return NewPQLBaseQuery(fmt.Sprintf("Count(%s)", row.serialize()), idx, nil)
+	serializedQuery := row.serialize()
+	q := NewPQLBaseQuery(fmt.Sprintf("Count(%s)", serializedQuery.String()), idx, nil)
+	q.hasKeys = q.hasKeys || serializedQuery.HasKeys
+	return q
 }
 
 // SetColumnAttrs creates a SetColumnAttrs query.
@@ -418,9 +452,10 @@ func (idx *Index) rowOperation(name string, rows ...*PQLRowQuery) *PQLRowQuery {
 		if err = row.Error(); err != nil {
 			return NewPQLRowQuery("", idx, err)
 		}
-		args = append(args, row.serialize())
+		args = append(args, row.serialize().String())
 	}
-	return NewPQLRowQuery(fmt.Sprintf("%s(%s)", name, strings.Join(args, ",")), idx, nil)
+	query := NewPQLRowQuery(fmt.Sprintf("%s(%s)", name, strings.Join(args, ",")), idx, nil)
+	return query
 }
 
 // FieldInfo represents schema information for a field.
@@ -591,8 +626,9 @@ func (f *Field) Row(rowIDOrKey interface{}) *PQLRowQuery {
 	if err != nil {
 		return NewPQLRowQuery("", f.index, err)
 	}
-	q := fmt.Sprintf("Row(%s=%s)", f.name, rowStr)
-	return NewPQLRowQuery(q, f.index, nil)
+	text := fmt.Sprintf("Row(%s=%s)", f.name, rowStr)
+	q := NewPQLRowQuery(text, f.index, nil)
+	return q
 }
 
 // Set creates a Set query.
@@ -602,8 +638,10 @@ func (f *Field) Set(rowIDOrKey, colIDOrKey interface{}) *PQLBaseQuery {
 	if err != nil {
 		return NewPQLBaseQuery("", f.index, err)
 	}
-	q := fmt.Sprintf("Set(%s,%s=%s)", colStr, f.name, rowStr)
-	return NewPQLBaseQuery(q, f.index, nil)
+	text := fmt.Sprintf("Set(%s,%s=%s)", colStr, f.name, rowStr)
+	q := NewPQLBaseQuery(text, f.index, nil)
+	q.hasKeys = f.options.keys || f.index.options.keys
+	return q
 }
 
 // SetTimestamp creates a Set query with timestamp.
@@ -614,8 +652,10 @@ func (f *Field) SetTimestamp(rowIDOrKey, colIDOrKey interface{}, timestamp time.
 	if err != nil {
 		return NewPQLBaseQuery("", f.index, err)
 	}
-	q := fmt.Sprintf("Set(%s,%s=%s,%s)", colStr, f.name, rowStr, timestamp.Format(timeFormat))
-	return NewPQLBaseQuery(q, f.index, nil)
+	text := fmt.Sprintf("Set(%s,%s=%s,%s)", colStr, f.name, rowStr, timestamp.Format(timeFormat))
+	q := NewPQLBaseQuery(text, f.index, nil)
+	q.hasKeys = f.options.keys || f.index.options.keys
+	return q
 }
 
 // Clear creates a Clear query.
@@ -625,21 +665,25 @@ func (f *Field) Clear(rowIDOrKey, colIDOrKey interface{}) *PQLBaseQuery {
 	if err != nil {
 		return NewPQLBaseQuery("", f.index, err)
 	}
-	q := fmt.Sprintf("Clear(%s,%s=%s)", colStr, f.name, rowStr)
-	return NewPQLBaseQuery(q, f.index, nil)
+	text := fmt.Sprintf("Clear(%s,%s=%s)", colStr, f.name, rowStr)
+	q := NewPQLBaseQuery(text, f.index, nil)
+	q.hasKeys = f.options.keys || f.index.options.keys
+	return q
 }
 
 // TopN creates a TopN query with the given item count.
 // Returns the id and count of the top n rows (by count of columns) in the field.
 func (f *Field) TopN(n uint64) *PQLRowQuery {
-	return NewPQLRowQuery(fmt.Sprintf("TopN(%s,n=%d)", f.name, n), f.index, nil)
+	q := NewPQLRowQuery(fmt.Sprintf("TopN(%s,n=%d)", f.name, n), f.index, nil)
+	return q
 }
 
 // RowTopN creates a TopN query with the given item count and row.
 // This variant supports customizing the row query.
 func (f *Field) RowTopN(n uint64, row *PQLRowQuery) *PQLRowQuery {
-	return NewPQLRowQuery(fmt.Sprintf("TopN(%s,%s,n=%d)",
+	q := NewPQLRowQuery(fmt.Sprintf("TopN(%s,%s,n=%d)",
 		f.name, row.serialize(), n), f.index, nil)
+	return q
 }
 
 // FilterAttrTopN creates a TopN query with the given item count, row, attribute name and filter values for that field
@@ -656,12 +700,16 @@ func (f *Field) filterAttrTopN(n uint64, row *PQLRowQuery, field string, values 
 	if err != nil {
 		return NewPQLRowQuery("", f.index, err)
 	}
+	var q *PQLRowQuery
 	if row == nil {
-		return NewPQLRowQuery(fmt.Sprintf("TopN(%s,n=%d,attrName='%s',attrValues=%s)",
+		q = NewPQLRowQuery(fmt.Sprintf("TopN(%s,n=%d,attrName='%s',attrValues=%s)",
 			f.name, n, field, string(b)), f.index, nil)
+	} else {
+		serializedRow := row.serialize()
+		q = NewPQLRowQuery(fmt.Sprintf("TopN(%s,%s,n=%d,attrName='%s',attrValues=%s)",
+			f.name, serializedRow.String(), n, field, string(b)), f.index, nil)
 	}
-	return NewPQLRowQuery(fmt.Sprintf("TopN(%s,%s,n=%d,attrName='%s',attrValues=%s)",
-		f.name, row.serialize(), n, field, string(b)), f.index, nil)
+	return q
 }
 
 // Range creates a Range query.
@@ -671,8 +719,9 @@ func (f *Field) Range(rowIDOrKey interface{}, start time.Time, end time.Time) *P
 	if err != nil {
 		return NewPQLRowQuery("", f.index, err)
 	}
-	q := fmt.Sprintf("Range(%s=%s,%s,%s)", f.name, rowStr, start.Format(timeFormat), end.Format(timeFormat))
-	return NewPQLRowQuery(q, f.index, nil)
+	text := fmt.Sprintf("Range(%s=%s,%s,%s)", f.name, rowStr, start.Format(timeFormat), end.Format(timeFormat))
+	q := NewPQLRowQuery(text, f.index, nil)
+	return q
 }
 
 // SetRowAttrs creates a SetRowAttrs query.
@@ -687,8 +736,10 @@ func (f *Field) SetRowAttrs(rowIDOrKey interface{}, attrs map[string]interface{}
 	if err != nil {
 		return NewPQLBaseQuery("", f.index, err)
 	}
-	q := fmt.Sprintf("SetRowAttrs(%s,%s,%s)", f.name, rowStr, attrsString)
-	return NewPQLBaseQuery(q, f.index, nil)
+	text := fmt.Sprintf("SetRowAttrs(%s,%s,%s)", f.name, rowStr, attrsString)
+	q := NewPQLBaseQuery(text, f.index, nil)
+	q.hasKeys = f.options.keys || f.index.options.keys
+	return q
 }
 
 func createAttributesString(attrs map[string]interface{}) (string, error) {
@@ -821,14 +872,18 @@ func (field *Field) NotEquals(n int) *PQLRowQuery {
 
 // NotNull creates a not equal to null query.
 func (field *Field) NotNull() *PQLRowQuery {
-	qry := fmt.Sprintf("Range(%s != null)", field.name)
-	return NewPQLRowQuery(qry, field.index, nil)
+	text := fmt.Sprintf("Range(%s != null)", field.name)
+	q := NewPQLRowQuery(text, field.index, nil)
+	q.hasKeys = field.options.keys || field.index.options.keys
+	return q
 }
 
 // Between creates a between query.
 func (field *Field) Between(a int, b int) *PQLRowQuery {
-	qry := fmt.Sprintf("Range(%s >< [%d,%d])", field.name, a, b)
-	return NewPQLRowQuery(qry, field.index, nil)
+	text := fmt.Sprintf("Range(%s >< [%d,%d])", field.name, a, b)
+	q := NewPQLRowQuery(text, field.index, nil)
+	q.hasKeys = field.options.keys || field.index.options.keys
+	return q
 }
 
 // Sum creates a sum query.
@@ -857,17 +912,24 @@ func (field *Field) SetIntValue(colIDOrKey interface{}, value int) *PQLBaseQuery
 }
 
 func (field *Field) binaryOperation(op string, n int) *PQLRowQuery {
-	qry := fmt.Sprintf("Range(%s %s %d)", field.name, op, n)
-	return NewPQLRowQuery(qry, field.index, nil)
+	text := fmt.Sprintf("Range(%s %s %d)", field.name, op, n)
+	q := NewPQLRowQuery(text, field.index, nil)
+	q.hasKeys = field.options.keys || field.index.options.keys
+	return q
 }
 
 func (field *Field) valQuery(op string, row *PQLRowQuery) *PQLBaseQuery {
 	rowStr := ""
+	hasKeys := field.options.keys || field.index.options.keys
 	if row != nil {
-		rowStr = fmt.Sprintf("%s,", row.serialize())
+		serializedRow := row.serialize()
+		hasKeys = hasKeys || serializedRow.HasKeys
+		rowStr = fmt.Sprintf("%s,", serializedRow.String())
 	}
-	qry := fmt.Sprintf("%s(%sfield='%s')", op, rowStr, field.name)
-	return NewPQLBaseQuery(qry, field.index, nil)
+	text := fmt.Sprintf("%s(%sfield='%s')", op, rowStr, field.name)
+	q := NewPQLBaseQuery(text, field.index, nil)
+	q.hasKeys = hasKeys
+	return q
 }
 
 func encodeMap(m map[string]interface{}) string {

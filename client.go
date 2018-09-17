@@ -53,7 +53,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const PqlVersion = "1.0"
+const PQLVersion = "1.0"
 const maxHosts = 10
 
 // Client is the HTTP client for Pilosa server.
@@ -62,13 +62,13 @@ type Client struct {
 	client  *http.Client
 	// User-Agent header cache. Not used until cluster-resize support branch is merged
 	// and user agent is saved here in NewClient
-	userAgent              string
-	importThreadCount      int
-	shardWidth             uint64
-	fragmentNodeCache      map[string][]fragmentNode
-	fragmentNodeCacheMutex *sync.RWMutex
-	importManager          *recordImportManager
-	logger                 *log.Logger
+	userAgent         string
+	importThreadCount int
+	shardWidth        uint64
+	importManager     *recordImportManager
+	logger            *log.Logger
+	coordinatorURI    *URI
+	coordinatorLock   *sync.RWMutex
 }
 
 // DefaultClient creates a client with the default address and options.
@@ -96,11 +96,10 @@ func newClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
 	}
 	options = options.withDefaults()
 	c := &Client{
-		cluster:                cluster,
-		client:                 newHTTPClient(options.withDefaults()),
-		fragmentNodeCache:      map[string][]fragmentNode{},
-		fragmentNodeCacheMutex: &sync.RWMutex{},
-		logger:                 log.New(os.Stderr, "go-pilosa ", log.Flags()),
+		cluster:         cluster,
+		client:          newHTTPClient(options.withDefaults()),
+		logger:          log.New(os.Stderr, "go-pilosa ", log.Flags()),
+		coordinatorLock: &sync.RWMutex{},
 	}
 	c.importManager = newRecordImportManager(c)
 	return c
@@ -150,12 +149,14 @@ func (c *Client) Query(query PQLQuery, options ...interface{}) (*QueryResponse, 
 	if err != nil {
 		return nil, err
 	}
-	data, err := makeRequestData(query.serialize(), queryOptions)
+	serializedQuery := query.serialize()
+	data, err := makeRequestData(serializedQuery.String(), queryOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "making request data")
 	}
+	useCoordinator := serializedQuery.HasKeys
 	path := fmt.Sprintf("/index/%s/query", query.Index().name)
-	_, buf, err := c.httpRequest("POST", path, data, defaultProtobufHeaders())
+	_, buf, err := c.httpRequest("POST", path, data, defaultProtobufHeaders(), useCoordinator)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +176,7 @@ func (c *Client) Query(query PQLQuery, options ...interface{}) (*QueryResponse, 
 func (c *Client) CreateIndex(index *Index) error {
 	data := []byte(index.options.String())
 	path := fmt.Sprintf("/index/%s", index.name)
-	response, _, err := c.httpRequest("POST", path, data, nil)
+	response, _, err := c.httpRequest("POST", path, data, nil, false)
 	if err != nil {
 		if response != nil && response.StatusCode == 409 {
 			return ErrIndexExists
@@ -190,7 +191,7 @@ func (c *Client) CreateIndex(index *Index) error {
 func (c *Client) CreateField(field *Field) error {
 	data := []byte(field.options.String())
 	path := fmt.Sprintf("/index/%s/field/%s", field.index.name, field.name)
-	response, _, err := c.httpRequest("POST", path, data, nil)
+	response, _, err := c.httpRequest("POST", path, data, nil, false)
 	if err != nil {
 		if response != nil && response.StatusCode == 409 {
 			return ErrFieldExists
@@ -221,7 +222,7 @@ func (c *Client) EnsureField(field *Field) error {
 // DeleteIndex deletes an index on the server.
 func (c *Client) DeleteIndex(index *Index) error {
 	path := fmt.Sprintf("/index/%s", index.name)
-	_, _, err := c.httpRequest("DELETE", path, nil, nil)
+	_, _, err := c.httpRequest("DELETE", path, nil, nil, false)
 	return err
 
 }
@@ -229,7 +230,7 @@ func (c *Client) DeleteIndex(index *Index) error {
 // DeleteField deletes a field on the server.
 func (c *Client) DeleteField(field *Field) error {
 	path := fmt.Sprintf("/index/%s/field/%s", field.index.name, field.name)
-	_, _, err := c.httpRequest("DELETE", path, nil, nil)
+	_, _, err := c.httpRequest("DELETE", path, nil, nil, false)
 	return err
 }
 
@@ -283,7 +284,7 @@ func (c *Client) syncSchema(schema *Schema, serverSchema *Schema) error {
 
 // Schema returns the indexes and fields on the server.
 func (c *Client) Schema() (*Schema, error) {
-	var indexes []StatusIndex
+	var indexes []SchemaIndex
 	indexes, err := c.readSchema()
 	if err != nil {
 		return nil, err
@@ -314,11 +315,7 @@ func (c *Client) ImportField(field *Field, iterator RecordIterator, options ...I
 	return c.importManager.Run(field, iterator, importOptions.withDefaults())
 }
 
-func (c *Client) importColumns(indexName string, fieldName string, shard uint64, records []Record) error {
-	nodes, err := c.fetchFragmentNodes(indexName, shard)
-	if err != nil {
-		return errors.Wrap(err, "fetching fragment nodes")
-	}
+func (c *Client) importColumns(field *Field, shard uint64, records []Record, nodes []fragmentNode) error {
 	eg := errgroup.Group{}
 	for _, node := range nodes {
 		uri := &URI{
@@ -327,18 +324,14 @@ func (c *Client) importColumns(indexName string, fieldName string, shard uint64,
 			port:   node.Port,
 		}
 		eg.Go(func() error {
-			return c.importNode(uri, columnsToImportRequest(indexName, fieldName, shard, records))
+			return c.importNode(uri, columnsToImportRequest(field, shard, records))
 		})
 	}
-	err = eg.Wait()
+	err := eg.Wait()
 	return errors.Wrap(err, "importing columns to nodes")
 }
 
-func (c *Client) importValues(indexName string, fieldName string, shard uint64, vals []Record) error {
-	nodes, err := c.fetchFragmentNodes(indexName, shard)
-	if err != nil {
-		return err
-	}
+func (c *Client) importValues(field *Field, shard uint64, vals []Record, nodes []fragmentNode) error {
 	eg := errgroup.Group{}
 	for _, node := range nodes {
 		uri := &URI{
@@ -347,23 +340,16 @@ func (c *Client) importValues(indexName string, fieldName string, shard uint64, 
 			port:   node.Port,
 		}
 		eg.Go(func() error {
-			return c.importValueNode(uri, valsToImportRequest(indexName, fieldName, shard, vals))
+			return c.importValueNode(uri, valsToImportRequest(field, shard, vals))
 		})
 	}
-	err = eg.Wait()
+	err := eg.Wait()
 	return errors.Wrap(err, "importing values to nodes")
 }
 
 func (c *Client) fetchFragmentNodes(indexName string, shard uint64) ([]fragmentNode, error) {
-	key := fmt.Sprintf("%s-%d", indexName, shard)
-	c.fragmentNodeCacheMutex.RLock()
-	nodes, ok := c.fragmentNodeCache[key]
-	c.fragmentNodeCacheMutex.RUnlock()
-	if ok {
-		return nodes, nil
-	}
 	path := fmt.Sprintf("/internal/fragment/nodes?shard=%d&index=%s", shard, indexName)
-	_, body, err := c.httpRequest("GET", path, []byte{}, nil)
+	_, body, err := c.httpRequest("GET", path, []byte{}, nil, false)
 	if err != nil {
 		return nil, err
 	}
@@ -376,10 +362,25 @@ func (c *Client) fetchFragmentNodes(indexName string, shard uint64) ([]fragmentN
 	for _, nodeURI := range fragmentNodeURIs {
 		fragmentNodes = append(fragmentNodes, nodeURI.URI)
 	}
-	c.fragmentNodeCacheMutex.Lock()
-	c.fragmentNodeCache[key] = fragmentNodes
-	c.fragmentNodeCacheMutex.Unlock()
 	return fragmentNodes, nil
+}
+
+func (c *Client) fetchCoordinatorNode() (fragmentNode, error) {
+	status, err := c.Status()
+	if err != nil {
+		return fragmentNode{}, err
+	}
+	for _, node := range status.Nodes {
+		if node.IsCoordinator {
+			nodeURI := node.URI
+			return fragmentNode{
+				Scheme: nodeURI.Scheme,
+				Host:   nodeURI.Host,
+				Port:   nodeURI.Port,
+			}, nil
+		}
+	}
+	return fragmentNode{}, errors.New("Coordinator node not found")
 }
 
 func (c *Client) importNode(uri *URI, request *pbuf.ImportRequest) error {
@@ -410,7 +411,7 @@ func (c *Client) importData(uri *URI, indexName string, fieldName string, data [
 }
 
 // ExportField exports columns for a field.
-func (c *Client) ExportField(field *Field) (RecordIterator, error) {
+func (c *Client) ExportField(field *Field) (io.Reader, error) {
 	var shardsMax map[string]uint64
 	var err error
 
@@ -427,12 +428,13 @@ func (c *Client) ExportField(field *Field) (RecordIterator, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewCSVColumnIterator(newExportReader(c, shardURIs, field)), nil
+
+	return newExportReader(c, shardURIs, field), nil
 }
 
 // Status returns the serves status.
 func (c *Client) Status() (Status, error) {
-	_, data, err := c.httpRequest("GET", "/status", nil, nil)
+	_, data, err := c.httpRequest("GET", "/status", nil, nil, false)
 	if err != nil {
 		return Status{}, errors.Wrap(err, "requesting /status")
 	}
@@ -444,8 +446,8 @@ func (c *Client) Status() (Status, error) {
 	return status, nil
 }
 
-func (c *Client) readSchema() ([]StatusIndex, error) {
-	_, data, err := c.httpRequest("GET", "/schema", nil, nil)
+func (c *Client) readSchema() ([]SchemaIndex, error) {
+	_, data, err := c.httpRequest("GET", "/schema", nil, nil, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "requesting /schema")
 	}
@@ -458,7 +460,7 @@ func (c *Client) readSchema() ([]StatusIndex, error) {
 }
 
 func (c *Client) shardsMax() (map[string]uint64, error) {
-	_, data, err := c.httpRequest("GET", "/internal/shards/max", nil, nil)
+	_, data, err := c.httpRequest("GET", "/internal/shards/max", nil, nil, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "requesting /internal/shards/max")
 	}
@@ -473,13 +475,13 @@ func (c *Client) shardsMax() (map[string]uint64, error) {
 // HttpRequest sends an HTTP request to the Pilosa server.
 // **NOTE**: This function is experimental and may be removed in later revisions.
 func (c *Client) HttpRequest(method string, path string, data []byte, headers map[string]string) (*http.Response, []byte, error) {
-	return c.httpRequest(method, path, data, headers)
+	return c.httpRequest(method, path, data, headers, false)
 }
 
 // httpRequest makes a request to the cluster - use this when you want the
 // client to choose a host, and it doesn't matter if the request goes to a
 // specific host
-func (c *Client) httpRequest(method string, path string, data []byte, headers map[string]string) (*http.Response, []byte, error) {
+func (c *Client) httpRequest(method string, path string, data []byte, headers map[string]string, useCoordinator bool) (*http.Response, []byte, error) {
 	if data == nil {
 		data = []byte{}
 	}
@@ -489,17 +491,21 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 	var err error
 	for i := 0; i < maxHosts; i++ {
 		reader := bytes.NewReader(data)
-		// get a host from the cluster
-		host := c.cluster.Host()
-		if host == nil {
-			return nil, nil, ErrEmptyCluster
+		host, err := c.host(useCoordinator)
+		if err != nil {
+			return nil, nil, err
 		}
-
 		response, err = c.doRequest(host, method, path, c.augmentHeaders(headers), reader)
 		if err == nil {
 			break
 		}
-		c.cluster.RemoveHost(host)
+		if useCoordinator {
+			c.coordinatorLock.Lock()
+			c.coordinatorURI = nil
+			c.coordinatorLock.Unlock()
+		} else {
+			c.cluster.RemoveHost(host)
+		}
 	}
 	if response == nil {
 		return nil, nil, ErrTriedMaxHosts
@@ -519,6 +525,37 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 		return response, buf, err
 	}
 	return response, buf, nil
+}
+
+func (c *Client) host(useCoordinator bool) (*URI, error) {
+	var host *URI
+	if useCoordinator {
+		c.coordinatorLock.RLock()
+		host = c.coordinatorURI
+		c.coordinatorLock.RUnlock()
+		if host == nil {
+			c.coordinatorLock.Lock()
+			if c.coordinatorURI == nil {
+				node, err := c.fetchCoordinatorNode()
+				if err != nil {
+					c.coordinatorLock.Unlock()
+					return nil, errors.Wrap(err, "fetching coordinator node")
+				}
+				host = URIFromAddress(fmt.Sprintf("%s://%s:%d", node.Scheme, node.Host, node.Port))
+			} else {
+				host = c.coordinatorURI
+			}
+			c.coordinatorURI = host
+			c.coordinatorLock.Unlock()
+		}
+	} else {
+		// get a host from the cluster
+		host = c.cluster.Host()
+		if host == nil {
+			return nil, ErrEmptyCluster
+		}
+	}
+	return host, nil
 }
 
 // anyError checks an http Response and error to see if anything went wrong with
@@ -595,7 +632,7 @@ func defaultProtobufHeaders() map[string]string {
 	return map[string]string{
 		"Content-Type": "application/x-protobuf",
 		"Accept":       "application/x-protobuf",
-		"PQL-Version":  PqlVersion,
+		"PQL-Version":  PQLVersion,
 	}
 }
 
@@ -642,40 +679,86 @@ func makeRequestData(query string, options *QueryOptions) ([]byte, error) {
 	return r, nil
 }
 
-func columnsToImportRequest(indexName string, fieldName string, shard uint64, records []Record) *pbuf.ImportRequest {
-	rowIDs := make([]uint64, 0, len(records))
-	columnIDs := make([]uint64, 0, len(records))
-	timestamps := make([]int64, 0, len(records))
+func columnsToImportRequest(field *Field, shard uint64, records []Record) *pbuf.ImportRequest {
+	var rowIDs []uint64
+	var columnIDs []uint64
+	var rowKeys []string
+	var columnKeys []string
+
+	recordCount := len(records)
+	timestamps := make([]int64, 0, recordCount)
+	hasRowKeys := field.options.keys
+	hasColKeys := field.index.options.keys
+
+	if hasRowKeys {
+		rowKeys = make([]string, 0, recordCount)
+	} else {
+		rowIDs = make([]uint64, 0, recordCount)
+	}
+
+	if hasColKeys {
+		columnKeys = make([]string, 0, recordCount)
+	} else {
+		columnIDs = make([]uint64, 0, recordCount)
+	}
+
 	for _, record := range records {
 		column := record.(Column)
-		rowIDs = append(rowIDs, column.RowID)
-		columnIDs = append(columnIDs, column.ColumnID)
+		if hasRowKeys {
+			rowKeys = append(rowKeys, column.RowKey)
+		} else {
+			rowIDs = append(rowIDs, column.RowID)
+		}
+
+		if hasColKeys {
+			columnKeys = append(columnKeys, column.ColumnKey)
+		} else {
+			columnIDs = append(columnIDs, column.ColumnID)
+		}
+
 		timestamps = append(timestamps, column.Timestamp)
 	}
+
 	return &pbuf.ImportRequest{
-		Index:      indexName,
-		Field:      fieldName,
+		Index:      field.index.name,
+		Field:      field.name,
 		Shard:      shard,
 		RowIDs:     rowIDs,
 		ColumnIDs:  columnIDs,
+		RowKeys:    rowKeys,
+		ColumnKeys: columnKeys,
 		Timestamps: timestamps,
 	}
 }
 
-func valsToImportRequest(indexName string, fieldName string, shard uint64, vals []Record) *pbuf.ImportValueRequest {
-	columnIDs := make([]uint64, 0, len(vals))
+func valsToImportRequest(field *Field, shard uint64, vals []Record) *pbuf.ImportValueRequest {
+	var columnIDs []uint64
+	var columnKeys []string
 	values := make([]int64, 0, len(vals))
+	keys := field.index.options.keys
+	if keys {
+		columnKeys = make([]string, 0, len(vals))
+
+	} else {
+		columnIDs = make([]uint64, 0, len(vals))
+
+	}
 	for _, record := range vals {
 		val := record.(FieldValue)
-		columnIDs = append(columnIDs, val.ColumnID)
+		if keys {
+			columnKeys = append(columnKeys, val.ColumnKey)
+		} else {
+			columnIDs = append(columnIDs, val.ColumnID)
+		}
 		values = append(values, val.Value)
 	}
 	return &pbuf.ImportValueRequest{
-		Index:     indexName,
-		Field:     fieldName,
-		Shard:     shard,
-		ColumnIDs: columnIDs,
-		Values:    values,
+		Index:      field.index.name,
+		Field:      field.name,
+		Shard:      shard,
+		ColumnIDs:  columnIDs,
+		ColumnKeys: columnKeys,
+		Values:     values,
 	}
 }
 
@@ -855,7 +938,7 @@ type ImportOptions struct {
 	batchSize             int
 	strategy              ImportWorkerStrategy
 	statusChan            chan<- ImportStatusUpdate
-	importRecordsFunction func(indexName string, fieldName string, shard uint64, records []Record) error
+	importRecordsFunction func(field *Field, shard uint64, records []Record, nodes []fragmentNode) error
 }
 
 func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
@@ -915,7 +998,7 @@ func OptImportStatusChannel(statusChan chan<- ImportStatusUpdate) ImportOption {
 	}
 }
 
-func importRecordsFunction(fun func(indexName string, fieldName string, shard uint64, records []Record) error) ImportOption {
+func importRecordsFunction(fun func(field *Field, shard uint64, records []Record, nodes []fragmentNode) error) ImportOption {
 	return func(options *ImportOptions) error {
 		options.importRecordsFunction = fun
 		return nil
@@ -938,34 +1021,39 @@ type Status struct {
 	indexMaxShard map[string]uint64
 }
 
-// StatusNode contains node information.
 type StatusNode struct {
-	Scheme  string        `json:"scheme"`
-	Host    string        `json:"host"`
-	Port    int           `json:"port"`
-	Indexes []StatusIndex `json:"indexes"`
+	ID            string    `json:"id"`
+	URI           StatusURI `json:"uri"`
+	IsCoordinator bool      `json:"isCoordinator"`
+}
+
+// StatusURI contains node information.
+type StatusURI struct {
+	Scheme string `json:"scheme"`
+	Host   string `json:"host"`
+	Port   uint16 `json:"port"`
 }
 
 type SchemaInfo struct {
-	Indexes []StatusIndex `json:"indexes"`
+	Indexes []SchemaIndex `json:"indexes"`
 }
 
-// StatusIndex contains index information.
-type StatusIndex struct {
+// SchemaIndex contains index information.
+type SchemaIndex struct {
 	Name    string        `json:"name"`
-	Options StatusOptions `json:"options"`
-	Fields  []StatusField `json:"fields"`
+	Options SchemaOptions `json:"options"`
+	Fields  []SchemaField `json:"fields"`
 	Shards  []uint64      `json:"shards"`
 }
 
-// StatusField contains field information.
-type StatusField struct {
+// SchemaField contains field information.
+type SchemaField struct {
 	Name    string        `json:"name"`
-	Options StatusOptions `json:"options"`
+	Options SchemaOptions `json:"options"`
 }
 
-// StatusOptions contains options for a field or an index.
-type StatusOptions struct {
+// SchemaOptions contains options for a field or an index.
+type SchemaOptions struct {
 	FieldType   FieldType `json:"type"`
 	CacheType   string    `json:"cacheType"`
 	CacheSize   uint      `json:"cacheSize"`
@@ -975,13 +1063,13 @@ type StatusOptions struct {
 	Keys        bool      `json:"keys"`
 }
 
-func (so StatusOptions) asIndexOptions() *IndexOptions {
+func (so SchemaOptions) asIndexOptions() *IndexOptions {
 	return &IndexOptions{
 		keys: so.Keys,
 	}
 }
 
-func (so StatusOptions) asFieldOptions() *FieldOptions {
+func (so SchemaOptions) asFieldOptions() *FieldOptions {
 	return &FieldOptions{
 		fieldType:   so.FieldType,
 		cacheSize:   int(so.CacheSize),

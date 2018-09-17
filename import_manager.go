@@ -85,17 +85,34 @@ func (rim recordImportManager) Run(field *Field, iterator RecordIterator, option
 
 func recordImportWorker(id int, client *Client, field *Field, chans importWorkerChannels, options ImportOptions) {
 	batchForShard := map[uint64][]Record{}
-	fieldName := field.Name()
-	indexName := field.index.Name()
 	importFun := options.importRecordsFunction
 	statusChan := chans.status
 	recordChan := chans.records
 	errChan := chans.errs
+	shardNodes := map[uint64][]fragmentNode{}
 
 	importRecords := func(shard uint64, records []Record) error {
+		var nodes []fragmentNode
+		var ok bool
+		var err error
+		if nodes, ok = shardNodes[shard]; !ok {
+			// if the data has row or column keys, send the data only to the coordinator
+			if field.index.options.keys || field.options.keys {
+				node, err := client.fetchCoordinatorNode()
+				if err != nil {
+					return err
+				}
+				nodes = []fragmentNode{node}
+			} else {
+				nodes, err = client.fetchFragmentNodes(field.index.name, shard)
+				if err != nil {
+					return err
+				}
+			}
+		}
 		tic := time.Now()
 		sort.Sort(recordSort(records))
-		err := importFun(indexName, fieldName, shard, records)
+		err = importFun(field, shard, records, nodes)
 		if err != nil {
 			return err
 		}
@@ -185,4 +202,18 @@ type ImportStatusUpdate struct {
 	Shard         uint64
 	ImportedCount int
 	Time          time.Duration
+}
+
+type recordSort []Record
+
+func (rc recordSort) Len() int {
+	return len(rc)
+}
+
+func (rc recordSort) Swap(i, j int) {
+	rc[i], rc[j] = rc[j], rc[i]
+}
+
+func (rc recordSort) Less(i, j int) bool {
+	return rc[i].Less(rc[j])
 }

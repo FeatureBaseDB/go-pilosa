@@ -339,6 +339,12 @@ func TestXor(t *testing.T) {
 		sampleIndex.Xor(b1, b4))
 }
 
+func TestNot(t *testing.T) {
+	comparePQL(t,
+		"Not(Row(sample-field=10))",
+		sampleIndex.Not(sampleField.Row(10)))
+}
+
 func TestTopN(t *testing.T) {
 	comparePQL(t,
 		"TopN(collaboration,n=27)",

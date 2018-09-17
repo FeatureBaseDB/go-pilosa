@@ -859,6 +859,30 @@ func TestRangeField(t *testing.T) {
 	}
 }
 
+func TestNotQuery(t *testing.T) {
+	client := getClient()
+	index := schema.Index("not-query-index", OptIndexTrackExistence(true))
+	field := index.Field("not-field")
+	client.SyncSchema(schema)
+	defer client.DeleteIndex(index)
+
+	client.Query(index.BatchQuery(
+		field.Set(1, 10),
+		field.Set(1, 11),
+		field.Set(2, 11),
+		field.Set(2, 12),
+		field.Set(2, 13),
+	))
+	resp, err := client.Query(index.Not(field.Row(1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := []uint64{12, 13}
+	if !reflect.DeepEqual(target, resp.Result().Row().Columns) {
+		t.Fatalf("%v != %v", target, resp.Result().Row().Columns)
+	}
+}
+
 func TestExcludeAttrsColumns(t *testing.T) {
 	client := getClient()
 	field := index.Field("excludecolumnsattrsfield")

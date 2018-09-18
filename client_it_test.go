@@ -689,7 +689,7 @@ func TestImportWithBatchSizeExpectingZero(t *testing.T) {
 	}
 }
 
-func failingImportColumns(indexName string, fieldName string, shard uint64, records []Record) error {
+func failingImportColumns(field *Field, shard uint64, records []Record, options *ImportOptions) error {
 	if len(records) > 0 {
 		return errors.New("some error")
 	}
@@ -1077,7 +1077,9 @@ func TestImportFailsOnImportColumnsError(t *testing.T) {
 	server := getMockServer(500, []byte{}, 0)
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	err := client.importColumns("foo", "bar", 0, []Record{})
+	index := NewIndex("foo")
+	field := index.Field("bar")
+	err := client.importColumns(field, 0, []Record{}, nil)
 	if err == nil {
 		t.Fatalf("importColumns should fail when fetch fragment nodes fails")
 	}
@@ -1087,7 +1089,9 @@ func TestValueImportFailsOnImportValueError(t *testing.T) {
 	server := getMockServer(500, []byte{}, 0)
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	err := client.importValues("foo", "bar", 0, nil)
+	index := NewIndex("foo")
+	field := index.Field("bar")
+	err := client.importValues(field, 0, nil, nil)
 	if err == nil {
 		t.Fatalf("importValues should fail when fetch fragment nodes fails")
 	}
@@ -1124,7 +1128,9 @@ func TestImportColumnsFailInvalidNodeAddress(t *testing.T) {
 	server := getMockServer(200, data, len(data))
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	err := client.importColumns("foo", "bar", 0, []Record{})
+	index := NewIndex("foo")
+	field := index.Field("bar")
+	err := client.importColumns(field, 0, []Record{}, &ImportOptions{})
 	if err == nil {
 		t.Fatalf("importColumns should fail on invalid node host")
 	}
@@ -1135,7 +1141,9 @@ func TestImportValuesFailInvalidNodeAddress(t *testing.T) {
 	server := getMockServer(200, data, len(data))
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	err := client.importValues("foo", "bar", 0, nil)
+	index := NewIndex("foo")
+	field := index.Field("bar")
+	err := client.importValues(field, 0, nil, &ImportOptions{})
 	if err == nil {
 		t.Fatalf("importValues should fail on invalid node host")
 	}

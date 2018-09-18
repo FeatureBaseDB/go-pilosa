@@ -66,7 +66,6 @@ type Client struct {
 	// and user agent is saved here in NewClient
 	userAgent              string
 	importThreadCount      int
-	shardWidth             uint64
 	fragmentNodeCache      map[string][]fragmentNode
 	fragmentNodeCacheMutex *sync.RWMutex
 	importManager          *recordImportManager
@@ -316,11 +315,12 @@ func (c *Client) ImportField(field *Field, iterator RecordIterator, options ...I
 	return c.importManager.Run(field, iterator, importOptions.withDefaults())
 }
 
-func (c *Client) importColumns(indexName string, fieldName string, shard uint64, records []Record, fast bool) error {
-	nodes, err := c.fetchFragmentNodes(indexName, shard)
+func (c *Client) importColumns(field *Field, shard uint64, records []Record, options *ImportOptions) error {
+	nodes, err := c.fetchFragmentNodes(field.index.name, shard)
 	if err != nil {
 		return errors.Wrap(err, "fetching fragment nodes")
 	}
+	fast := !field.index.options.keys && !field.options.keys
 	eg := errgroup.Group{}
 	for _, node := range nodes {
 		uri := &URI{
@@ -330,11 +330,12 @@ func (c *Client) importColumns(indexName string, fieldName string, shard uint64,
 		}
 		if fast {
 			eg.Go(func() error {
-				return c.importNode(uri, columnsToImportRequest(indexName, fieldName, shard, records))
+				bmp := columnsToBitmap(options.shardWidth, records)
+				return c.importRoaringBitmap(uri, field.index.name, field.name, shard, bmp)
 			})
 		} else {
 			eg.Go(func() error {
-				return c.importNode(uri, columnsToImportRequest(indexName, fieldName, shard, records))
+				return c.importNode(uri, columnsToImportRequest(field.index.name, field.name, shard, records))
 			})
 		}
 	}
@@ -342,8 +343,8 @@ func (c *Client) importColumns(indexName string, fieldName string, shard uint64,
 	return errors.Wrap(err, "importing columns to nodes")
 }
 
-func (c *Client) importValues(indexName string, fieldName string, shard uint64, vals []Record) error {
-	nodes, err := c.fetchFragmentNodes(indexName, shard)
+func (c *Client) importValues(field *Field, shard uint64, vals []Record, options *ImportOptions) error {
+	nodes, err := c.fetchFragmentNodes(field.index.name, shard)
 	if err != nil {
 		return err
 	}
@@ -355,7 +356,7 @@ func (c *Client) importValues(indexName string, fieldName string, shard uint64, 
 			port:   node.Port,
 		}
 		eg.Go(func() error {
-			return c.importValueNode(uri, valsToImportRequest(indexName, fieldName, shard, vals))
+			return c.importValueNode(uri, valsToImportRequest(field.index.name, field.name, shard, vals))
 		})
 	}
 	err = eg.Wait()
@@ -409,6 +410,27 @@ func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest) err
 func (c *Client) importData(uri *URI, indexName string, fieldName string, data []byte) error {
 	path := fmt.Sprintf("/index/%s/field/%s/import", indexName, fieldName)
 	resp, err := c.doRequest(uri, "POST", path, defaultProtobufHeaders(), bytes.NewReader(data))
+	if err = anyError(resp, err); err != nil {
+		return errors.Wrap(err, "doing import")
+	}
+	defer resp.Body.Close()
+
+	return nil
+}
+
+func (c *Client) importRoaringBitmap(uri *URI, indexName string, fieldName string, shard uint64, bmp *roaring.Bitmap) error {
+	buf := &bytes.Buffer{}
+	_, err := bmp.WriteTo(buf)
+	if err != nil {
+		return errors.Wrap(err, "marshalling bitmap")
+	}
+	path := fmt.Sprintf("/index/%s/field/%s/import-roaring/%d", indexName, fieldName, shard)
+	headers := map[string]string{
+		"Content-Type": "application/x-binary",
+		"Accept":       "application/x-protobuf",
+	}
+	data := buf.Bytes()
+	resp, err := c.doRequest(uri, "POST", path, headers, bytes.NewReader(data))
 	if err = anyError(resp, err); err != nil {
 		return errors.Wrap(err, "doing import")
 	}
@@ -671,12 +693,12 @@ func columnsToImportRequest(indexName string, fieldName string, shard uint64, re
 }
 
 func columnsToBitmap(shardWidth uint64, records []Record) *roaring.Bitmap {
-	arr := make([]uint64, len(records))
-	for i, record := range records {
+	bmp := roaring.NewBitmap()
+	for _, record := range records {
 		c := record.(Column)
-		arr[i] = c.RowID*shardWidth + (c.ColumnID % shardWidth)
+		bmp.DirectAdd(c.RowID*shardWidth + (c.ColumnID % shardWidth))
 	}
-	return roaring.NewBitmap(arr...)
+	return bmp
 }
 
 func valsToImportRequest(indexName string, fieldName string, shard uint64, vals []Record) *pbuf.ImportValueRequest {
@@ -872,7 +894,7 @@ type ImportOptions struct {
 	batchSize             int
 	strategy              ImportWorkerStrategy
 	statusChan            chan<- ImportStatusUpdate
-	importRecordsFunction func(indexName string, fieldName string, shard uint64, records []Record) error
+	importRecordsFunction func(field *Field, shard uint64, records []Record, options *ImportOptions) error
 }
 
 func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
@@ -932,7 +954,7 @@ func OptImportStatusChannel(statusChan chan<- ImportStatusUpdate) ImportOption {
 	}
 }
 
-func importRecordsFunction(fun func(indexName string, fieldName string, shard uint64, records []Record) error) ImportOption {
+func importRecordsFunction(fun func(field *Field, shard uint64, records []Record, options *ImportOptions) error) ImportOption {
 	return func(options *ImportOptions) error {
 		options.importRecordsFunction = fun
 		return nil

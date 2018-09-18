@@ -85,8 +85,6 @@ func (rim recordImportManager) Run(field *Field, iterator RecordIterator, option
 
 func recordImportWorker(id int, client *Client, field *Field, chans importWorkerChannels, options ImportOptions) {
 	batchForShard := map[uint64][]Record{}
-	fieldName := field.Name()
-	indexName := field.index.Name()
 	importFun := options.importRecordsFunction
 	statusChan := chans.status
 	recordChan := chans.records
@@ -95,7 +93,7 @@ func recordImportWorker(id int, client *Client, field *Field, chans importWorker
 	importRecords := func(shard uint64, records []Record) error {
 		tic := time.Now()
 		sort.Sort(recordSort(records))
-		err := importFun(indexName, fieldName, shard, records)
+		err := importFun(field, shard, records, &options)
 		if err != nil {
 			return err
 		}

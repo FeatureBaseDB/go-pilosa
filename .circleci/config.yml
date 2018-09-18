@@ -1,0 +1,68 @@
+version: 2
+defaults: &defaults
+  working_directory: /go/src/github.com/pilosa/go-pilosa
+  docker:
+    - image: circleci/golang:1.10
+fast-checkout: &fast-checkout
+  attach_workspace:
+    at: .
+jobs:
+  build:
+    <<: *defaults
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - vendor-cache-{{ checksum "Gopkg.lock" }}
+      - run: "[ -d vendor ] || make vendor"
+      - save_cache:
+          key: vendor-cache-{{ checksum "Gopkg.lock" }}
+          paths:
+            - vendor
+      - persist_to_workspace:
+          root: .
+          paths: "*"
+  linter:
+    <<: *defaults
+    steps:
+      - *fast-checkout
+      - run: go get -u github.com/alecthomas/gometalinter
+      - run: gometalinter --install
+      - run: go get github.com/remyoudompheng/go-misc/deadcode
+      - run: make gometalinter
+  test-golang-1.10: &base-test
+    <<: *defaults
+    steps:
+      - *fast-checkout
+      - run: make test-all
+    docker:
+      - image: circleci/golang:1.10
+      - image: pilosa/pilosa:v1.1.0
+  test-golang-1.9:
+    <<: *base-test
+    docker:
+      - image: circleci/golang:1.9
+      - image: pilosa/pilosa:v1.1.0
+  coverage:
+    <<: *defaults
+    steps:
+      - *fast-checkout
+      - run: make start-pilosa GOOS=linux && sleep 2 && touch vendor && make cover PILOSA_BIND=https://:20101
+      - run: go get github.com/mattn/goveralls && /go/bin/goveralls -service=circle-ci -ignore "gopilosa_pbuf/public.pb.go" -coverprofile=build/coverage.out
+workflows:
+  version: 2
+  test:
+    jobs:
+      - build
+      - linter:
+          requires:
+            - build
+      - test-golang-1.10:
+          requires:
+            - build
+      - test-golang-1.9:
+          requires:
+            - build
+      - coverage:
+          requires:
+            - build

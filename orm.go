@@ -244,7 +244,8 @@ func NewPQLRowQuery(pql string, index *Index, err error) *PQLRowQuery {
 
 // IndexOptions contains options to customize Index objects.
 type IndexOptions struct {
-	keys bool
+	keys           bool
+	trackExistence bool
 }
 
 func (io *IndexOptions) withDefaults() (updated *IndexOptions) {
@@ -258,6 +259,9 @@ func (io IndexOptions) String() string {
 	mopt := map[string]interface{}{}
 	if io.keys {
 		mopt["keys"] = io.keys
+	}
+	if io.trackExistence {
+		mopt["trackExistence"] = io.trackExistence
 	}
 	return fmt.Sprintf(`{"options":%s}`, encodeMap(mopt))
 }
@@ -278,6 +282,13 @@ type IndexOption func(options *IndexOptions)
 func OptIndexKeys(keys bool) IndexOption {
 	return func(options *IndexOptions) {
 		options.keys = keys
+	}
+}
+
+// OptIndexTrackExistence enables keeping track of existence of columns.
+func OptIndexTrackExistence(trackExistence bool) IndexOption {
+	return func(options *IndexOptions) {
+		options.trackExistence = trackExistence
 	}
 }
 
@@ -403,6 +414,10 @@ func (idx *Index) Xor(rows ...*PQLRowQuery) *PQLRowQuery {
 		return NewPQLRowQuery("", idx, NewError("Xor operation requires at least 2 rows"))
 	}
 	return idx.rowOperation("Xor", rows...)
+}
+
+func (idx *Index) Not(row *PQLRowQuery) *PQLRowQuery {
+	return NewPQLRowQuery(fmt.Sprintf("Not(%s)", row.serialize()), idx, row.Error())
 }
 
 // Count creates a Count query.

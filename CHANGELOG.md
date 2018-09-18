@@ -12,6 +12,7 @@
         * Integer fields to store an integer in the given range.
         * Time fields which can store timestamps.
     * Experimental: Import strategies are experimental and may be removed in later versions.
+    * Moved CSV related functionality to the `csv` subpackge.
     * Renamed `FilterFieldTopN` function to `FilterAttrTopN`.
     * Removed all deprecated code.
     * Removed `Field` type and renamed `Frame` to `Field`.

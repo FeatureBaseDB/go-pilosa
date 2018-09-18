@@ -8,6 +8,12 @@
   revision = "888eb0692c857ec880338addf316bd662d5e630e"
 
 [[projects]]
+  name = "github.com/pilosa/pilosa"
+  packages = ["roaring"]
+  revision = "e664a0e42f967056d71c9ab113c5952918256b55"
+  version = "master"
+
+[[projects]]
   name = "github.com/pkg/errors"
   packages = ["."]
   revision = "645ef00459ed84a119197bfb8d8205042c6df63d"
@@ -28,6 +34,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "257e63bf216aafd8b69f0df36062480efdad0b354fa212c3d38df17e5beeb22c"
+  inputs-digest = "e4b44b3ac946d6fb582fa721179665f67d1359cf548174210c7d5cdeda59ac56"
   solver-name = "gps-cdcl"
   solver-version = 1

@@ -1736,7 +1736,7 @@ func getMockServer(statusCode int, response []byte, contentLength int) *httptest
 func fragmentNodesFromURL(url string) []fragmentNode {
 	serverURI := URIFromAddress(url)
 	nodes := []fragmentNode{
-		fragmentNode{
+		{
 			Scheme: serverURI.Scheme(),
 			Host:   serverURI.Host(),
 			Port:   serverURI.Port(),

@@ -319,22 +319,22 @@ func (c *Client) ImportField(field *Field, iterator RecordIterator, options ...I
 func (c *Client) importColumns(field *Field, shard uint64, records []Record, nodes []fragmentNode, options *ImportOptions) error {
 	eg := errgroup.Group{}
 	fast := !field.index.options.keys && !field.options.keys
+
+	if len(nodes) == 0 {
+		return errors.New("No nodes to import to")
+	}
+
+	if fast {
+		uri := nodes[0].URI()
+		bmp := columnsToBitmap(options.shardWidth, records)
+		return c.importRoaringBitmap(uri, field, shard, bmp)
+	}
+
 	for _, node := range nodes {
-		uri := &URI{
-			scheme: node.Scheme,
-			host:   node.Host,
-			port:   node.Port,
-		}
-		if fast {
-			eg.Go(func() error {
-				bmp := columnsToBitmap(options.shardWidth, records)
-				return c.importRoaringBitmap(uri, field, shard, bmp)
-			})
-		} else {
-			eg.Go(func() error {
-				return c.importNode(uri, columnsToImportRequest(field, shard, records))
-			})
-		}
+		uri := node.URI()
+		eg.Go(func() error {
+			return c.importNode(uri, columnsToImportRequest(field, shard, records))
+		})
 	}
 	err := eg.Wait()
 	return errors.Wrap(err, "importing columns to nodes")
@@ -1053,6 +1053,14 @@ type fragmentNode struct {
 	Scheme string `json:"scheme"`
 	Host   string `json:"host"`
 	Port   uint16 `json:"port"`
+}
+
+func (node fragmentNode) URI() *URI {
+	return &URI{
+		scheme: node.Scheme,
+		host:   node.Host,
+		port:   node.Port,
+	}
 }
 
 // Status contains the status information from a Pilosa server.

@@ -1,7 +1,7 @@
 # Change Log
 
 * **v1.1.0** (2018-09-25)
-    * Compatible with Pilosa 1.1.0.
+    * Compatible with Pilosa 1.1.
     * Added support for `Not` queries. See [Not call](https://www.pilosa.com/docs/master/query-language/#not). Usage sample: `index.Not(field.Row(1))`. This feature requires Pilosa on master branch.
 
 * **v0.10.0** (2018-09-05)

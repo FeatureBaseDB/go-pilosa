@@ -863,7 +863,10 @@ func TestNotQuery(t *testing.T) {
 	client := getClient()
 	index := schema.Index("not-query-index", OptIndexTrackExistence(true))
 	field := index.Field("not-field")
-	client.SyncSchema(schema)
+	err := client.SyncSchema(schema)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer client.DeleteIndex(index)
 
 	client.Query(index.BatchQuery(

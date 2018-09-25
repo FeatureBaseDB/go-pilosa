@@ -10,10 +10,10 @@ PILOSA_BIND ?= http://:10101
 all: test
 
 cover: vendor
-	PILOSA_BIND=$(PILOSA_BIND) go test ./... -cover $(TESTFLAGS) -covermode=count -coverprofile=build/coverage.out
+	PILOSA_BIND=$(PILOSA_BIND) go test ./... -cover $(TESTFLAGS) -tags="fullcoverage" -covermode=count -coverprofile=build/coverage.out
 
 fast-cover:
-	PILOSA_BIND=$(PILOSA_BIND) go test ./... -cover -tags="nointegration" $(TESTFLAGS)
+	PILOSA_BIND=$(PILOSA_BIND) go test ./... -cover $(TESTFLAGS)
 
 generate:
 	# This ensures that we don't forget to change the package name if we copy the proto definition from pilosa in order to update it.

@@ -1,5 +1,9 @@
 # Change Log
 
+* **v1.1.0** (2018-09-25)
+    * Compatible with Pilosa 1.1.0.
+    * Added support for `Not` queries. See [Not call](https://www.pilosa.com/docs/master/query-language/#not). Usage sample: `index.Not(field.Row(1))`. This feature requires Pilosa on master branch.
+
 * **v0.10.0** (2018-09-05)
     * Compatible with Pilosa 1.0.
     * Following terminology was changed:
@@ -18,7 +22,7 @@
     * Removed `Field` type and renamed `Frame` to `Field`.
     * Removed `client.ImportValueField` function. `client.ImportField` function imports both set and integer fields, depending on the type of the field.
     * Removed index and field validation. The validation is done only on the server side. `schema.Index` and `index.Field` functions do not return `error` values.
-  
+
 * **v0.9.0** (2018-05-10)
     * Compatible with Pilosa 0.9.
     * Added `Equals`, `NotEquals` and `NotNull` field operations.
@@ -44,13 +48,13 @@
     * **Removed** `NewClientFromAddresses` function. Use `NewClient([]string{address1, address2, ...}, option1, option2, ...)` instead.
     * **Removed** `NewClientWithURI` function. Use `NewClient(uri)` instead.
     * **Removed** `NewClientWithCluster` function. Use `NewClient(cluster, option1, option2, ...)` instead.
-    
+
 * **v0.8.0** (2017-11-16)
     * IPv6 support.
     * **Deprecation** `Error*` constants. Use `Err*` constants instead.
     * **Deprecation** `NewClientWithURI`, `NewClientFromAddresses` and `NewClientWithCluster` functions. Use `NewClient` function which can be used with the same parameters.
-    * **Deprecation** Passing a `*ClientOptions` struct to `NewClient` function. Pass 0 or more `ClientOption` structs to `NewClient` instead.  
-    * **Deprecation** Passing a `*QueryOptions` struct to `client.Query` function. Pass 0 or more `QueryOption` structs instead. 
+    * **Deprecation** Passing a `*ClientOptions` struct to `NewClient` function. Pass 0 or more `ClientOption` structs to `NewClient` instead.
+    * **Deprecation** Passing a `*QueryOptions` struct to `client.Query` function. Pass 0 or more `QueryOption` structs instead.
     * **Deprecation** Index options.
     * **Deprecation** Passing a `*FrameOptions` struct to `index.Frame` function. Pass 0 or more `FrameOption` structs instead.
 

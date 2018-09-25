@@ -60,7 +60,7 @@ In order to use BSI groups, an integer field should be created. The field should
 index := schema.Index("animals")
 captivity := index.Field("captivity", pilosa.OptFieldTypeInt(0, 956))
 client.SyncSchema(schema)
-``` 
+```
 
 If the field with the necessary field already exists on the server, you don't need to create the field instance, `client.SyncSchema(schema)` would load that to `schema`. You can then add some data:
 ```go
@@ -94,7 +94,7 @@ client.Query(index.BatchQuery(
 // Query for the total number of animals in captivity where row 42 is set
 response, _ = client.Query(captivity.Sum(field.Row(42)))
 fmt.Println(response.Result().Value())
-``` 
+```
 
 See the functions further below for the list of functions that can be used with a `Field`.
 
@@ -106,6 +106,7 @@ Index:
 * `Intersect(rows *PQLRowQuery...) *PQLRowQuery`
 * `Difference(rows *PQLRowQuery...) *PQLRowQuery`
 * `Xor(rows ...*PQLRowQuery) *PQLRowQuery`
+* `Not(row) *PQLRowQuery`
 * `Count(row *PQLRowQuery) *PQLBaseQuery`
 * `SetColumnAttrs(columnID uint64, attrs map[string]interface{}) *PQLBaseQuery`
 

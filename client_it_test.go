@@ -1,5 +1,3 @@
-// +build integration
-
 // Copyright 2017 Pilosa Corp.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -31,6 +29,8 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 // DAMAGE.
+//
+// +build !nointegration
 
 package pilosa
 
@@ -1763,7 +1763,7 @@ func getMockServer(statusCode int, response []byte, contentLength int) *httptest
 func fragmentNodesFromURL(url string) []fragmentNode {
 	serverURI := URIFromAddress(url)
 	nodes := []fragmentNode{
-		fragmentNode{
+		{
 			Scheme: serverURI.Scheme(),
 			Host:   serverURI.Host(),
 			Port:   serverURI.Port(),

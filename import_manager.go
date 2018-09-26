@@ -112,7 +112,7 @@ func recordImportWorker(id int, client *Client, field *Field, chans importWorker
 		}
 		tic := time.Now()
 		sort.Sort(recordSort(records))
-		err = importFun(field, shard, records, nodes)
+		err = importFun(field, shard, records, nodes, &options)
 		if err != nil {
 			return err
 		}

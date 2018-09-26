@@ -47,6 +47,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pilosa/pilosa/roaring"
+
 	"github.com/golang/protobuf/proto"
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
 	"github.com/pkg/errors"
@@ -64,7 +66,6 @@ type Client struct {
 	// and user agent is saved here in NewClient
 	userAgent         string
 	importThreadCount int
-	shardWidth        uint64
 	importManager     *recordImportManager
 	logger            *log.Logger
 	coordinatorURI    *URI
@@ -315,14 +316,22 @@ func (c *Client) ImportField(field *Field, iterator RecordIterator, options ...I
 	return c.importManager.Run(field, iterator, importOptions.withDefaults())
 }
 
-func (c *Client) importColumns(field *Field, shard uint64, records []Record, nodes []fragmentNode) error {
+func (c *Client) importColumns(field *Field, shard uint64, records []Record, nodes []fragmentNode, options *ImportOptions) error {
 	eg := errgroup.Group{}
+	fast := !field.index.options.keys && !field.options.keys
+
+	if len(nodes) == 0 {
+		return errors.New("No nodes to import to")
+	}
+
+	if fast {
+		uri := nodes[0].URI()
+		bmp := columnsToBitmap(options.shardWidth, records)
+		return c.importRoaringBitmap(uri, field, shard, bmp)
+	}
+
 	for _, node := range nodes {
-		uri := &URI{
-			scheme: node.Scheme,
-			host:   node.Host,
-			port:   node.Port,
-		}
+		uri := node.URI()
 		eg.Go(func() error {
 			return c.importNode(uri, columnsToImportRequest(field, shard, records))
 		})
@@ -331,7 +340,7 @@ func (c *Client) importColumns(field *Field, shard uint64, records []Record, nod
 	return errors.Wrap(err, "importing columns to nodes")
 }
 
-func (c *Client) importValues(field *Field, shard uint64, vals []Record, nodes []fragmentNode) error {
+func (c *Client) importValues(field *Field, shard uint64, vals []Record, nodes []fragmentNode, options *ImportOptions) error {
 	eg := errgroup.Group{}
 	for _, node := range nodes {
 		uri := &URI{
@@ -402,6 +411,28 @@ func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest) err
 func (c *Client) importData(uri *URI, indexName string, fieldName string, data []byte) error {
 	path := fmt.Sprintf("/index/%s/field/%s/import", indexName, fieldName)
 	resp, err := c.doRequest(uri, "POST", path, defaultProtobufHeaders(), bytes.NewReader(data))
+	if err = anyError(resp, err); err != nil {
+		return errors.Wrap(err, "doing import")
+	}
+	defer resp.Body.Close()
+
+	return nil
+}
+
+func (c *Client) importRoaringBitmap(uri *URI, field *Field, shard uint64, bmp *roaring.Bitmap) error {
+	buf := &bytes.Buffer{}
+	_, err := bmp.WriteTo(buf)
+	if err != nil {
+		return errors.Wrap(err, "marshalling bitmap")
+	}
+	path := fmt.Sprintf("/index/%s/field/%s/import-roaring/%d",
+		field.index.name, field.name, shard)
+	headers := map[string]string{
+		"Content-Type": "application/x-binary",
+		"Accept":       "application/x-protobuf",
+	}
+	data := buf.Bytes()
+	resp, err := c.doRequest(uri, "POST", path, headers, bytes.NewReader(data))
 	if err = anyError(resp, err); err != nil {
 		return errors.Wrap(err, "doing import")
 	}
@@ -731,6 +762,15 @@ func columnsToImportRequest(field *Field, shard uint64, records []Record) *pbuf.
 	}
 }
 
+func columnsToBitmap(shardWidth uint64, records []Record) *roaring.Bitmap {
+	bmp := roaring.NewBitmap()
+	for _, record := range records {
+		c := record.(Column)
+		bmp.DirectAdd(c.RowID*shardWidth + (c.ColumnID % shardWidth))
+	}
+	return bmp
+}
+
 func valsToImportRequest(field *Field, shard uint64, vals []Record) *pbuf.ImportValueRequest {
 	var columnIDs []uint64
 	var columnKeys []string
@@ -938,7 +978,7 @@ type ImportOptions struct {
 	batchSize             int
 	strategy              ImportWorkerStrategy
 	statusChan            chan<- ImportStatusUpdate
-	importRecordsFunction func(field *Field, shard uint64, records []Record, nodes []fragmentNode) error
+	importRecordsFunction func(field *Field, shard uint64, records []Record, nodes []fragmentNode, options *ImportOptions) error
 }
 
 func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
@@ -998,7 +1038,7 @@ func OptImportStatusChannel(statusChan chan<- ImportStatusUpdate) ImportOption {
 	}
 }
 
-func importRecordsFunction(fun func(field *Field, shard uint64, records []Record, nodes []fragmentNode) error) ImportOption {
+func importRecordsFunction(fun func(field *Field, shard uint64, records []Record, nodes []fragmentNode, options *ImportOptions) error) ImportOption {
 	return func(options *ImportOptions) error {
 		options.importRecordsFunction = fun
 		return nil
@@ -1013,6 +1053,14 @@ type fragmentNode struct {
 	Scheme string `json:"scheme"`
 	Host   string `json:"host"`
 	Port   uint16 `json:"port"`
+}
+
+func (node fragmentNode) URI() *URI {
+	return &URI{
+		scheme: node.Scheme,
+		host:   node.Host,
+		port:   node.Port,
+	}
 }
 
 // Status contains the status information from a Pilosa server.

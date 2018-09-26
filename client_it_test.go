@@ -659,7 +659,7 @@ func TestImportWithBatchSizeExpectingZero(t *testing.T) {
 	}
 }
 
-func failingImportColumns(field *Field, shard uint64, records []Record, nodes []fragmentNode) error {
+func failingImportColumns(field *Field, shard uint64, records []Record, nodes []fragmentNode, options *ImportOptions) error {
 	if len(records) > 0 {
 		return errors.New("some error")
 	}
@@ -956,7 +956,7 @@ func TestImportFailsOnImportColumnsError(t *testing.T) {
 	index := NewIndex("foo")
 	field := index.Field("bar")
 	nodes := fragmentNodesFromURL(server.URL)
-	err := client.importColumns(field, 0, []Record{}, nodes)
+	err := client.importColumns(field, 0, []Record{}, nodes, &ImportOptions{})
 	if err == nil {
 		t.Fatalf("importColumns should fail when fetch fragment nodes fails")
 	}
@@ -969,7 +969,7 @@ func TestValueImportFailsOnImportValueError(t *testing.T) {
 	index := NewIndex("foo")
 	field := index.Field("bar")
 	nodes := fragmentNodesFromURL(server.URL)
-	err := client.importValues(field, 0, nil, nodes)
+	err := client.importValues(field, 0, nil, nodes, &ImportOptions{})
 	if err == nil {
 		t.Fatalf("importValues should fail when fetch fragment nodes fails")
 	}
@@ -983,7 +983,7 @@ func TestImportColumnsFailInvalidNodeAddress(t *testing.T) {
 	index := NewIndex("foo")
 	field := index.Field("bar")
 	nodes := fragmentNodesFromURL("zzz://doesntmatter:10101")
-	err := client.importColumns(field, 0, []Record{}, nodes)
+	err := client.importColumns(field, 0, []Record{}, nodes, &ImportOptions{})
 	if err == nil {
 		t.Fatalf("importColumns should fail on invalid node host")
 	}
@@ -997,7 +997,7 @@ func TestImportValuesFailInvalidNodeAddress(t *testing.T) {
 	index := NewIndex("foo")
 	field := index.Field("bar")
 	nodes := fragmentNodesFromURL("zzz://doesntmatter:10101")
-	err := client.importValues(field, 0, nil, nodes)
+	err := client.importValues(field, 0, nil, nodes, &ImportOptions{})
 	if err == nil {
 		t.Fatalf("importValues should fail on invalid node host")
 	}

@@ -318,7 +318,7 @@ func (c *Client) ImportField(field *Field, iterator RecordIterator, options ...I
 
 func (c *Client) importColumns(field *Field, shard uint64, records []Record, nodes []fragmentNode, options *ImportOptions) error {
 	eg := errgroup.Group{}
-	fast := !field.index.options.keys && !field.options.keys
+	fast := !field.index.options.keys && !field.options.keys && options.roaring
 
 	if len(nodes) == 0 {
 		return errors.New("No nodes to import to")
@@ -979,6 +979,7 @@ type ImportOptions struct {
 	strategy              ImportWorkerStrategy
 	statusChan            chan<- ImportStatusUpdate
 	importRecordsFunction func(field *Field, shard uint64, records []Record, nodes []fragmentNode, options *ImportOptions) error
+	roaring               bool
 }
 
 func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
@@ -1034,6 +1035,13 @@ func OptImportStrategy(strategy ImportWorkerStrategy) ImportOption {
 func OptImportStatusChannel(statusChan chan<- ImportStatusUpdate) ImportOption {
 	return func(options *ImportOptions) error {
 		options.statusChan = statusChan
+		return nil
+	}
+}
+
+func OptImportRoaring(enabled bool) ImportOption {
+	return func(options *ImportOptions) error {
+		options.roaring = enabled
 		return nil
 	}
 }

@@ -1,5 +1,8 @@
 # Change Log
 
+* **master**
+    * Added support for roaring imports which can speed up the import process by %30 for non-key column imports. Pass `OptImportRoaring(true)` to `client.ImportField` to enable it. This feature requires Pilosa on master branch.
+
 * **v1.1.0** (2018-09-25)
     * Compatible with Pilosa 1.1.
     * Added support for `Not` queries. See [Not call](https://www.pilosa.com/docs/master/query-language/#not). Usage sample: `index.Not(field.Row(1))`. This feature requires Pilosa on master branch.

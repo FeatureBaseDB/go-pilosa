@@ -2,16 +2,16 @@
 
 
 [[projects]]
-  branch = "master"
   name = "github.com/golang/protobuf"
   packages = ["proto"]
-  revision = "888eb0692c857ec880338addf316bd662d5e630e"
+  revision = "aa810b61a9c79d51363740d207bb46cf8e620ed5"
+  version = "v1.2.0"
 
 [[projects]]
+  branch = "master"
   name = "github.com/pilosa/pilosa"
   packages = ["roaring"]
-  revision = "e664a0e42f967056d71c9ab113c5952918256b55"
-  version = "master"
+  revision = "1706e9b4e1745fd17b4575155e77f1b3683a6cbb"
 
 [[projects]]
   name = "github.com/pkg/errors"
@@ -23,17 +23,17 @@
   branch = "master"
   name = "golang.org/x/net"
   packages = ["context"]
-  revision = "f5dfe339be1d06f81b22525fe34671ee7d2c8904"
+  revision = "4dfa2610cdf3b287375bbba5b8f2a14d3b01d8de"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/sync"
   packages = ["errgroup"]
-  revision = "fd80eb99c8f653c847d294a001bdf2a3a6f768f5"
+  revision = "1d60e4601c6fd243af51cc01ddf169918a5407ca"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "e4b44b3ac946d6fb582fa721179665f67d1359cf548174210c7d5cdeda59ac56"
+  inputs-digest = "60081f3500585b6ef7422b00ab05bc1f5bbde2f21b79927619f0c3b1e15a7e3b"
   solver-name = "gps-cdcl"
   solver-version = 1

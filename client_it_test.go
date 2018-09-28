@@ -1290,7 +1290,11 @@ func TestClientRace(t *testing.T) {
 
 func TestImportFieldWithoutImportFunFails(t *testing.T) {
 	client := DefaultClient()
-	err := client.ImportField(&Field{}, nil, importRecordsFunction(nil))
+	field := &Field{
+		index:   &Index{options: &IndexOptions{}},
+		options: &FieldOptions{},
+	}
+	err := client.ImportField(field, nil, importRecordsFunction(nil))
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -1401,7 +1405,7 @@ func TestRowIDColumnIDImportRoaring(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportField(field, iterator, OptImportRoaring(true))
+	err = client.ImportField(field, iterator)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1448,7 +1452,22 @@ func TestRowIDColumnIDImportFails(t *testing.T) {
 }
 
 func TestRowIDColumnIDImportFailsRoaring(t *testing.T) {
-	server := getMockServer(200, []byte(`[{"id":"8aaebf1e-4a80-41c8-99d0-26c27244b6f6","uri":{"scheme":"http","host":"nonexistent","port":10101},"isCoordinator":true}]`), -1)
+	field := NewSchema().Index("foo").Field("bar")
+	roaringImportPath := makeRoaringImportPath(field, 0)
+	fragmentNodesPath := fmt.Sprintf("/internal/fragment/nodes?shard=%d&index=%s", 0, "foo")
+	paths := map[string]mockResponseItem{
+		roaringImportPath: {
+			content:       nil,
+			statusCode:    405,
+			contentLength: 0,
+		},
+		fragmentNodesPath: {
+			content:       []byte(`[{"id":"8aaebf1e-4a80-41c8-99d0-26c27244b6f6","uri":{"scheme":"http","host":"nonexistent","port":10101},"isCoordinator":true}]`),
+			statusCode:    200,
+			contentLength: -1,
+		},
+	}
+	server := getMockPathServer(paths)
 	defer server.Close()
 	client, _ := NewClient(server.URL)
 	iterator := NewArrayRecordIterator([]Record{
@@ -1457,8 +1476,7 @@ func TestRowIDColumnIDImportFailsRoaring(t *testing.T) {
 		Column{RowID: 2, ColumnID: 3},
 		Column{RowID: 7, ColumnID: 1},
 	})
-	field := NewSchema().Index("foo").Field("bar")
-	err := client.ImportField(field, iterator, OptImportRoaring(true))
+	err := client.ImportField(field, iterator)
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}

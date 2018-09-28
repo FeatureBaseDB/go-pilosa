@@ -306,6 +306,8 @@ func (c *Client) ImportField(field *Field, iterator RecordIterator, options ...I
 	if field.options != nil && field.options.fieldType == FieldTypeInt {
 		importRecordsFunction(c.importValues)(importOptions)
 	} else {
+		// Check whether roaring imports is available
+		importOptions.roaring = c.hasRoaringImportSupport(field)
 		importRecordsFunction(c.importColumns)(importOptions)
 	}
 	for _, option := range options {
@@ -318,13 +320,12 @@ func (c *Client) ImportField(field *Field, iterator RecordIterator, options ...I
 
 func (c *Client) importColumns(field *Field, shard uint64, records []Record, nodes []fragmentNode, options *ImportOptions) error {
 	eg := errgroup.Group{}
-	fast := !field.index.options.keys && !field.options.keys && options.roaring
 
 	if len(nodes) == 0 {
 		return errors.New("No nodes to import to")
 	}
 
-	if fast {
+	if options.roaring {
 		uri := nodes[0].URI()
 		bmp := columnsToBitmap(options.shardWidth, records)
 		return c.importRoaringBitmap(uri, field, shard, bmp)
@@ -338,6 +339,21 @@ func (c *Client) importColumns(field *Field, shard uint64, records []Record, nod
 	}
 	err := eg.Wait()
 	return errors.Wrap(err, "importing columns to nodes")
+}
+
+func (c *Client) hasRoaringImportSupport(field *Field) bool {
+	if field.index.options.keys || field.options.keys {
+		// Roaring imports is not available when keys are involved.
+		return false
+	}
+	// Check whether the roaring import endpoint exists
+	path := makeRoaringImportPath(field, 0)
+	resp, _, _ := c.httpRequest("GET", path, nil, nil, false)
+	if resp.StatusCode == http.StatusMethodNotAllowed || resp.StatusCode == http.StatusOK {
+		// Roaring import endpoint exists
+		return true
+	}
+	return false
 }
 
 func (c *Client) importValues(field *Field, shard uint64, vals []Record, nodes []fragmentNode, options *ImportOptions) error {
@@ -425,8 +441,7 @@ func (c *Client) importRoaringBitmap(uri *URI, field *Field, shard uint64, bmp *
 	if err != nil {
 		return errors.Wrap(err, "marshalling bitmap")
 	}
-	path := fmt.Sprintf("/index/%s/field/%s/import-roaring/%d",
-		field.index.name, field.name, shard)
+	path := makeRoaringImportPath(field, shard)
 	headers := map[string]string{
 		"Content-Type": "application/x-binary",
 		"Accept":       "application/x-protobuf",
@@ -708,6 +723,11 @@ func makeRequestData(query string, options *QueryOptions) ([]byte, error) {
 		return nil, errors.Wrap(err, "marshaling request to protobuf")
 	}
 	return r, nil
+}
+
+func makeRoaringImportPath(field *Field, shard uint64) string {
+	return fmt.Sprintf("/index/%s/field/%s/import-roaring/%d",
+		field.index.name, field.name, shard)
 }
 
 func columnsToImportRequest(field *Field, shard uint64, records []Record) *pbuf.ImportRequest {
@@ -1035,13 +1055,6 @@ func OptImportStrategy(strategy ImportWorkerStrategy) ImportOption {
 func OptImportStatusChannel(statusChan chan<- ImportStatusUpdate) ImportOption {
 	return func(options *ImportOptions) error {
 		options.statusChan = statusChan
-		return nil
-	}
-}
-
-func OptImportRoaring(enabled bool) ImportOption {
-	return func(options *ImportOptions) error {
-		options.roaring = enabled
 		return nil
 	}
 }

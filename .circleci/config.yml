@@ -37,12 +37,12 @@ jobs:
       - run: make test-all
     docker:
       - image: circleci/golang:1.10
-      - image: pilosa/pilosa:v1.1.0
+      - image: pilosa/pilosa:master
   test-golang-1.9:
     <<: *base-test
     docker:
       - image: circleci/golang:1.9
-      - image: pilosa/pilosa:v1.1.0
+      - image: pilosa/pilosa:master
 workflows:
   version: 2
   test:

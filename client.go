@@ -996,7 +996,6 @@ type ImportOptions struct {
 	shardWidth            uint64
 	timeout               time.Duration
 	batchSize             int
-	strategy              ImportWorkerStrategy
 	statusChan            chan<- ImportStatusUpdate
 	importRecordsFunction func(field *Field, shard uint64, records []Record, nodes []fragmentNode, options *ImportOptions) error
 	roaring               bool
@@ -1015,9 +1014,6 @@ func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
 	if updated.batchSize <= 0 {
 		updated.batchSize = 100000
 	}
-	if updated.strategy == DefaultImport {
-		updated.strategy = BatchImport
-	}
 	return
 }
 
@@ -1031,23 +1027,9 @@ func OptImportThreadCount(count int) ImportOption {
 	}
 }
 
-func OptImportTimeout(timeout time.Duration) ImportOption {
-	return func(options *ImportOptions) error {
-		options.timeout = timeout
-		return nil
-	}
-}
-
 func OptImportBatchSize(batchSize int) ImportOption {
 	return func(options *ImportOptions) error {
 		options.batchSize = batchSize
-		return nil
-	}
-}
-
-func OptImportStrategy(strategy ImportWorkerStrategy) ImportOption {
-	return func(options *ImportOptions) error {
-		options.strategy = strategy
 		return nil
 	}
 }

@@ -590,21 +590,6 @@ func NewGivenColumnGenerator(recs []Record) *GivenColumnGenerator {
 	}
 }
 
-func TestImportWithTimeout(t *testing.T) {
-	client := getClient()
-	iterator := &ColumnGenerator{numRows: 100, numColumns: 1000}
-	field := index.Field("importfield-timeout")
-	err := client.EnsureField(field)
-	if err != nil {
-		t.Fatal(err)
-	}
-	statusChan := make(chan ImportStatusUpdate, 10000)
-	err = client.ImportField(field, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(8), OptImportStrategy(TimeoutImport), OptImportTimeout(10*time.Millisecond), OptImportBatchSize(1000))
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestImportWithBatchSize(t *testing.T) {
 	client := getClient()
 	iterator := &ColumnGenerator{numRows: 10, numColumns: 1000}
@@ -614,7 +599,7 @@ func TestImportWithBatchSize(t *testing.T) {
 		t.Fatal(err)
 	}
 	statusChan := make(chan ImportStatusUpdate, 10)
-	err = client.ImportField(field, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(BatchImport), OptImportBatchSize(1000))
+	err = client.ImportField(field, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportBatchSize(1000))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -653,7 +638,7 @@ func TestImportWithBatchSizeExpectingZero(t *testing.T) {
 		t.Fatal(err)
 	}
 	statusChan := make(chan ImportStatusUpdate, 10)
-	err = client.ImportField(field, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(BatchImport), OptImportBatchSize(6))
+	err = client.ImportField(field, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportBatchSize(6))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -666,21 +651,6 @@ func failingImportColumns(field *Field, shard uint64, records []Record, nodes []
 	return nil
 }
 
-func TestImportWithTimeoutFails(t *testing.T) {
-	client := getClient()
-	iterator := &ColumnGenerator{numRows: 10, numColumns: 1000}
-	field := index.Field("importfield-timeout")
-	err := client.EnsureField(field)
-	if err != nil {
-		t.Fatal(err)
-	}
-	statusChan := make(chan ImportStatusUpdate, 10)
-	err = client.ImportField(field, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(TimeoutImport), OptImportTimeout(1*time.Millisecond), importRecordsFunction(failingImportColumns))
-	if err == nil {
-		t.Fatalf("Should have failed")
-	}
-}
-
 func TestImportWithBatchSizeFails(t *testing.T) {
 	client := getClient()
 	iterator := &ColumnGenerator{numRows: 10, numColumns: 1000}
@@ -690,7 +660,7 @@ func TestImportWithBatchSizeFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	statusChan := make(chan ImportStatusUpdate, 10)
-	err = client.ImportField(field, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportStrategy(BatchImport), OptImportBatchSize(1000), importRecordsFunction(failingImportColumns))
+	err = client.ImportField(field, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(1), OptImportBatchSize(1000), importRecordsFunction(failingImportColumns))
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}

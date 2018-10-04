@@ -128,23 +128,8 @@ func recordImportWorker(id int, client *Client, field *Field, chans importWorker
 		return nil
 	}
 
-	largestShard := func() uint64 {
-		largest := 0
-		resultShard := uint64(0)
-		for shard, records := range batchForShard {
-			if len(records) > largest {
-				largest = len(records)
-				resultShard = shard
-			}
-		}
-		return resultShard
-	}
-
 	var err error
-	tic := time.Now()
-	strategy := options.strategy
 	recordCount := 0
-	timeout := options.timeout
 	batchSize := options.batchSize
 	shardWidth := options.shardWidth
 
@@ -153,7 +138,7 @@ func recordImportWorker(id int, client *Client, field *Field, chans importWorker
 		shard := record.Shard(shardWidth)
 		batchForShard[shard] = append(batchForShard[shard], record)
 
-		if strategy == BatchImport && recordCount >= batchSize {
+		if recordCount >= batchSize {
 			for shard, records := range batchForShard {
 				if len(records) == 0 {
 					continue
@@ -165,16 +150,6 @@ func recordImportWorker(id int, client *Client, field *Field, chans importWorker
 				batchForShard[shard] = nil
 			}
 			recordCount = 0
-			tic = time.Now()
-		} else if strategy == TimeoutImport && time.Since(tic) >= timeout {
-			shard := largestShard()
-			err = importRecords(shard, batchForShard[shard])
-			if err != nil {
-				break
-			}
-			batchForShard[shard] = nil
-			recordCount = 0
-			tic = time.Now()
 		}
 	}
 

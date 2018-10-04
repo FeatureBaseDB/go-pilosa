@@ -539,6 +539,12 @@ func TestSetRowAttrsInvalidAttr(t *testing.T) {
 	}
 }
 
+func TestStore(t *testing.T) {
+	comparePQL(t,
+		"Store(Row(collaboration=5),sample-field=10)",
+		sampleField.Store(collabField.Row(5), 10))
+}
+
 func TestBatchQuery(t *testing.T) {
 	q := sampleIndex.BatchQuery()
 	if q.Index() != sampleIndex {

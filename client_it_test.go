@@ -886,6 +886,32 @@ func TestNotQuery(t *testing.T) {
 	}
 }
 
+func TestStoreQuery(t *testing.T) {
+	client := getClient()
+	index := schema.Index("store-query-index")
+	fromField := index.Field("from-field")
+	toField := index.Field("to-field")
+	err := client.SyncSchema(schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.DeleteIndex(index)
+
+	client.Query(index.BatchQuery(
+		fromField.Set(10, 100),
+		fromField.Set(10, 200),
+		toField.Store(fromField.Row(10), 1),
+	))
+	resp, err := client.Query(toField.Row(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := []uint64{100, 200}
+	if !reflect.DeepEqual(target, resp.Result().Row().Columns) {
+		t.Fatalf("%v != %v", target, resp.Result().Row().Columns)
+	}
+}
+
 func TestExcludeAttrsColumns(t *testing.T) {
 	client := getClient()
 	field := index.Field("excludecolumnsattrsfield")

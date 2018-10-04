@@ -742,6 +742,14 @@ func (f *Field) SetRowAttrs(rowIDOrKey interface{}, attrs map[string]interface{}
 	return q
 }
 
+func (f *Field) Store(row *PQLRowQuery, rowIDOrKey interface{}) *PQLBaseQuery {
+	rowStr, err := formatIDKey(rowIDOrKey)
+	if err != nil {
+		return NewPQLBaseQuery("", f.index, err)
+	}
+	return NewPQLBaseQuery(fmt.Sprintf("Store(%s,%s=%s)", row.serialize().Query, f.name, rowStr), f.index, nil)
+}
+
 func createAttributesString(attrs map[string]interface{}) (string, error) {
 	attrsList := make([]string, 0, len(attrs))
 	for k, v := range attrs {

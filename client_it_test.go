@@ -888,9 +888,10 @@ func TestNotQuery(t *testing.T) {
 
 func TestStoreQuery(t *testing.T) {
 	client := getClient()
-	index := schema.Index("store-query-index")
-	fromField := index.Field("from-field")
-	toField := index.Field("to-field")
+	schema := NewSchema()
+	index := schema.Index("store-test")
+	fromField := index.Field("x-from-field")
+	toField := index.Field("x-to-field")
 	err := client.SyncSchema(schema)
 	if err != nil {
 		t.Fatal(err)

@@ -742,6 +742,16 @@ func (f *Field) SetRowAttrs(rowIDOrKey interface{}, attrs map[string]interface{}
 	return q
 }
 
+// Store creates a Store call.
+// Store writes the result of the row query to the specified row. If the row already exists, it will be replaced. The destination field must be of field type set.
+func (f *Field) Store(row *PQLRowQuery, rowIDOrKey interface{}) *PQLBaseQuery {
+	rowStr, err := formatIDKey(rowIDOrKey)
+	if err != nil {
+		return NewPQLBaseQuery("", f.index, err)
+	}
+	return NewPQLBaseQuery(fmt.Sprintf("Store(%s,%s=%s)", row.serialize().Query, f.name, rowStr), f.index, nil)
+}
+
 func createAttributesString(attrs map[string]interface{}) (string, error) {
 	attrsList := make([]string, 0, len(attrs))
 	for k, v := range attrs {

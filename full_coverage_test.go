@@ -14,7 +14,6 @@ import (
 )
 
 // TestMultipleClientKeyQuery2 coverts else {host = c.coordinatorURI} line in Client.host function
-
 func TestMultipleClientKeyQuery2(t *testing.T) {
 	server := getMockStatusServer(200, []byte(`{"state":"NORMAL","nodes":[{"isCoordinator":true, "id":"0f5c2ffc-1244-47d0-a83d-f5a25abba9bc","uri":{"scheme":"http","host":"nonexistent","port":10101}}],"localID":"0f5c2ffc-1244-47d0-a83d-f5a25abba9bc"}`), -1)
 	defer server.Close()

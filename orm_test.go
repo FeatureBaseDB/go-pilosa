@@ -564,6 +564,17 @@ func TestStore(t *testing.T) {
 		sampleField.Store(collabField.Row(5), 10))
 }
 
+func TestOptions(t *testing.T) {
+	comparePQL(t,
+		"Options(Row(collaboration=5),columnAttrs=true,excludeColumns=true,excludeRowAttrs=true,shards=[1,3])",
+		sampleIndex.Options(collabField.Row(5),
+			OptOptionsColumnAttrs(true),
+			OptOptionsExcludeColumns(true),
+			OptOptionsExcludeRowAttrs(true),
+			OptOptionsShards(1, 3),
+		))
+}
+
 func TestBatchQuery(t *testing.T) {
 	q := sampleIndex.BatchQuery()
 	if q.Index() != sampleIndex {

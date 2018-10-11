@@ -581,9 +581,7 @@ func (fo FieldOptions) String() string {
 	mopt := map[string]interface{}{}
 
 	switch fo.fieldType {
-	case FieldTypeSet:
-		fallthrough
-	case FieldTypeMutex:
+	case FieldTypeSet, FieldTypeMutex:
 		if fo.cacheType != CacheTypeDefault {
 			mopt["cacheType"] = string(fo.cacheType)
 		}

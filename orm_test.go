@@ -623,6 +623,16 @@ func TestTimeFieldOptions(t *testing.T) {
 	compareFieldOptions(t, field.Options(), FieldTypeTime, TimeQuantumDayHour, CacheTypeDefault, 0, 0, 0)
 }
 
+func TestMutexFieldOptions(t *testing.T) {
+	field := sampleIndex.Field("mutex-field", OptFieldTypeMutex(CacheTypeRanked, 9999))
+	jsonString := field.options.String()
+	targetString := `{"options":{"type":"mutex","cacheType":"ranked","cacheSize":9999}}`
+	if sortedString(targetString) != sortedString(jsonString) {
+		t.Fatalf("`%s` != `%s`", targetString, jsonString)
+	}
+	compareFieldOptions(t, field.Options(), FieldTypeMutex, TimeQuantumNone, CacheTypeRanked, 9999, 0, 0)
+}
+
 func TestEncodeMapPanicsOnMarshalFailure(t *testing.T) {
 	defer func() {
 		recover()

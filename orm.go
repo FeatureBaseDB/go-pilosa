@@ -518,6 +518,8 @@ func (fo FieldOptions) String() string {
 
 	switch fo.fieldType {
 	case FieldTypeSet:
+		fallthrough
+	case FieldTypeMutex:
 		if fo.cacheType != CacheTypeDefault {
 			mopt["cacheType"] = string(fo.cacheType)
 		}
@@ -572,10 +574,20 @@ func OptFieldTypeInt(min int64, max int64) FieldOption {
 	}
 }
 
+// OptFieldTypeTime adds a time field.
 func OptFieldTypeTime(quantum TimeQuantum) FieldOption {
 	return func(options *FieldOptions) {
 		options.fieldType = FieldTypeTime
 		options.timeQuantum = quantum
+	}
+}
+
+// OptFieldTypeMutex adds a mutex field.
+func OptFieldTypeMutex(cacheType CacheType, cacheSize int) FieldOption {
+	return func(options *FieldOptions) {
+		options.fieldType = FieldTypeMutex
+		options.cacheType = cacheType
+		options.cacheSize = cacheSize
 	}
 }
 
@@ -810,6 +822,7 @@ const (
 	FieldTypeSet     FieldType = "set"
 	FieldTypeInt     FieldType = "int"
 	FieldTypeTime    FieldType = "time"
+	FieldTypeMutex   FieldType = "mutex"
 )
 
 // TimeQuantum type represents valid time quantum values time fields.

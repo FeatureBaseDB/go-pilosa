@@ -3,6 +3,7 @@
 * **master**
     * Added support for roaring imports which can speed up the import process by %30 for non-key column imports. This feature requires Pilosa on master branch.
     * Added mutex and bool fields.
+    * Added `field.ClearRow` call.
     * Removed experimental import strategies.
 
 * **v1.1.0** (2018-09-25)

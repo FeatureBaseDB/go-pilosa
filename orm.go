@@ -690,6 +690,18 @@ func (f *Field) Clear(rowIDOrKey, colIDOrKey interface{}) *PQLBaseQuery {
 	return q
 }
 
+// ClearRow creates a ClearRow query.
+// ClearRow sets all bits to 0 in a given row of the binary matrix, thus disassociating the given row in the given field from all columns.
+func (f *Field) ClearRow(rowIDOrKey interface{}) *PQLBaseQuery {
+	rowStr, err := formatIDKeyBool(rowIDOrKey)
+	if err != nil {
+		return NewPQLBaseQuery("", f.index, err)
+	}
+	text := fmt.Sprintf("ClearRow(%s=%s)", f.name, rowStr)
+	q := NewPQLBaseQuery(text, f.index, nil)
+	return q
+}
+
 // TopN creates a TopN query with the given item count.
 // Returns the id and count of the top n rows (by count of columns) in the field.
 func (f *Field) TopN(n uint64) *PQLRowQuery {

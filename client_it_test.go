@@ -367,6 +367,44 @@ func TestSetBoolField(t *testing.T) {
 	}
 }
 
+func TestClearRowQuery(t *testing.T) {
+	client := getClient()
+	field := index.Field("clear-row-test")
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = client.Query(index.BatchQuery(
+		field.Set(1, 100),
+		field.Set(1, 200),
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := client.Query(field.Row(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := []uint64{100, 200}
+	if !reflect.DeepEqual(target, response.Result().Row().Columns) {
+		t.Fatalf("%v != %v", target, response.Result().Row().Columns)
+	}
+
+	_, err = client.Query(field.ClearRow(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err = client.Query(field.Row(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target = []uint64(nil)
+	if !reflect.DeepEqual(target, response.Result().Row().Columns) {
+		t.Fatalf("%v != %v", target, response.Result().Row().Columns)
+	}
+}
+
 func TestCreateDeleteIndexField(t *testing.T) {
 	client := getClient()
 	index1 := NewIndex("to-be-deleted")

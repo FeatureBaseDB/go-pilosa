@@ -219,7 +219,7 @@ func TestRow(t *testing.T) {
 		"Row(collaboration='b7feb014-8ea7-49a8-9cd8-19709161ab63')",
 		collabField.Row("b7feb014-8ea7-49a8-9cd8-19709161ab63"))
 
-	q := collabField.Row(false)
+	q := collabField.Row(nil)
 	if q.err == nil {
 		t.Fatalf("should have failed")
 	}
@@ -274,6 +274,25 @@ func TestClear(t *testing.T) {
 		t.Fatalf("should have failed")
 	}
 	q = collabField.Clear(5, false)
+	if q.err == nil {
+		t.Fatalf("should have failed")
+	}
+}
+
+func TestClearRow(t *testing.T) {
+	comparePQL(t,
+		"ClearRow(collaboration=5)",
+		collabField.ClearRow(5))
+
+	comparePQL(t,
+		"ClearRow(collaboration='five')",
+		collabField.ClearRow("five"))
+
+	comparePQL(t,
+		"ClearRow(collaboration=true)",
+		collabField.ClearRow(true))
+
+	q := collabField.ClearRow(nil)
 	if q.err == nil {
 		t.Fatalf("should have failed")
 	}
@@ -519,7 +538,7 @@ func TestSetRowAttrsTest(t *testing.T) {
 		"SetRowAttrs(collaboration,'foo',active=true,quote=\"\\\"Don't worry, be happy\\\"\")",
 		collabField.SetRowAttrs("foo", attrs))
 
-	q := collabField.SetRowAttrs(false, attrs)
+	q := collabField.SetRowAttrs(nil, attrs)
 	if q.err == nil {
 		t.Fatalf("should have failed")
 	}
@@ -557,7 +576,7 @@ func TestBatchQuery(t *testing.T) {
 	}
 	comparePQL(t, "Row(sample-field=44)Row(sample-field=10101)", q)
 
-	q2 := sampleField.Row(false)
+	q2 := sampleField.Row(nil)
 	if q2.err == nil {
 		t.Fatalf("should have failed")
 	}
@@ -587,7 +606,7 @@ func TestRange(t *testing.T) {
 		"Range(collaboration='foo',1970-01-01T00:00,2000-02-02T03:04)",
 		collabField.Range("foo", start, end))
 
-	q := collabField.Range(false, start, end)
+	q := collabField.Range(nil, start, end)
 	if q.err == nil {
 		t.Fatalf("should have failed")
 	}

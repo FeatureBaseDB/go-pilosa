@@ -591,6 +591,13 @@ func OptFieldTypeMutex(cacheType CacheType, cacheSize int) FieldOption {
 	}
 }
 
+// OptFieldTypeBool adds a bool field.
+func OptFieldTypeBool() FieldOption {
+	return func(options *FieldOptions) {
+		options.fieldType = FieldTypeBool
+	}
+}
+
 // OptFieldKeys sets whether field uses string keys.
 func OptFieldKeys(keys bool) FieldOption {
 	return func(options *FieldOptions) {
@@ -634,7 +641,7 @@ func (f *Field) copy() *Field {
 // Row retrieves the indices of all the set columns in a row.
 // It also retrieves any attributes set on that row or column.
 func (f *Field) Row(rowIDOrKey interface{}) *PQLRowQuery {
-	rowStr, err := formatIDKey(rowIDOrKey)
+	rowStr, err := formatIDKeyBool(rowIDOrKey)
 	if err != nil {
 		return NewPQLRowQuery("", f.index, err)
 	}
@@ -727,7 +734,7 @@ func (f *Field) filterAttrTopN(n uint64, row *PQLRowQuery, field string, values 
 // Range creates a Range query.
 // Similar to Row, but only returns columns which were set with timestamps between the given start and end timestamps.
 func (f *Field) Range(rowIDOrKey interface{}, start time.Time, end time.Time) *PQLRowQuery {
-	rowStr, err := formatIDKey(rowIDOrKey)
+	rowStr, err := formatIDKeyBool(rowIDOrKey)
 	if err != nil {
 		return NewPQLRowQuery("", f.index, err)
 	}
@@ -740,7 +747,7 @@ func (f *Field) Range(rowIDOrKey interface{}, start time.Time, end time.Time) *P
 // SetRowAttrs associates arbitrary key/value pairs with a row in a field.
 // Following types are accepted: integer, float, string and boolean types.
 func (f *Field) SetRowAttrs(rowIDOrKey interface{}, attrs map[string]interface{}) *PQLBaseQuery {
-	rowStr, err := formatIDKey(rowIDOrKey)
+	rowStr, err := formatIDKeyBool(rowIDOrKey)
 	if err != nil {
 		return NewPQLBaseQuery("", f.index, err)
 	}
@@ -757,7 +764,7 @@ func (f *Field) SetRowAttrs(rowIDOrKey interface{}, attrs map[string]interface{}
 // Store creates a Store call.
 // Store writes the result of the row query to the specified row. If the row already exists, it will be replaced. The destination field must be of field type set.
 func (f *Field) Store(row *PQLRowQuery, rowIDOrKey interface{}) *PQLBaseQuery {
-	rowStr, err := formatIDKey(rowIDOrKey)
+	rowStr, err := formatIDKeyBool(rowIDOrKey)
 	if err != nil {
 		return NewPQLBaseQuery("", f.index, err)
 	}
@@ -802,8 +809,15 @@ func formatIDKey(idKey interface{}) (string, error) {
 	}
 }
 
+func formatIDKeyBool(idKeyBool interface{}) (string, error) {
+	if b, ok := idKeyBool.(bool); ok {
+		return strconv.FormatBool(b), nil
+	}
+	return formatIDKey(idKeyBool)
+}
+
 func formatRowColIDKey(rowIDOrKey, colIDOrKey interface{}) (string, string, error) {
-	rowStr, err := formatIDKey(rowIDOrKey)
+	rowStr, err := formatIDKeyBool(rowIDOrKey)
 	if err != nil {
 		return "", "", errors.Wrap(err, "formatting row")
 	}
@@ -823,6 +837,7 @@ const (
 	FieldTypeInt     FieldType = "int"
 	FieldTypeTime    FieldType = "time"
 	FieldTypeMutex   FieldType = "mutex"
+	FieldTypeBool    FieldType = "bool"
 )
 
 // TimeQuantum type represents valid time quantum values time fields.

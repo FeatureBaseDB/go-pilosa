@@ -344,6 +344,29 @@ func TestSetMutexField(t *testing.T) {
 	}
 }
 
+func TestSetBoolField(t *testing.T) {
+	client := getClient()
+	field := index.Field("bool-test", OptFieldTypeBool())
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// can set bool
+	_, err = client.Query(field.Set(true, 100))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := client.Query(field.Row(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := []uint64{100}
+	if !reflect.DeepEqual(target, response.Result().Row().Columns) {
+		t.Fatalf("%v != %v", target, response.Result().Row().Columns)
+	}
+}
+
 func TestCreateDeleteIndexField(t *testing.T) {
 	client := getClient()
 	index1 := NewIndex("to-be-deleted")

@@ -234,7 +234,7 @@ func TestSet(t *testing.T) {
 		`Set('some_id',collaboration='b7feb014-8ea7-49a8-9cd8-19709161ab63')`,
 		collabField.Set("b7feb014-8ea7-49a8-9cd8-19709161ab63", "some_id"))
 
-	q := collabField.Set(false, 10)
+	q := collabField.Set(nil, 10)
 	if q.err == nil {
 		t.Fatalf("should have failed")
 	}
@@ -254,7 +254,7 @@ func TestTimestamp(t *testing.T) {
 		"Set('mycol',collaboration='myrow',2017-04-24T12:14)",
 		collabField.SetTimestamp("myrow", "mycol", timestamp))
 
-	q := collabField.SetTimestamp(false, 20, timestamp)
+	q := collabField.SetTimestamp(nil, 20, timestamp)
 	if q.err == nil {
 		t.Fatalf("should have failed")
 	}
@@ -269,7 +269,7 @@ func TestClear(t *testing.T) {
 		"Clear('some_id',collaboration='b7feb014-8ea7-49a8-9cd8-19709161ab63')",
 		collabField.Clear("b7feb014-8ea7-49a8-9cd8-19709161ab63", "some_id"))
 
-	q := collabField.Clear(false, 10)
+	q := collabField.Clear(nil, 10)
 	if q.err == nil {
 		t.Fatalf("should have failed")
 	}
@@ -631,6 +631,16 @@ func TestMutexFieldOptions(t *testing.T) {
 		t.Fatalf("`%s` != `%s`", targetString, jsonString)
 	}
 	compareFieldOptions(t, field.Options(), FieldTypeMutex, TimeQuantumNone, CacheTypeRanked, 9999, 0, 0)
+}
+
+func TestBoolFieldOptions(t *testing.T) {
+	field := sampleIndex.Field("bool-field", OptFieldTypeBool())
+	jsonString := field.options.String()
+	targetString := `{"options":{"type":"bool"}}`
+	if sortedString(targetString) != sortedString(jsonString) {
+		t.Fatalf("`%s` != `%s`", targetString, jsonString)
+	}
+	compareFieldOptions(t, field.Options(), FieldTypeBool, TimeQuantumNone, CacheTypeDefault, 0, 0, 0)
 }
 
 func TestEncodeMapPanicsOnMarshalFailure(t *testing.T) {

@@ -219,7 +219,7 @@ func TestRow(t *testing.T) {
 		"Row(collaboration='b7feb014-8ea7-49a8-9cd8-19709161ab63')",
 		collabField.Row("b7feb014-8ea7-49a8-9cd8-19709161ab63"))
 
-	q := collabField.Row(false)
+	q := collabField.Row(nil)
 	if q.err == nil {
 		t.Fatalf("should have failed")
 	}
@@ -234,7 +234,7 @@ func TestSet(t *testing.T) {
 		`Set('some_id',collaboration='b7feb014-8ea7-49a8-9cd8-19709161ab63')`,
 		collabField.Set("b7feb014-8ea7-49a8-9cd8-19709161ab63", "some_id"))
 
-	q := collabField.Set(false, 10)
+	q := collabField.Set(nil, 10)
 	if q.err == nil {
 		t.Fatalf("should have failed")
 	}
@@ -254,7 +254,7 @@ func TestTimestamp(t *testing.T) {
 		"Set('mycol',collaboration='myrow',2017-04-24T12:14)",
 		collabField.SetTimestamp("myrow", "mycol", timestamp))
 
-	q := collabField.SetTimestamp(false, 20, timestamp)
+	q := collabField.SetTimestamp(nil, 20, timestamp)
 	if q.err == nil {
 		t.Fatalf("should have failed")
 	}
@@ -269,11 +269,30 @@ func TestClear(t *testing.T) {
 		"Clear('some_id',collaboration='b7feb014-8ea7-49a8-9cd8-19709161ab63')",
 		collabField.Clear("b7feb014-8ea7-49a8-9cd8-19709161ab63", "some_id"))
 
-	q := collabField.Clear(false, 10)
+	q := collabField.Clear(nil, 10)
 	if q.err == nil {
 		t.Fatalf("should have failed")
 	}
 	q = collabField.Clear(5, false)
+	if q.err == nil {
+		t.Fatalf("should have failed")
+	}
+}
+
+func TestClearRow(t *testing.T) {
+	comparePQL(t,
+		"ClearRow(collaboration=5)",
+		collabField.ClearRow(5))
+
+	comparePQL(t,
+		"ClearRow(collaboration='five')",
+		collabField.ClearRow("five"))
+
+	comparePQL(t,
+		"ClearRow(collaboration=true)",
+		collabField.ClearRow(true))
+
+	q := collabField.ClearRow(nil)
 	if q.err == nil {
 		t.Fatalf("should have failed")
 	}
@@ -519,7 +538,7 @@ func TestSetRowAttrsTest(t *testing.T) {
 		"SetRowAttrs(collaboration,'foo',active=true,quote=\"\\\"Don't worry, be happy\\\"\")",
 		collabField.SetRowAttrs("foo", attrs))
 
-	q := collabField.SetRowAttrs(false, attrs)
+	q := collabField.SetRowAttrs(nil, attrs)
 	if q.err == nil {
 		t.Fatalf("should have failed")
 	}
@@ -545,6 +564,17 @@ func TestStore(t *testing.T) {
 		sampleField.Store(collabField.Row(5), 10))
 }
 
+func TestOptions(t *testing.T) {
+	comparePQL(t,
+		"Options(Row(collaboration=5),columnAttrs=true,excludeColumns=true,excludeRowAttrs=true,shards=[1,3])",
+		sampleIndex.Options(collabField.Row(5),
+			OptOptionsColumnAttrs(true),
+			OptOptionsExcludeColumns(true),
+			OptOptionsExcludeRowAttrs(true),
+			OptOptionsShards(1, 3),
+		))
+}
+
 func TestBatchQuery(t *testing.T) {
 	q := sampleIndex.BatchQuery()
 	if q.Index() != sampleIndex {
@@ -557,7 +587,7 @@ func TestBatchQuery(t *testing.T) {
 	}
 	comparePQL(t, "Row(sample-field=44)Row(sample-field=10101)", q)
 
-	q2 := sampleField.Row(false)
+	q2 := sampleField.Row(nil)
 	if q2.err == nil {
 		t.Fatalf("should have failed")
 	}
@@ -587,7 +617,7 @@ func TestRange(t *testing.T) {
 		"Range(collaboration='foo',1970-01-01T00:00,2000-02-02T03:04)",
 		collabField.Range("foo", start, end))
 
-	q := collabField.Range(false, start, end)
+	q := collabField.Range(nil, start, end)
 	if q.err == nil {
 		t.Fatalf("should have failed")
 	}
@@ -621,6 +651,26 @@ func TestTimeFieldOptions(t *testing.T) {
 		t.Fatalf("`%s` != `%s`", targetString, jsonString)
 	}
 	compareFieldOptions(t, field.Options(), FieldTypeTime, TimeQuantumDayHour, CacheTypeDefault, 0, 0, 0)
+}
+
+func TestMutexFieldOptions(t *testing.T) {
+	field := sampleIndex.Field("mutex-field", OptFieldTypeMutex(CacheTypeRanked, 9999))
+	jsonString := field.options.String()
+	targetString := `{"options":{"type":"mutex","cacheType":"ranked","cacheSize":9999}}`
+	if sortedString(targetString) != sortedString(jsonString) {
+		t.Fatalf("`%s` != `%s`", targetString, jsonString)
+	}
+	compareFieldOptions(t, field.Options(), FieldTypeMutex, TimeQuantumNone, CacheTypeRanked, 9999, 0, 0)
+}
+
+func TestBoolFieldOptions(t *testing.T) {
+	field := sampleIndex.Field("bool-field", OptFieldTypeBool())
+	jsonString := field.options.String()
+	targetString := `{"options":{"type":"bool"}}`
+	if sortedString(targetString) != sortedString(jsonString) {
+		t.Fatalf("`%s` != `%s`", targetString, jsonString)
+	}
+	compareFieldOptions(t, field.Options(), FieldTypeBool, TimeQuantumNone, CacheTypeDefault, 0, 0, 0)
 }
 
 func TestEncodeMapPanicsOnMarshalFailure(t *testing.T) {

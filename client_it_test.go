@@ -298,7 +298,111 @@ func TestTopNReturns(t *testing.T) {
 	if item.Count != 3 {
 		t.Fatalf("Item[0] Count should be 3")
 	}
+}
 
+func TestSetMutexField(t *testing.T) {
+	client := getClient()
+	field := index.Field("mutex-test", OptFieldTypeMutex(CacheTypeDefault, 0))
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// can set mutex
+	_, err = client.Query(field.Set(1, 100))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := client.Query(field.Row(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := []uint64{100}
+	if !reflect.DeepEqual(target, response.Result().Row().Columns) {
+		t.Fatalf("%v != %v", target, response.Result().Row().Columns)
+	}
+
+	// setting another row removes the previous
+	_, err = client.Query(field.Set(42, 100))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err = client.Query(index.BatchQuery(
+		field.Row(1),
+		field.Row(42),
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target1 := []uint64(nil)
+	target42 := []uint64{100}
+	if !reflect.DeepEqual(target1, response.Results()[0].Row().Columns) {
+		t.Fatalf("%#v != %#v", target1, response.Results()[0].Row().Columns)
+	}
+	if !reflect.DeepEqual(target42, response.Results()[1].Row().Columns) {
+		t.Fatalf("%#v != %#v", target42, response.Results()[1].Row().Columns)
+	}
+}
+
+func TestSetBoolField(t *testing.T) {
+	client := getClient()
+	field := index.Field("bool-test", OptFieldTypeBool())
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// can set bool
+	_, err = client.Query(field.Set(true, 100))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := client.Query(field.Row(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := []uint64{100}
+	if !reflect.DeepEqual(target, response.Result().Row().Columns) {
+		t.Fatalf("%v != %v", target, response.Result().Row().Columns)
+	}
+}
+
+func TestClearRowQuery(t *testing.T) {
+	client := getClient()
+	field := index.Field("clear-row-test")
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = client.Query(index.BatchQuery(
+		field.Set(1, 100),
+		field.Set(1, 200),
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := client.Query(field.Row(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := []uint64{100, 200}
+	if !reflect.DeepEqual(target, response.Result().Row().Columns) {
+		t.Fatalf("%v != %v", target, response.Result().Row().Columns)
+	}
+
+	_, err = client.Query(field.ClearRow(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err = client.Query(field.Row(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target = []uint64(nil)
+	if !reflect.DeepEqual(target, response.Result().Row().Columns) {
+		t.Fatalf("%v != %v", target, response.Result().Row().Columns)
+	}
 }
 
 func TestCreateDeleteIndexField(t *testing.T) {
@@ -868,11 +972,14 @@ func TestStoreQuery(t *testing.T) {
 	}
 	defer client.DeleteIndex(index)
 
-	client.Query(index.BatchQuery(
+	_, err = client.Query(index.BatchQuery(
 		fromField.Set(10, 100),
 		fromField.Set(10, 200),
 		toField.Store(fromField.Row(10), 1),
 	))
+	if err != nil {
+		t.Fatal(err)
+	}
 	resp, err := client.Query(toField.Row(1))
 	if err != nil {
 		t.Fatal(err)

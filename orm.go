@@ -292,6 +292,60 @@ func OptIndexTrackExistence(trackExistence bool) IndexOption {
 	}
 }
 
+// OptionsOptions is used to pass an option to Option call.
+type OptionsOptions struct {
+	columnAttrs     bool
+	excludeColumns  bool
+	excludeRowAttrs bool
+	shards          []uint64
+}
+
+func (oo OptionsOptions) marshal() string {
+	part1 := fmt.Sprintf("columnAttrs=%s,excludeColumns=%s,excludeRowAttrs=%s",
+		strconv.FormatBool(oo.columnAttrs),
+		strconv.FormatBool(oo.excludeColumns),
+		strconv.FormatBool(oo.excludeRowAttrs))
+	if oo.shards != nil {
+		shardsStr := make([]string, len(oo.shards))
+		for i, shard := range oo.shards {
+			shardsStr[i] = strconv.FormatUint(shard, 10)
+		}
+		return fmt.Sprintf("%s,shards=[%s]", part1, strings.Join(shardsStr, ","))
+	}
+	return part1
+}
+
+type OptionsOption func(options *OptionsOptions)
+
+// OptOptionsColumnAttrs enables returning column attributes.
+func OptOptionsColumnAttrs(enable bool) OptionsOption {
+	return func(options *OptionsOptions) {
+		options.columnAttrs = enable
+	}
+}
+
+// OptOptionsExcludeColumns enables preventing returning columns.
+func OptOptionsExcludeColumns(enable bool) OptionsOption {
+	return func(options *OptionsOptions) {
+		options.excludeColumns = enable
+	}
+}
+
+// OptOptionsExcludeRowAttrs enables preventing returning row attributes.
+func OptOptionsExcludeRowAttrs(enable bool) OptionsOption {
+	return func(options *OptionsOptions) {
+		options.excludeRowAttrs = enable
+	}
+}
+
+// OptOptionsShards run the query using only the data from the given shards.
+// By default, the entire data set (i.e. data from all shards) is used.
+func OptOptionsShards(shards ...uint64) OptionsOption {
+	return func(options *OptionsOptions) {
+		options.shards = shards
+	}
+}
+
 // Index is a Pilosa index. The purpose of the Index is to represent a data namespace.
 // You cannot perform cross-index queries. Column-level attributes are global to the Index.
 type Index struct {
@@ -445,6 +499,16 @@ func (idx *Index) SetColumnAttrs(colIDOrKey interface{}, attrs map[string]interf
 	return NewPQLBaseQuery(q, idx, nil)
 }
 
+// Options creates an Options query.
+func (idx *Index) Options(row *PQLRowQuery, opts ...OptionsOption) *PQLBaseQuery {
+	oo := &OptionsOptions{}
+	for _, opt := range opts {
+		opt(oo)
+	}
+	text := fmt.Sprintf("Options(%s,%s)", row.serialize(), oo.marshal())
+	return NewPQLBaseQuery(text, idx, nil)
+}
+
 func (idx *Index) rowOperation(name string, rows ...*PQLRowQuery) *PQLRowQuery {
 	var err error
 	args := make([]string, 0, len(rows))
@@ -517,7 +581,7 @@ func (fo FieldOptions) String() string {
 	mopt := map[string]interface{}{}
 
 	switch fo.fieldType {
-	case FieldTypeSet:
+	case FieldTypeSet, FieldTypeMutex:
 		if fo.cacheType != CacheTypeDefault {
 			mopt["cacheType"] = string(fo.cacheType)
 		}
@@ -572,10 +636,27 @@ func OptFieldTypeInt(min int64, max int64) FieldOption {
 	}
 }
 
+// OptFieldTypeTime adds a time field.
 func OptFieldTypeTime(quantum TimeQuantum) FieldOption {
 	return func(options *FieldOptions) {
 		options.fieldType = FieldTypeTime
 		options.timeQuantum = quantum
+	}
+}
+
+// OptFieldTypeMutex adds a mutex field.
+func OptFieldTypeMutex(cacheType CacheType, cacheSize int) FieldOption {
+	return func(options *FieldOptions) {
+		options.fieldType = FieldTypeMutex
+		options.cacheType = cacheType
+		options.cacheSize = cacheSize
+	}
+}
+
+// OptFieldTypeBool adds a bool field.
+func OptFieldTypeBool() FieldOption {
+	return func(options *FieldOptions) {
+		options.fieldType = FieldTypeBool
 	}
 }
 
@@ -622,7 +703,7 @@ func (f *Field) copy() *Field {
 // Row retrieves the indices of all the set columns in a row.
 // It also retrieves any attributes set on that row or column.
 func (f *Field) Row(rowIDOrKey interface{}) *PQLRowQuery {
-	rowStr, err := formatIDKey(rowIDOrKey)
+	rowStr, err := formatIDKeyBool(rowIDOrKey)
 	if err != nil {
 		return NewPQLRowQuery("", f.index, err)
 	}
@@ -671,6 +752,18 @@ func (f *Field) Clear(rowIDOrKey, colIDOrKey interface{}) *PQLBaseQuery {
 	return q
 }
 
+// ClearRow creates a ClearRow query.
+// ClearRow sets all bits to 0 in a given row of the binary matrix, thus disassociating the given row in the given field from all columns.
+func (f *Field) ClearRow(rowIDOrKey interface{}) *PQLBaseQuery {
+	rowStr, err := formatIDKeyBool(rowIDOrKey)
+	if err != nil {
+		return NewPQLBaseQuery("", f.index, err)
+	}
+	text := fmt.Sprintf("ClearRow(%s=%s)", f.name, rowStr)
+	q := NewPQLBaseQuery(text, f.index, nil)
+	return q
+}
+
 // TopN creates a TopN query with the given item count.
 // Returns the id and count of the top n rows (by count of columns) in the field.
 func (f *Field) TopN(n uint64) *PQLRowQuery {
@@ -715,7 +808,7 @@ func (f *Field) filterAttrTopN(n uint64, row *PQLRowQuery, field string, values 
 // Range creates a Range query.
 // Similar to Row, but only returns columns which were set with timestamps between the given start and end timestamps.
 func (f *Field) Range(rowIDOrKey interface{}, start time.Time, end time.Time) *PQLRowQuery {
-	rowStr, err := formatIDKey(rowIDOrKey)
+	rowStr, err := formatIDKeyBool(rowIDOrKey)
 	if err != nil {
 		return NewPQLRowQuery("", f.index, err)
 	}
@@ -728,7 +821,7 @@ func (f *Field) Range(rowIDOrKey interface{}, start time.Time, end time.Time) *P
 // SetRowAttrs associates arbitrary key/value pairs with a row in a field.
 // Following types are accepted: integer, float, string and boolean types.
 func (f *Field) SetRowAttrs(rowIDOrKey interface{}, attrs map[string]interface{}) *PQLBaseQuery {
-	rowStr, err := formatIDKey(rowIDOrKey)
+	rowStr, err := formatIDKeyBool(rowIDOrKey)
 	if err != nil {
 		return NewPQLBaseQuery("", f.index, err)
 	}
@@ -745,7 +838,7 @@ func (f *Field) SetRowAttrs(rowIDOrKey interface{}, attrs map[string]interface{}
 // Store creates a Store call.
 // Store writes the result of the row query to the specified row. If the row already exists, it will be replaced. The destination field must be of field type set.
 func (f *Field) Store(row *PQLRowQuery, rowIDOrKey interface{}) *PQLBaseQuery {
-	rowStr, err := formatIDKey(rowIDOrKey)
+	rowStr, err := formatIDKeyBool(rowIDOrKey)
 	if err != nil {
 		return NewPQLBaseQuery("", f.index, err)
 	}
@@ -790,8 +883,15 @@ func formatIDKey(idKey interface{}) (string, error) {
 	}
 }
 
+func formatIDKeyBool(idKeyBool interface{}) (string, error) {
+	if b, ok := idKeyBool.(bool); ok {
+		return strconv.FormatBool(b), nil
+	}
+	return formatIDKey(idKeyBool)
+}
+
 func formatRowColIDKey(rowIDOrKey, colIDOrKey interface{}) (string, string, error) {
-	rowStr, err := formatIDKey(rowIDOrKey)
+	rowStr, err := formatIDKeyBool(rowIDOrKey)
 	if err != nil {
 		return "", "", errors.Wrap(err, "formatting row")
 	}
@@ -810,6 +910,8 @@ const (
 	FieldTypeSet     FieldType = "set"
 	FieldTypeInt     FieldType = "int"
 	FieldTypeTime    FieldType = "time"
+	FieldTypeMutex   FieldType = "mutex"
+	FieldTypeBool    FieldType = "bool"
 )
 
 // TimeQuantum type represents valid time quantum values time fields.

@@ -58,7 +58,7 @@ func TestSchemaDiff(t *testing.T) {
 	index11 := schema1.Index("diff-index1")
 	index11.Field("field1-1")
 	index11.Field("field1-2")
-	index12 := schema1.Index("diff-index2")
+	index12 := schema1.Index("diff-index2", OptIndexKeys(true), OptIndexTrackExistence(false))
 	index12.Field("field2-1")
 
 	schema2 := NewSchema()
@@ -69,7 +69,7 @@ func TestSchemaDiff(t *testing.T) {
 	targetIndex1 := targetDiff12.Index("diff-index1")
 	targetIndex1.Field("field1-1")
 	targetIndex1.Field("field1-2")
-	targetIndex2 := targetDiff12.Index("diff-index2")
+	targetIndex2 := targetDiff12.Index("diff-index2", OptIndexKeys(true), OptIndexTrackExistence(false))
 	targetIndex2.Field("field2-1")
 
 	diff12 := schema1.diff(schema2)
@@ -123,8 +123,22 @@ func TestIndexCopy(t *testing.T) {
 }
 
 func TestIndexOptions(t *testing.T) {
-	index := schema.Index("index-with-options", OptIndexKeys(true))
-	target := `{"options":{"keys":true}}`
+	schema := NewSchema()
+	// test the defaults
+	index := schema.Index("index-default-options")
+	target := `{"options":{}}`
+	if target != index.options.String() {
+		t.Fatalf("%s != %s", target, index.options.String())
+	}
+
+	index = schema.Index("index-keys", OptIndexKeys(true))
+	target = `{"options":{"keys":true}}`
+	if target != index.options.String() {
+		t.Fatalf("%s != %s", target, index.options.String())
+	}
+
+	index = schema.Index("index-trackexistence", OptIndexTrackExistence(false))
+	target = `{"options":{"trackExistence":false}}`
 	if target != index.options.String() {
 		t.Fatalf("%s != %s", target, index.options.String())
 	}

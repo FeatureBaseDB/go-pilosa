@@ -244,23 +244,31 @@ func NewPQLRowQuery(pql string, index *Index, err error) *PQLRowQuery {
 
 // IndexOptions contains options to customize Index objects.
 type IndexOptions struct {
-	keys           bool
-	trackExistence bool
+	keys              bool
+	keysSet           bool
+	trackExistence    bool
+	trackExistenceSet bool
 }
 
 func (io *IndexOptions) withDefaults() (updated *IndexOptions) {
 	// copy options so the original is not updated
 	updated = &IndexOptions{}
 	*updated = *io
+	if !updated.keysSet {
+		updated.keys = false
+	}
+	if !updated.trackExistenceSet {
+		updated.trackExistence = true
+	}
 	return
 }
 
 func (io IndexOptions) String() string {
 	mopt := map[string]interface{}{}
-	if io.keys {
+	if io.keysSet {
 		mopt["keys"] = io.keys
 	}
-	if io.trackExistence {
+	if io.trackExistenceSet {
 		mopt["trackExistence"] = io.trackExistence
 	}
 	return fmt.Sprintf(`{"options":%s}`, encodeMap(mopt))
@@ -282,6 +290,7 @@ type IndexOption func(options *IndexOptions)
 func OptIndexKeys(keys bool) IndexOption {
 	return func(options *IndexOptions) {
 		options.keys = keys
+		options.keysSet = true
 	}
 }
 
@@ -289,6 +298,7 @@ func OptIndexKeys(keys bool) IndexOption {
 func OptIndexTrackExistence(trackExistence bool) IndexOption {
 	return func(options *IndexOptions) {
 		options.trackExistence = trackExistence
+		options.trackExistenceSet = true
 	}
 }
 
@@ -360,9 +370,10 @@ func (idx *Index) String() string {
 
 // NewIndex creates an index with a name.
 func NewIndex(name string) *Index {
+	options := &IndexOptions{}
 	return &Index{
 		name:    name,
-		options: &IndexOptions{},
+		options: options.withDefaults(),
 		fields:  map[string]*Field{},
 	}
 }

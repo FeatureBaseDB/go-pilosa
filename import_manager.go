@@ -1,6 +1,7 @@
 package pilosa
 
 import (
+	"fmt"
 	"io"
 	"sort"
 	"time"
@@ -29,6 +30,7 @@ func (rim recordImportManager) Run(field *Field, iterator RecordIterator, option
 	threadCount := uint64(options.threadCount)
 	recordChans := make([]chan Record, threadCount)
 	errChan := make(chan error)
+	recordErrChan := make(chan error, 1)
 	statusChan := options.statusChan
 
 	if options.importRecordsFunction == nil {
@@ -45,51 +47,66 @@ func (rim recordImportManager) Run(field *Field, iterator RecordIterator, option
 		go recordImportWorker(i, rim.client, field, chans, options)
 	}
 
-	var record Record
-	var recordIteratorError error
-
-	for {
-		record, recordIteratorError = iterator.NextRecord()
-		if recordIteratorError != nil {
-			if recordIteratorError == io.EOF {
-				recordIteratorError = nil
-			}
-			break
-		}
-		shard := record.Shard(shardWidth)
-		recordChans[shard%threadCount] <- record
-	}
-
-	for _, q := range recordChans {
-		close(q)
-	}
-
-	if recordIteratorError != nil {
-		return recordIteratorError
-	}
-
+	var importErr error
 	done := uint64(0)
-	for {
+
+	go func(it RecordIterator) {
+		var record Record
+		var err error
+		for {
+			record, err = it.NextRecord()
+			if err != nil {
+				if err == io.EOF {
+					err = nil
+				}
+				break
+			}
+			shard := record.Shard(shardWidth)
+			recordChans[shard%threadCount] <- record
+		}
+		recordErrChan <- err
+	}(iterator)
+
+sendRecords:
+	for done < threadCount {
 		select {
 		case workerErr := <-errChan:
-			if workerErr != nil {
-				return workerErr
-			}
 			done += 1
-			if done == threadCount {
-				return nil
+			if workerErr != nil {
+				importErr = workerErr
+				break sendRecords
+			}
+		case recordErr := <-recordErrChan:
+			for _, q := range recordChans {
+				close(q)
+			}
+			if recordErr != nil {
+				importErr = recordErr
+				break sendRecords
 			}
 		}
 	}
+
+	return importErr
 }
 
 func recordImportWorker(id int, client *Client, field *Field, chans importWorkerChannels, options ImportOptions) {
+	var err error
 	batchForShard := map[uint64][]Record{}
 	importFun := options.importRecordsFunction
 	statusChan := chans.status
 	recordChan := chans.records
 	errChan := chans.errs
 	shardNodes := map[uint64][]fragmentNode{}
+
+	defer func() {
+		if r := recover(); r != nil {
+			if err == nil {
+				err = fmt.Errorf("worker %d panic", id)
+			}
+		}
+		errChan <- err
+	}()
 
 	importRecords := func(shard uint64, records []Record) error {
 		var nodes []fragmentNode
@@ -128,11 +145,11 @@ func recordImportWorker(id int, client *Client, field *Field, chans importWorker
 		return nil
 	}
 
-	var err error
 	recordCount := 0
 	batchSize := options.batchSize
 	shardWidth := options.shardWidth
 
+readRecords:
 	for record := range recordChan {
 		recordCount += 1
 		shard := record.Shard(shardWidth)
@@ -145,7 +162,7 @@ func recordImportWorker(id int, client *Client, field *Field, chans importWorker
 				}
 				err = importRecords(shard, records)
 				if err != nil {
-					break
+					break readRecords
 				}
 				batchForShard[shard] = nil
 			}
@@ -154,7 +171,6 @@ func recordImportWorker(id int, client *Client, field *Field, chans importWorker
 	}
 
 	if err != nil {
-		errChan <- err
 		return
 	}
 
@@ -168,8 +184,6 @@ func recordImportWorker(id int, client *Client, field *Field, chans importWorker
 			break
 		}
 	}
-
-	errChan <- err
 }
 
 type ImportStatusUpdate struct {

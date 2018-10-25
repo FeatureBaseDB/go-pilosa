@@ -76,9 +76,6 @@ sendRecords:
 				importErr = workerErr
 				break sendRecords
 			}
-			if done == threadCount {
-				break sendRecords
-			}
 		case recordErr := <-recordErrChan:
 			for _, q := range recordChans {
 				close(q)

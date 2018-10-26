@@ -42,6 +42,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"reflect"
 	"strconv"
@@ -1155,7 +1156,7 @@ func TestImportNodeFails(t *testing.T) {
 		Field:      "bar",
 		Shard:      0,
 	}
-	err := client.importNode(uri, importRequest)
+	err := client.importNode(uri, importRequest, defaultImportOptions())
 	if err == nil {
 		t.Fatalf("importNode should fail when posting to /import fails")
 	}
@@ -1170,7 +1171,7 @@ func TestImportNodeProtobufMarshalFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.importNode(uri, nil)
+	err = client.importNode(uri, nil, defaultImportOptions())
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -1473,7 +1474,7 @@ func TestValueCSVImportFailure(t *testing.T) {
 	defer server.Close()
 	client, _ := NewClient(server.URL)
 	uri := URIFromAddress(server.URL)
-	err := client.importValueNode(uri, nil)
+	err := client.importValueNode(uri, nil, defaultImportOptions())
 	if err == nil {
 		t.Fatal("should have failed")
 	}
@@ -1481,12 +1482,7 @@ func TestValueCSVImportFailure(t *testing.T) {
 
 func TestRowIDColumnIDImport(t *testing.T) {
 	client := getClient()
-	iterator := NewArrayRecordIterator([]Record{
-		Column{RowID: 10, ColumnID: 7},
-		Column{RowID: 10, ColumnID: 5},
-		Column{RowID: 2, ColumnID: 3},
-		Column{RowID: 7, ColumnID: 1},
-	})
+	iterator := newTestIterator()
 	field := index.Field("importfield-rowid-colid")
 	err := client.EnsureField(field)
 	if err != nil {
@@ -1517,18 +1513,38 @@ func TestRowIDColumnIDImport(t *testing.T) {
 		}
 		if target[i] != br.Columns[0] {
 			t.Fatalf("%d != %d", target[i], br.Columns[0])
+		}
+	}
+
+	// test clear imports
+	iterator = newTestIterator()
+	err = client.ImportField(field, iterator, OptImportClear(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bq = index.BatchQuery(
+		field.Row(2),
+		field.Row(7),
+		field.Row(10),
+	)
+	response, err = client.Query(bq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Results()) != 3 {
+		t.Fatalf("Result count should be 3")
+	}
+	for _, result := range response.Results() {
+		br := result.Row()
+		if !reflect.DeepEqual([]uint64(nil), br.Columns) {
+			t.Fatalf("%#v != %#v", []uint64(nil), br.Columns)
 		}
 	}
 }
 
 func TestRowIDColumnIDImportRoaring(t *testing.T) {
 	client := getClient()
-	iterator := NewArrayRecordIterator([]Record{
-		Column{RowID: 10, ColumnID: 7},
-		Column{RowID: 10, ColumnID: 5},
-		Column{RowID: 2, ColumnID: 3},
-		Column{RowID: 7, ColumnID: 1},
-	})
+	iterator := newTestIterator()
 	field := index.Field("importfield-rowid-colid")
 	err := client.EnsureField(field)
 	if err != nil {
@@ -1559,6 +1575,32 @@ func TestRowIDColumnIDImportRoaring(t *testing.T) {
 		}
 		if target[i] != br.Columns[0] {
 			t.Fatalf("%d != %d", target[i], br.Columns[0])
+		}
+	}
+
+	// test clear imports
+	iterator = newTestIterator()
+	err = client.ImportField(field, iterator, OptImportClear(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bq = index.BatchQuery(
+		field.Row(2),
+		field.Row(7),
+		field.Row(10),
+	)
+	response, err = client.Query(bq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Results()) != 3 {
+		t.Fatalf("Result count should be 3")
+	}
+	for _, result := range response.Results() {
+		br := result.Row()
+		if !reflect.DeepEqual([]uint64(nil), br.Columns) {
+			t.Fatalf("%#v != %#v", []uint64(nil), br.Columns)
 		}
 	}
 }
@@ -1582,7 +1624,7 @@ func TestRowIDColumnIDImportFails(t *testing.T) {
 
 func TestRowIDColumnIDImportFailsRoaring(t *testing.T) {
 	field := NewSchema().Index("foo").Field("bar")
-	roaringImportPath := makeRoaringImportPath(field, 0)
+	roaringImportPath := makeRoaringImportPath(field, 0, url.Values{})
 	fragmentNodesPath := fmt.Sprintf("/internal/fragment/nodes?shard=%d&index=%s", 0, "foo")
 	paths := map[string]mockResponseItem{
 		roaringImportPath: {
@@ -1753,11 +1795,14 @@ func TestRowKeyColumnKeyImport(t *testing.T) {
 }
 
 func TestValueFieldImport(t *testing.T) {
+	newIterator := func() *ArrayRecordIterator {
+		return NewArrayRecordIterator([]Record{
+			FieldValue{ColumnID: 10, Value: 7},
+			FieldValue{ColumnID: 7, Value: 1},
+		})
+	}
 	client := getClient()
-	iterator := NewArrayRecordIterator([]Record{
-		FieldValue{ColumnID: 10, Value: 7},
-		FieldValue{ColumnID: 7, Value: 1},
-	})
+	iterator := newIterator()
 	field := index.Field("importvaluefield", OptFieldTypeInt(0, 100))
 	err := client.EnsureField(field)
 	if err != nil {
@@ -1785,6 +1830,21 @@ func TestValueFieldImport(t *testing.T) {
 		t.Fatal(err)
 	}
 	target := int64(8)
+	if target != response.Result().Value() {
+		t.Fatalf("%d != %#v", target, response.Result())
+	}
+
+	// test clear imports
+	iterator = newIterator()
+	err = client.ImportField(field, iterator, OptImportClear(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err = client.Query(field.Sum(field2.Row(1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target = int64(0)
 	if target != response.Result().Value() {
 		t.Fatalf("%d != %#v", target, response.Result())
 	}
@@ -2087,4 +2147,19 @@ func consumeReader(t *testing.T, r io.Reader) string {
 		t.Fatal(err)
 	}
 	return string(b)
+}
+
+func newTestIterator() *ArrayRecordIterator {
+	return NewArrayRecordIterator([]Record{
+		Column{RowID: 10, ColumnID: 7},
+		Column{RowID: 10, ColumnID: 5},
+		Column{RowID: 2, ColumnID: 3},
+		Column{RowID: 7, ColumnID: 1},
+	})
+}
+
+func defaultImportOptions() *ImportOptions {
+	importOptions := ImportOptions{}
+	importOptions = importOptions.withDefaults()
+	return &importOptions
 }

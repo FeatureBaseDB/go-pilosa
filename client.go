@@ -42,15 +42,16 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/pilosa/pilosa/roaring"
-
 	"github.com/golang/protobuf/proto"
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
+	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -328,13 +329,13 @@ func (c *Client) importColumns(field *Field, shard uint64, records []Record, nod
 	if options.roaring {
 		uri := nodes[0].URI()
 		bmp := columnsToBitmap(options.shardWidth, records)
-		return c.importRoaringBitmap(uri, field, shard, bmp)
+		return c.importRoaringBitmap(uri, field, shard, bmp, options)
 	}
 
 	for _, node := range nodes {
 		uri := node.URI()
 		eg.Go(func() error {
-			return c.importNode(uri, columnsToImportRequest(field, shard, records))
+			return c.importNode(uri, columnsToImportRequest(field, shard, records), options)
 		})
 	}
 	err := eg.Wait()
@@ -347,7 +348,7 @@ func (c *Client) hasRoaringImportSupport(field *Field) bool {
 		return false
 	}
 	// Check whether the roaring import endpoint exists
-	path := makeRoaringImportPath(field, 0)
+	path := makeRoaringImportPath(field, 0, url.Values{})
 	resp, _, _ := c.httpRequest("GET", path, nil, nil, false)
 	if resp.StatusCode == http.StatusMethodNotAllowed || resp.StatusCode == http.StatusOK {
 		// Roaring import endpoint exists
@@ -365,7 +366,7 @@ func (c *Client) importValues(field *Field, shard uint64, vals []Record, nodes [
 			port:   node.Port,
 		}
 		eg.Go(func() error {
-			return c.importValueNode(uri, valsToImportRequest(field, shard, vals))
+			return c.importValueNode(uri, valsToImportRequest(field, shard, vals), options)
 		})
 	}
 	err := eg.Wait()
@@ -408,24 +409,26 @@ func (c *Client) fetchCoordinatorNode() (fragmentNode, error) {
 	return fragmentNode{}, errors.New("Coordinator node not found")
 }
 
-func (c *Client) importNode(uri *URI, request *pbuf.ImportRequest) error {
+func (c *Client) importNode(uri *URI, request *pbuf.ImportRequest, options *ImportOptions) error {
 	data, err := proto.Marshal(request)
 	if err != nil {
 		return errors.Wrap(err, "marshaling to protobuf")
 	}
-	return c.importData(uri, request.GetIndex(), request.GetField(), data)
+	return c.importData(uri, request.GetIndex(), request.GetField(), data, options)
 }
 
-func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest) error {
+func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest, options *ImportOptions) error {
 	data, err := proto.Marshal(request)
 	if err != nil {
 		return errors.Wrap(err, "marshaling to protobuf")
 	}
-	return c.importData(uri, request.GetIndex(), request.GetField(), data)
+	return c.importData(uri, request.GetIndex(), request.GetField(), data, options)
 }
 
-func (c *Client) importData(uri *URI, indexName string, fieldName string, data []byte) error {
-	path := fmt.Sprintf("/index/%s/field/%s/import", indexName, fieldName)
+func (c *Client) importData(uri *URI, indexName string, fieldName string, data []byte, options *ImportOptions) error {
+	params := url.Values{}
+	params.Add("clear", strconv.FormatBool(options.clear))
+	path := fmt.Sprintf("/index/%s/field/%s/import?%s", indexName, fieldName, params.Encode())
 	resp, err := c.doRequest(uri, "POST", path, defaultProtobufHeaders(), bytes.NewReader(data))
 	if err = anyError(resp, err); err != nil {
 		return errors.Wrap(err, "doing import")
@@ -435,13 +438,15 @@ func (c *Client) importData(uri *URI, indexName string, fieldName string, data [
 	return nil
 }
 
-func (c *Client) importRoaringBitmap(uri *URI, field *Field, shard uint64, bmp *roaring.Bitmap) error {
+func (c *Client) importRoaringBitmap(uri *URI, field *Field, shard uint64, bmp *roaring.Bitmap, options *ImportOptions) error {
 	buf := &bytes.Buffer{}
 	_, err := bmp.WriteTo(buf)
 	if err != nil {
 		return errors.Wrap(err, "marshalling bitmap")
 	}
-	path := makeRoaringImportPath(field, shard)
+	params := url.Values{}
+	params.Add("clear", strconv.FormatBool(options.clear))
+	path := makeRoaringImportPath(field, shard, params)
 	headers := map[string]string{
 		"Content-Type": "application/x-binary",
 		"Accept":       "application/x-protobuf",
@@ -725,9 +730,9 @@ func makeRequestData(query string, options *QueryOptions) ([]byte, error) {
 	return r, nil
 }
 
-func makeRoaringImportPath(field *Field, shard uint64) string {
-	return fmt.Sprintf("/index/%s/field/%s/import-roaring/%d",
-		field.index.name, field.name, shard)
+func makeRoaringImportPath(field *Field, shard uint64, params url.Values) string {
+	return fmt.Sprintf("/index/%s/field/%s/import-roaring/%d?%s",
+		field.index.name, field.name, shard, params.Encode())
 }
 
 func columnsToImportRequest(field *Field, shard uint64, records []Record) *pbuf.ImportRequest {
@@ -999,6 +1004,7 @@ type ImportOptions struct {
 	statusChan            chan<- ImportStatusUpdate
 	importRecordsFunction func(field *Field, shard uint64, records []Record, nodes []fragmentNode, options *ImportOptions) error
 	roaring               bool
+	clear                 bool
 }
 
 func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
@@ -1037,6 +1043,13 @@ func OptImportBatchSize(batchSize int) ImportOption {
 func OptImportStatusChannel(statusChan chan<- ImportStatusUpdate) ImportOption {
 	return func(options *ImportOptions) error {
 		options.statusChan = statusChan
+		return nil
+	}
+}
+
+func OptImportClear(clear bool) ImportOption {
+	return func(options *ImportOptions) error {
+		options.clear = clear
 		return nil
 	}
 }

@@ -1156,7 +1156,7 @@ func TestImportNodeFails(t *testing.T) {
 		Field:      "bar",
 		Shard:      0,
 	}
-	err := client.importNode(uri, importRequest, DefaultImportOptions())
+	err := client.importNode(uri, importRequest, defaultImportOptions())
 	if err == nil {
 		t.Fatalf("importNode should fail when posting to /import fails")
 	}
@@ -1171,7 +1171,7 @@ func TestImportNodeProtobufMarshalFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.importNode(uri, nil, DefaultImportOptions())
+	err = client.importNode(uri, nil, defaultImportOptions())
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -1474,7 +1474,7 @@ func TestValueCSVImportFailure(t *testing.T) {
 	defer server.Close()
 	client, _ := NewClient(server.URL)
 	uri := URIFromAddress(server.URL)
-	err := client.importValueNode(uri, nil, DefaultImportOptions())
+	err := client.importValueNode(uri, nil, defaultImportOptions())
 	if err == nil {
 		t.Fatal("should have failed")
 	}
@@ -2156,4 +2156,10 @@ func newTestIterator() *ArrayRecordIterator {
 		Column{RowID: 2, ColumnID: 3},
 		Column{RowID: 7, ColumnID: 1},
 	})
+}
+
+func defaultImportOptions() *ImportOptions {
+	importOptions := ImportOptions{}
+	importOptions = importOptions.withDefaults()
+	return &importOptions
 }

@@ -1007,12 +1007,6 @@ type ImportOptions struct {
 	clear                 bool
 }
 
-func DefaultImportOptions() *ImportOptions {
-	importOptions := ImportOptions{}
-	importOptions = importOptions.withDefaults()
-	return &importOptions
-}
-
 func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
 	updated = *opt
 	updated.shardWidth = 1048576

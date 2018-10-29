@@ -801,6 +801,12 @@ func (f *Field) FilterAttrTopN(n uint64, row *PQLRowQuery, attrName string, attr
 	return f.filterAttrTopN(n, row, attrName, attrValues...)
 }
 
+// RowTopXor creates a TopXor query with the given item count and row.
+func (f *Field) RowTopXor(n uint64, row *PQLRowQuery) *PQLRowQuery {
+	q := NewPQLRowQuery(fmt.Sprintf("TopXor(%s,%s,n=%d)", f.name, row.serialize(), n), f.index, nil)
+	return q
+}
+
 func (f *Field) filterAttrTopN(n uint64, row *PQLRowQuery, field string, values ...interface{}) *PQLRowQuery {
 	if err := validateLabel(field); err != nil {
 		return NewPQLRowQuery("", f.index, err)

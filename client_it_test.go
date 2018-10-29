@@ -428,6 +428,46 @@ func TestIndexRowQuery(t *testing.T) {
 	}
 }
 
+func TestIndexRowTopXorQuery(t *testing.T) {
+	client := getClient()
+	field1 := index.Field("topxor-test-1")
+	err := client.EnsureField(field1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	field2 := index.Field("topxor-test-2")
+	err = client.EnsureField(field2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = client.Query(index.BatchQuery(
+		field1.Set(0, 0),
+		field1.Set(0, 1),
+		field1.Set(0, 10000),
+		field1.Set(10, 10000),
+		field1.Set(10, 10001),
+		field1.Set(20, 10000),
+		field1.Set(20, 10001),
+		field1.Set(20, 10002),
+		field2.Set(100, 10000),
+		field2.Set(100, 10001),
+		field2.Set(100, 10002),
+	))
+	client.HttpRequest("POST", "/recalculate-caches", nil, nil)
+	response, err := client.Query(field1.RowTopXor(2, field2.Row(100)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := []CountResultItem{
+		CountResultItem{ID: 20, Count: 0},
+		CountResultItem{ID: 10, Count: 1},
+	}
+	if !reflect.DeepEqual(target, response.Result().CountItems()) {
+		t.Fatalf("%v != %v", target, response.Result().CountItems())
+	}
+}
+
 func TestCreateDeleteIndexField(t *testing.T) {
 	client := getClient()
 	index1 := NewIndex("to-be-deleted")

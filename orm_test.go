@@ -595,6 +595,12 @@ func TestIndexRow(t *testing.T) {
 		sampleIndex.IndexRow(collabField.Row(5), projectIndex))
 }
 
+func TestRowTopXor(t *testing.T) {
+	comparePQL(t,
+		"TopXor(sample-field,Row(collaboration=5),n=10)",
+		sampleField.RowTopXor(10, collabField.Row(5)))
+}
+
 func TestBatch(t *testing.T) {
 	q := sampleIndex.BatchQuery()
 	if q.Index() != sampleIndex {

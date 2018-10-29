@@ -589,7 +589,13 @@ func TestOptions(t *testing.T) {
 		))
 }
 
-func TestBatchQuery(t *testing.T) {
+func TestIndexRow(t *testing.T) {
+	comparePQL(t,
+		"IndexRow(Row(collaboration=5),index='project-index')",
+		sampleIndex.IndexRow(collabField.Row(5), projectIndex))
+}
+
+func TestBatch(t *testing.T) {
 	q := sampleIndex.BatchQuery()
 	if q.Index() != sampleIndex {
 		t.Fatalf("The correct index should be assigned")
@@ -607,7 +613,7 @@ func TestBatchQuery(t *testing.T) {
 	}
 }
 
-func TestBatchQueryWithError(t *testing.T) {
+func TestBatchWithError(t *testing.T) {
 	q := sampleIndex.BatchQuery()
 	q.Add(sampleField.FilterAttrTopN(12, collabField.Row(7), "$invalid$", 80, 81))
 	if q.Error() == nil {

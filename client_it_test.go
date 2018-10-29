@@ -370,7 +370,7 @@ func TestSetBoolField(t *testing.T) {
 
 func TestClearRowQuery(t *testing.T) {
 	client := getClient()
-	field := index.Field("clear-row-test")
+	field := index.Field("clearrow-test")
 	err := client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
@@ -401,6 +401,28 @@ func TestClearRowQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 	target = []uint64(nil)
+	if !reflect.DeepEqual(target, response.Result().Row().Columns) {
+		t.Fatalf("%v != %v", target, response.Result().Row().Columns)
+	}
+}
+
+func TestIndexRowQuery(t *testing.T) {
+	client := getClient()
+	field := index.Field("indexrow-test")
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = client.Query(field.Set(1, 100))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := []uint64{100}
+	response, err := client.Query(index.IndexRow(field.Row(1), index))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !reflect.DeepEqual(target, response.Result().Row().Columns) {
 		t.Fatalf("%v != %v", target, response.Result().Row().Columns)
 	}

@@ -510,6 +510,11 @@ func (idx *Index) SetColumnAttrs(colIDOrKey interface{}, attrs map[string]interf
 	return NewPQLBaseQuery(q, idx, nil)
 }
 
+func (idx *Index) IndexRow(row *PQLRowQuery, index *Index) *PQLRowQuery {
+	serializedQuery := row.serialize().String()
+	return NewPQLRowQuery(fmt.Sprintf("IndexRow(%s,index='%s')", serializedQuery, index.name), idx, nil)
+}
+
 // Options creates an Options query.
 func (idx *Index) Options(row *PQLRowQuery, opts ...OptionsOption) *PQLBaseQuery {
 	oo := &OptionsOptions{}

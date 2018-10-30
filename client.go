@@ -1082,6 +1082,8 @@ func (node fragmentNode) URI() *URI {
 // Status contains the status information from a Pilosa server.
 type Status struct {
 	Nodes         []StatusNode `json:"nodes"`
+	State         string       `json:"state"`
+	LocalID       string       `json:"localID"`
 	indexMaxShard map[string]uint64
 }
 

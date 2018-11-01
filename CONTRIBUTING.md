@@ -1,6 +1,6 @@
 # Contributing
 
-Please check our [Contributor's Guidelines](https://github.com/pilosa/pilosa/CONTRIBUTING.md).
+Please check our [Contributor's Guidelines](https://github.com/pilosa/pilosa/blob/master/CONTRIBUTING.md).
 
 1. Fork this repo and add it as upstream: `git remote add upstream git@github.com:pilosa/go-pilosa.git`.
 2. Make sure all tests pass (use `make test-all`) and be sure that the tests cover all statements in your code (we aim for 100% test coverage).

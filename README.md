@@ -64,10 +64,10 @@ func main() {
 	// make sure the index and the field exists on the server
 	err = client.SyncSchema(schema)
 
-	// Send a Set query. PilosaException is thrown if execution of the query fails.
+	// Send a Set query. If err is non-nil, response will be nil.
 	response, err := client.Query(myfield.Set(5, 42))
 
-	// Send a Row query. PilosaException is thrown if execution of the query fails.
+	// Send a Row query. If err is non-nil, response will be nil.
 	response, err = client.Query(myfield.Row(5))
 
 	// Get the result

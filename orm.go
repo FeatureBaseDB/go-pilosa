@@ -864,7 +864,7 @@ func createAttributesString(attrs map[string]interface{}) (string, error) {
 			return "", err
 		}
 		if vs, ok := v.(string); ok {
-			attrsList = append(attrsList, fmt.Sprintf("%s=\"%s\"", k, strings.Replace(vs, "\"", "\\\"", -1)))
+			attrsList = append(attrsList, fmt.Sprintf("%s=%s", k, strconv.Quote(vs)))
 		} else {
 			attrsList = append(attrsList, fmt.Sprintf("%s=%v", k, v))
 		}

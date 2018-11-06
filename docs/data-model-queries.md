@@ -11,7 +11,7 @@ schema := pilosa.NewSchema()
 repository := schema.Index("repository")
 ```
 
-You can customize pass options while creating index instances:
+You can pass options while creating index instances:
 ```go
 repository := schema.Index("repository", pilosa.OptIndexKeys(true))
 ```

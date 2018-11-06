@@ -2,13 +2,18 @@
 
 ## Indexes and Fields
 
-*Index* and *field*s are the main data models of Pilosa. You can check the [Pilosa documentation](https://www.pilosa.com/docs) for more detail about the data model.
+*Index* and *field*s are the main data models of Pilosa. You can check the [Pilosa documentation](https://www.pilosa.com/docs/latest/data-model/) for more detail about the data model.
 
-The `schema.Index` function is used to create an index object. Note that this does not create an index on the server; the index object simply defines the schema.
+The `schema.Index` function is used to create an index instance. Note that this does not create an index on the server; the index object simply defines the schema.
 
 ```go
 schema := pilosa.NewSchema()
 repository := schema.Index("repository")
+```
+
+You can customize pass options while creating index instances:
+```go
+repository := schema.Index("repository", pilosa.OptIndexKeys(true))
 ```
 
 Field definitions are created with a call to the `Field` function of an index:
@@ -23,9 +28,19 @@ You can pass options to fields:
 stargazer := repository.Field("stargazer", pilosa.OptFieldTypeTime(TimeQuantumYearMonthDay))
 ```
 
+In case the schema already exists on the server, you can retrieve that instead of creating the schema:
+```go
+client := pilosa.DefaultClient()
+schema, err := client.Schema()
+if err != nil {
+    // act on the error
+}
+repository := schema.Index("repository")
+```
+
 ## Queries
 
-Once you have indexes and field structs created, you can create queries for them. Some of the queries work on the columns; corresponding methods are attached to the index. Other queries work on rows with related methods attached to fields.
+Once you have indexes and field definitions, you can create queries for them. Some of the queries work on the columns; corresponding methods are attached to the index. Other queries work on rows with related methods attached to fields.
 
 For instance, `Row` queries work on rows; use a `Field` object to create those queries:
 
@@ -47,19 +62,20 @@ query := repository.BatchQuery(
     repository.Union(stargazer.Row(100), stargazer.Row(5)))
 ```
 
-The recommended way of creating query structs is using dedicated methods attached to index and field objects, but sometimes it would be desirable to send raw queries to Pilosa. You can use `index.RawQuery` method for that. Note that query string is not validated before sending to the server:
+The recommended way of creating query instances is using dedicated functions attached to index and field objects, but sometimes it would be desirable to send raw queries to Pilosa. You can use `index.RawQuery` method for that. Note that query string is not validated before sending to the server:
 
 ```go
 query := repository.RawQuery("Row(stargazer=5)")
 ```
 
-This client supports [BSI groups](https://www.pilosa.com/docs/latest/query-language/#range-bsi). Read the [Range Encoded Bitmaps](https://www.pilosa.com/blog/range-encoded-bitmaps/) blog post for more information about the BSI implementation of range encoding in Pilosa.
+Raw queries are only sent to the coordinator node of a Pilosa cluster, so currently there's a possible performance hit using them instead of ORM functions attached to index or field instances.
 
-In order to use BSI groups, an integer field should be created. The field should have its minimum and maximum set. Here's how you would do that:
+This client supports [range queries using bit sliced indexes (BSI)](https://www.pilosa.com/docs/latest/query-language/#range-bsi). Read the [Range Encoded Bitmaps](https://www.pilosa.com/blog/range-encoded-bitmaps/) blog post for more information about the BSI implementation of range encoding in Pilosa.
+
+In order to use BSI range queries, an integer field should be created. The field should have its minimum and maximum set. Here's how you would do that:
 ```go
 index := schema.Index("animals")
 captivity := index.Field("captivity", pilosa.OptFieldTypeInt(0, 956))
-client.SyncSchema(schema)
 ```
 
 If the field with the necessary field already exists on the server, you don't need to create the field instance, `client.SyncSchema(schema)` would load that to `schema`. You can then add some data:
@@ -109,6 +125,7 @@ Index:
 * `Not(row) *PQLRowQuery`
 * `Count(row *PQLRowQuery) *PQLBaseQuery`
 * `SetColumnAttrs(columnID uint64, attrs map[string]interface{}) *PQLBaseQuery`
+* `Options(row *PQLRowQuery, opts ...OptionsOption) *PQLBaseQuery`
 
 Field:
 
@@ -121,6 +138,8 @@ Field:
 * `FilterFieldTopN(n uint64, row *PQLRowQuery, field string, values ...interface{}) *PQLRowQuery`
 * `Range(rowID uint64, start time.Time, end time.Time) *PQLRowQuery`
 * `SetRowAttrs(rowID uint64, attrs map[string]interface{}) *PQLBaseQuery`
+* `ClearRow(rowIDOrKey interface{}) *PQLBaseQuery`
+* `Store(row *PQLRowQuery, rowIDOrKey interface{}) *PQLBaseQuery`
 * `LT(n int) *PQLRowQuery`
 * `LTE(n int) *PQLRowQuery`
 * `GT(n int) *PQLRowQuery`

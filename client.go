@@ -140,6 +140,17 @@ func NewClient(addrUriOrCluster interface{}, options ...ClientOption) (*Client, 
 	return newClientWithCluster(cluster, clientOptions), nil
 }
 
+func (c *Client) BulkColumnLoad(indexName string,batch []*pbuf.ColumnAttrSet)([]byte,error){
+        
+ 	data,err := proto.Marshal(&pbuf.BulkColumnAttrRequest{ColAttrSets:batch})
+	if err != nil {
+		return  nil,err
+	}
+	path := fmt.Sprintf("/index/%s/import-column-attrs", indexName)
+	_, buf, err := c.httpRequest("POST", path, data, defaultProtobufHeaders(), false)
+	return buf,err
+}
+
 // Query runs the given query against the server with the given options.
 // Pass nil for default options.
 func (c *Client) Query(query PQLQuery, options ...interface{}) (*QueryResponse, error) {

@@ -447,12 +447,17 @@ func (c *Client) importRoaringBitmap(uri *URI, field *Field, shard uint64, bmp *
 	params := url.Values{}
 	params.Add("clear", strconv.FormatBool(options.clear))
 	path := makeRoaringImportPath(field, shard, params)
-	headers := map[string]string{
-		"Content-Type": "application/x-binary",
-		"Accept":       "application/x-protobuf",
+	req := &pbuf.ImportRoaringRequest{
+		Clear: options.clear,
+		Views: []*pbuf.ImportRoaringRequestView{
+			{Name: "", Data: buf.Bytes()},
+		},
 	}
-	data := buf.Bytes()
-	resp, err := c.doRequest(uri, "POST", path, headers, bytes.NewReader(data))
+	data, err := proto.Marshal(req)
+	if err != nil {
+		return err
+	}
+	resp, err := c.doRequest(uri, "POST", path, defaultProtobufHeaders(), bytes.NewReader(data))
 	if err = anyError(resp, err); err != nil {
 		return errors.Wrap(err, "doing import")
 	}

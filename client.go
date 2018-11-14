@@ -328,8 +328,13 @@ func (c *Client) importColumns(field *Field, shard uint64, records []Record, nod
 
 	if options.roaring {
 		uri := nodes[0].URI()
-		bmp := columnsToBitmap(options.shardWidth, records)
-		return c.importRoaringBitmap(uri, field, shard, bmp, options)
+		var views viewImports
+		if field.options.fieldType == FieldTypeTime {
+			views = columnsToBitmapTimeField(field.options.timeQuantum, options.shardWidth, records)
+		} else {
+			views = columnsToBitmap(options.shardWidth, records)
+		}
+		return c.importRoaringBitmap(uri, field, shard, views, options)
 	}
 
 	for _, node := range nodes {
@@ -438,20 +443,25 @@ func (c *Client) importData(uri *URI, indexName string, fieldName string, data [
 	return nil
 }
 
-func (c *Client) importRoaringBitmap(uri *URI, field *Field, shard uint64, bmp *roaring.Bitmap, options *ImportOptions) error {
-	buf := &bytes.Buffer{}
-	_, err := bmp.WriteTo(buf)
-	if err != nil {
-		return errors.Wrap(err, "marshalling bitmap")
+func (c *Client) importRoaringBitmap(uri *URI, field *Field, shard uint64, views viewImports, options *ImportOptions) error {
+	protoViews := []*pbuf.ImportRoaringRequestView{}
+	for name, bmp := range views {
+		buf := &bytes.Buffer{}
+		_, err := bmp.WriteTo(buf)
+		if err != nil {
+			return errors.Wrap(err, "marshalling bitmap")
+		}
+		protoViews = append(protoViews, &pbuf.ImportRoaringRequestView{
+			Name: name,
+			Data: buf.Bytes(),
+		})
 	}
 	params := url.Values{}
 	params.Add("clear", strconv.FormatBool(options.clear))
 	path := makeRoaringImportPath(field, shard, params)
 	req := &pbuf.ImportRoaringRequest{
 		Clear: options.clear,
-		Views: []*pbuf.ImportRoaringRequestView{
-			{Name: "", Data: buf.Bytes()},
-		},
+		Views: protoViews,
 	}
 	data, err := proto.Marshal(req)
 	if err != nil {
@@ -792,13 +802,67 @@ func columnsToImportRequest(field *Field, shard uint64, records []Record) *pbuf.
 	}
 }
 
-func columnsToBitmap(shardWidth uint64, records []Record) *roaring.Bitmap {
+type viewImports map[string]*roaring.Bitmap
+
+func columnsToBitmap(shardWidth uint64, records []Record) viewImports {
 	bmp := roaring.NewBitmap()
 	for _, record := range records {
 		c := record.(Column)
 		bmp.DirectAdd(c.RowID*shardWidth + (c.ColumnID % shardWidth))
 	}
-	return bmp
+	return map[string]*roaring.Bitmap{"": bmp}
+}
+
+func columnsToBitmapTimeField(quantum TimeQuantum, shardWidth uint64, records []Record) viewImports {
+	views := viewImports{
+		"": roaring.NewBitmap(),
+	}
+	standard := views[""]
+	for _, record := range records {
+		c := record.(Column)
+		b := c.RowID*shardWidth + (c.ColumnID % shardWidth)
+		standard.DirectAdd(b)
+		// TODO: cache time views
+		timeViews := viewsByTime(time.Unix(c.Timestamp, 0), quantum)
+		for _, name := range timeViews {
+			view, ok := views[name]
+			if !ok {
+				view = roaring.NewBitmap()
+				views[name] = view
+			}
+			view.DirectAdd(b)
+		}
+	}
+	return views
+}
+
+// viewsByTime returns a list of views for a given timestamp.
+func viewsByTime(t time.Time, q TimeQuantum) []string { // nolint: unparam
+	a := make([]string, 0, len(q))
+	for _, unit := range q {
+		view := viewByTimeUnit(t, unit)
+		if view == "" {
+			continue
+		}
+		a = append(a, view)
+	}
+	return a
+}
+
+// viewByTimeUnit returns the view name for time with a given quantum unit.
+func viewByTimeUnit(t time.Time, unit rune) string {
+	switch unit {
+	case 'Y':
+		return t.Format("2006")
+	case 'M':
+		return t.Format("200601")
+	case 'D':
+		return t.Format("20060102")
+	case 'H':
+		return t.Format("2006010215")
+	default:
+		return ""
+	}
 }
 
 func valsToImportRequest(field *Field, shard uint64, vals []Record) *pbuf.ImportValueRequest {

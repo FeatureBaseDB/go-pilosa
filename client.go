@@ -348,6 +348,10 @@ func (c *Client) importColumns(field *Field, shard uint64, records []Record, nod
 }
 
 func (c *Client) hasRoaringImportSupport(field *Field) bool {
+	if field.options.fieldType != FieldTypeSet && field.options.fieldType != FieldTypeBool && field.options.fieldType != FieldTypeTime {
+		// Roaring imports is available for only set, bool and time fields.
+		return false
+	}
 	if field.index.options.keys || field.options.keys {
 		// Roaring imports is not available when keys are involved.
 		return false

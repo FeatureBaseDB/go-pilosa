@@ -1607,7 +1607,7 @@ func TestRowIDColumnIDImportRoaring(t *testing.T) {
 
 func TestRowIDColumnIDTimestampImportRoaring(t *testing.T) {
 	client := getClient()
-	iterator := newTestIterator()
+	iterator := newTestIteratorWithTimestamp()
 	field := index.Field("importfield-rowid-colid-time", OptFieldTypeTime(TimeQuantumMonthDayHour))
 	err := client.EnsureField(field)
 	if err != nil {
@@ -1649,6 +1649,31 @@ func TestRowIDColumnIDTimestampImportRoaring(t *testing.T) {
 		t.Fatalf("%v != %v", target, response.Result().Row().Columns)
 	}
 
+	// test clear imports
+	iterator = newTestIterator()
+	err = client.ImportField(field, iterator, OptImportClear(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bq = index.BatchQuery(
+		field.Row(2),
+		field.Row(7),
+		field.Row(10),
+	)
+	response, err = client.Query(bq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Results()) != 3 {
+		t.Fatalf("Result count should be 3")
+	}
+	for _, result := range response.Results() {
+		br := result.Row()
+		if !reflect.DeepEqual([]uint64(nil), br.Columns) {
+			t.Fatalf("%#v != %#v", []uint64(nil), br.Columns)
+		}
+	}
 }
 
 func TestRowIDColumnIDImportFails(t *testing.T) {
@@ -2196,6 +2221,15 @@ func consumeReader(t *testing.T, r io.Reader) string {
 }
 
 func newTestIterator() *ArrayRecordIterator {
+	return NewArrayRecordIterator([]Record{
+		Column{RowID: 10, ColumnID: 7},
+		Column{RowID: 10, ColumnID: 5},
+		Column{RowID: 2, ColumnID: 3},
+		Column{RowID: 7, ColumnID: 1},
+	})
+}
+
+func newTestIteratorWithTimestamp() *ArrayRecordIterator {
 	return NewArrayRecordIterator([]Record{
 		Column{RowID: 10, ColumnID: 7, Timestamp: 1542199376}, // 2018-11-14 15:42:00
 		Column{RowID: 10, ColumnID: 5, Timestamp: 1483273800}, // 2017-01-01 12:30:00

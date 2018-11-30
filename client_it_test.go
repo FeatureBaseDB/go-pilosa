@@ -1605,6 +1605,77 @@ func TestRowIDColumnIDImportRoaring(t *testing.T) {
 	}
 }
 
+func TestRowIDColumnIDTimestampImportRoaring(t *testing.T) {
+	client := getClient()
+	iterator := newTestIteratorWithTimestamp()
+	field := index.Field("importfield-rowid-colid-time", OptFieldTypeTime(TimeQuantumMonthDayHour))
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.ImportField(field, iterator)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	target := []uint64{3, 1, 5}
+	bq := index.BatchQuery(
+		field.Row(2),
+		field.Row(7),
+		field.Row(10),
+	)
+	response, err := client.Query(bq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Results()) != 3 {
+		t.Fatalf("Result count should be 3")
+	}
+	for i, result := range response.Results() {
+		br := result.Row()
+		if len(br.Columns) < 1 {
+			t.Fatalf("1 or more keys should be returned")
+		}
+		if target[i] != br.Columns[0] {
+			t.Fatalf("%d != %d", target[i], br.Columns[0])
+		}
+	}
+
+	target = []uint64{5, 7}
+	start := time.Date(2016, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
+	response, err = client.Query(field.Range(10, start, end))
+	if !reflect.DeepEqual(target, response.Result().Row().Columns) {
+		t.Fatalf("%v != %v", target, response.Result().Row().Columns)
+	}
+
+	// test clear imports
+	iterator = newTestIterator()
+	err = client.ImportField(field, iterator, OptImportClear(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bq = index.BatchQuery(
+		field.Row(2),
+		field.Row(7),
+		field.Row(10),
+	)
+	response, err = client.Query(bq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Results()) != 3 {
+		t.Fatalf("Result count should be 3")
+	}
+	for _, result := range response.Results() {
+		br := result.Row()
+		if !reflect.DeepEqual([]uint64(nil), br.Columns) {
+			t.Fatalf("%#v != %#v", []uint64(nil), br.Columns)
+		}
+	}
+}
+
 func TestRowIDColumnIDImportFails(t *testing.T) {
 	server := getMockServer(200, []byte(`{}`), -1)
 	defer server.Close()
@@ -2155,6 +2226,15 @@ func newTestIterator() *ArrayRecordIterator {
 		Column{RowID: 10, ColumnID: 5},
 		Column{RowID: 2, ColumnID: 3},
 		Column{RowID: 7, ColumnID: 1},
+	})
+}
+
+func newTestIteratorWithTimestamp() *ArrayRecordIterator {
+	return NewArrayRecordIterator([]Record{
+		Column{RowID: 10, ColumnID: 7, Timestamp: 1542199376}, // 2018-11-14 15:42:00
+		Column{RowID: 10, ColumnID: 5, Timestamp: 1483273800}, // 2017-01-01 12:30:00
+		Column{RowID: 2, ColumnID: 3, Timestamp: 1520268300},  // 2018-03-05 16:45:00
+		Column{RowID: 7, ColumnID: 1, Timestamp: 1330965900},  // 2012-03-05 16:45:00
 	})
 }
 

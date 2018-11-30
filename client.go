@@ -827,7 +827,7 @@ func columnsToBitmapTimeField(quantum TimeQuantum, shardWidth uint64, records []
 		b := c.RowID*shardWidth + (c.ColumnID % shardWidth)
 		standard.DirectAdd(b)
 		// TODO: cache time views
-		timeViews := viewsByTime(time.Unix(c.Timestamp, 0), quantum)
+		timeViews := viewsByTime(time.Unix(0, c.Timestamp).UTC(), quantum)
 		for _, name := range timeViews {
 			view, ok := views[name]
 			if !ok {

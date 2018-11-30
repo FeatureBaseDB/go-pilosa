@@ -2231,10 +2231,10 @@ func newTestIterator() *ArrayRecordIterator {
 
 func newTestIteratorWithTimestamp() *ArrayRecordIterator {
 	return NewArrayRecordIterator([]Record{
-		Column{RowID: 10, ColumnID: 7, Timestamp: 1542199376}, // 2018-11-14 15:42:00
-		Column{RowID: 10, ColumnID: 5, Timestamp: 1483273800}, // 2017-01-01 12:30:00
-		Column{RowID: 2, ColumnID: 3, Timestamp: 1520268300},  // 2018-03-05 16:45:00
-		Column{RowID: 7, ColumnID: 1, Timestamp: 1330965900},  // 2012-03-05 16:45:00
+		Column{RowID: 10, ColumnID: 7, Timestamp: 1542199376000000000}, // 2018-11-14 15:42:00
+		Column{RowID: 10, ColumnID: 5, Timestamp: 1483273800000000000}, // 2017-01-01 12:30:00
+		Column{RowID: 2, ColumnID: 3, Timestamp: 1520268300000000000},  // 2018-03-05 16:45:00
+		Column{RowID: 7, ColumnID: 1, Timestamp: 1330965900000000000},  // 2012-03-05 16:45:00
 	})
 }
 

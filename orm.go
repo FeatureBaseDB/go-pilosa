@@ -540,13 +540,14 @@ type FieldInfo struct {
 
 // FieldOptions contains options to customize Field objects and field queries.
 type FieldOptions struct {
-	fieldType   FieldType
-	timeQuantum TimeQuantum
-	cacheType   CacheType
-	cacheSize   int
-	min         int64
-	max         int64
-	keys        bool
+	fieldType      FieldType
+	timeQuantum    TimeQuantum
+	cacheType      CacheType
+	cacheSize      int
+	min            int64
+	max            int64
+	keys           bool
+	noStandardView bool
 }
 
 // Type returns the type of the field. Currently "set", "int", or "time".
@@ -581,6 +582,10 @@ func (fo *FieldOptions) Max() int64 {
 	return fo.max
 }
 
+func (fo *FieldOptions) NoStandardView() bool {
+	return fo.noStandardView
+}
+
 func (fo *FieldOptions) withDefaults() (updated *FieldOptions) {
 	// copy options so the original is not updated
 	updated = &FieldOptions{}
@@ -604,6 +609,7 @@ func (fo FieldOptions) String() string {
 		mopt["max"] = fo.max
 	case FieldTypeTime:
 		mopt["timeQuantum"] = string(fo.timeQuantum)
+		mopt["noStandardView"] = fo.noStandardView
 	}
 
 	if fo.fieldType != FieldTypeDefault {
@@ -648,10 +654,13 @@ func OptFieldTypeInt(min int64, max int64) FieldOption {
 }
 
 // OptFieldTypeTime adds a time field.
-func OptFieldTypeTime(quantum TimeQuantum) FieldOption {
+func OptFieldTypeTime(quantum TimeQuantum, opts ...bool) FieldOption {
 	return func(options *FieldOptions) {
 		options.fieldType = FieldTypeTime
 		options.timeQuantum = quantum
+		if len(opts) > 0 && opts[0] == true {
+			options.noStandardView = true
+		}
 	}
 }
 

@@ -330,7 +330,7 @@ func (c *Client) importColumns(field *Field, shard uint64, records []Record, nod
 		uri := nodes[0].URI()
 		var views viewImports
 		if field.options.fieldType == FieldTypeTime {
-			views = columnsToBitmapTimeField(field.options.timeQuantum, options.shardWidth, records)
+			views = columnsToBitmapTimeField(field.options.timeQuantum, options.shardWidth, records, field.options.noStandardView)
 		} else {
 			views = columnsToBitmap(options.shardWidth, records)
 		}
@@ -817,15 +817,19 @@ func columnsToBitmap(shardWidth uint64, records []Record) viewImports {
 	return map[string]*roaring.Bitmap{"": bmp}
 }
 
-func columnsToBitmapTimeField(quantum TimeQuantum, shardWidth uint64, records []Record) viewImports {
-	views := viewImports{
-		"": roaring.NewBitmap(),
+func columnsToBitmapTimeField(quantum TimeQuantum, shardWidth uint64, records []Record, noStandardView bool) viewImports {
+	var standard *roaring.Bitmap
+	views := viewImports{}
+	if !noStandardView {
+		standard = roaring.NewBitmap()
+		views[""] = standard
 	}
-	standard := views[""]
 	for _, record := range records {
 		c := record.(Column)
 		b := c.RowID*shardWidth + (c.ColumnID % shardWidth)
-		standard.DirectAdd(b)
+		if standard != nil {
+			standard.DirectAdd(b)
+		}
 		// TODO: cache time views
 		timeViews := viewsByTime(time.Unix(0, c.Timestamp).UTC(), quantum)
 		for _, name := range timeViews {

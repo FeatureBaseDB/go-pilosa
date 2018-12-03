@@ -1634,7 +1634,7 @@ func TestRowIDColumnIDTimestampImportRoaring(t *testing.T) {
 	for i, result := range response.Results() {
 		br := result.Row()
 		if len(br.Columns) < 1 {
-			t.Fatalf("1 or more keys should be returned")
+			t.Fatalf("1 or more columns should be returned")
 		}
 		if target[i] != br.Columns[0] {
 			t.Fatalf("%d != %d", target[i], br.Columns[0])
@@ -1673,6 +1673,49 @@ func TestRowIDColumnIDTimestampImportRoaring(t *testing.T) {
 		if !reflect.DeepEqual([]uint64(nil), br.Columns) {
 			t.Fatalf("%#v != %#v", []uint64(nil), br.Columns)
 		}
+	}
+}
+
+func TestRowIDColumnIDTimestampImportRoaringNoStandardView(t *testing.T) {
+	client := getClient()
+	iterator := newTestIteratorWithTimestamp()
+	field := index.Field("importfield-rowid-colid-time-nostd", OptFieldTypeTime(TimeQuantumMonthDayHour, true))
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.ImportField(field, iterator)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	target := []uint64{3, 1, 5}
+	bq := index.BatchQuery(
+		field.Row(2),
+		field.Row(7),
+		field.Row(10),
+	)
+	response, err := client.Query(bq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Results()) != 3 {
+		t.Fatalf("Result count should be 3")
+	}
+	for _, result := range response.Results() {
+		br := result.Row()
+		// no columns should be returned since the standard view shouldn't exist
+		if len(br.Columns) != 0 {
+			t.Fatalf("no columns should be returned, but %d returned", len(br.Columns))
+		}
+	}
+
+	target = []uint64{5, 7}
+	start := time.Date(2016, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
+	response, err = client.Query(field.Range(10, start, end))
+	if !reflect.DeepEqual(target, response.Result().Row().Columns) {
+		t.Fatalf("%v != %v", target, response.Result().Row().Columns)
 	}
 }
 

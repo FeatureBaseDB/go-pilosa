@@ -660,7 +660,7 @@ func TestIntFieldOptions(t *testing.T) {
 func TestTimeFieldOptions(t *testing.T) {
 	field := sampleIndex.Field("time-field", OptFieldTypeTime(TimeQuantumDayHour))
 	jsonString := field.options.String()
-	targetString := `{"options":{"type":"time","timeQuantum":"DH"}}`
+	targetString := `{"options":{"noStandardView":false,"type":"time","timeQuantum":"DH"}}`
 	if sortedString(targetString) != sortedString(jsonString) {
 		t.Fatalf("`%s` != `%s`", targetString, jsonString)
 	}

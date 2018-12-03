@@ -658,7 +658,7 @@ func OptFieldTypeTime(quantum TimeQuantum, opts ...bool) FieldOption {
 	return func(options *FieldOptions) {
 		options.fieldType = FieldTypeTime
 		options.timeQuantum = quantum
-		if len(opts) > 0 && opts[0] == true {
+		if len(opts) > 0 && opts[0] {
 			options.noStandardView = true
 		}
 	}

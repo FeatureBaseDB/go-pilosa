@@ -819,15 +819,10 @@ func columnsToBitmap(shardWidth uint64, records []Record) viewImports {
 
 func columnsToBitmapTimeField(quantum TimeQuantum, shardWidth uint64, records []Record, noStandardView bool) viewImports {
 	var standard *roaring.Bitmap
-	var views viewImports
-	if noStandardView {
-		standard = nil
-		views = viewImports{}
-	} else {
+	views := viewImports{}
+	if !noStandardView {
 		standard = roaring.NewBitmap()
-		views = viewImports{
-			"": standard,
-		}
+		views[""] = standard
 	}
 	for _, record := range records {
 		c := record.(Column)

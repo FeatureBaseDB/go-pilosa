@@ -3,7 +3,6 @@ package pilosa
 import (
 	"fmt"
 	"io"
-	"sort"
 	"time"
 
 	"github.com/pkg/errors"
@@ -98,6 +97,10 @@ func recordImportWorker(id int, client *Client, field *Field, chans importWorker
 	recordChan := chans.records
 	errChan := chans.errs
 	shardNodes := map[uint64][]fragmentNode{}
+	state := &importState{
+		rowKeyIDMap:    map[string]uint64{},
+		columnKeyIDMap: map[string]uint64{},
+	}
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -128,8 +131,7 @@ func recordImportWorker(id int, client *Client, field *Field, chans importWorker
 			}
 		}
 		tic := time.Now()
-		sort.Sort(recordSort(records))
-		err = importFun(field, shard, records, nodes, &options)
+		err = importFun(field, shard, records, nodes, &options, state)
 		if err != nil {
 			return err
 		}

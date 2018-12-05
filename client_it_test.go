@@ -774,7 +774,7 @@ func TestImportWithBatchSizeExpectingZero(t *testing.T) {
 	}
 }
 
-func failingImportColumns(field *Field, shard uint64, records []Record, nodes []fragmentNode, options *ImportOptions) error {
+func failingImportColumns(field *Field, shard uint64, records []Record, nodes []fragmentNode, options *ImportOptions, state *importState) error {
 	if len(records) > 0 {
 		return errors.New("some error")
 	}
@@ -1086,7 +1086,7 @@ func TestImportFailsOnImportColumnsError(t *testing.T) {
 	index := NewIndex("foo")
 	field := index.Field("bar")
 	nodes := fragmentNodesFromURL(server.URL)
-	err := client.importColumns(field, 0, []Record{}, nodes, &ImportOptions{})
+	err := client.importColumns(field, 0, []Record{}, nodes, &ImportOptions{}, &importState{})
 	if err == nil {
 		t.Fatalf("importColumns should fail when fetch fragment nodes fails")
 	}
@@ -1099,7 +1099,7 @@ func TestValueImportFailsOnImportValueError(t *testing.T) {
 	index := NewIndex("foo")
 	field := index.Field("bar")
 	nodes := fragmentNodesFromURL(server.URL)
-	err := client.importValues(field, 0, nil, nodes, &ImportOptions{})
+	err := client.importValues(field, 0, nil, nodes, &ImportOptions{}, &importState{})
 	if err == nil {
 		t.Fatalf("importValues should fail when fetch fragment nodes fails")
 	}
@@ -1113,7 +1113,7 @@ func TestImportColumnsFailInvalidNodeAddress(t *testing.T) {
 	index := NewIndex("foo")
 	field := index.Field("bar")
 	nodes := fragmentNodesFromURL("zzz://doesntmatter:10101")
-	err := client.importColumns(field, 0, []Record{}, nodes, &ImportOptions{})
+	err := client.importColumns(field, 0, []Record{}, nodes, &ImportOptions{}, &importState{})
 	if err == nil {
 		t.Fatalf("importColumns should fail on invalid node host")
 	}
@@ -1127,7 +1127,7 @@ func TestImportValuesFailInvalidNodeAddress(t *testing.T) {
 	index := NewIndex("foo")
 	field := index.Field("bar")
 	nodes := fragmentNodesFromURL("zzz://doesntmatter:10101")
-	err := client.importValues(field, 0, nil, nodes, &ImportOptions{})
+	err := client.importValues(field, 0, nil, nodes, &ImportOptions{}, &importState{})
 	if err == nil {
 		t.Fatalf("importValues should fail on invalid node host")
 	}
@@ -1418,18 +1418,6 @@ func TestClientRace(t *testing.T) {
 	}
 }
 
-func TestImportFieldWithoutImportFunFails(t *testing.T) {
-	client := DefaultClient()
-	field := &Field{
-		index:   &Index{options: &IndexOptions{}},
-		options: &FieldOptions{},
-	}
-	err := client.ImportField(field, nil, importRecordsFunction(nil))
-	if err == nil {
-		t.Fatalf("Should have failed")
-	}
-}
-
 func TestFetchCoordinatorFails(t *testing.T) {
 	server := getMockServer(404, []byte(`[]`), -1)
 	defer server.Close()
@@ -1550,7 +1538,7 @@ func TestRowIDColumnIDImportRoaring(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportField(field, iterator)
+	err = client.ImportField(field, iterator, OptImportRoaring(true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1580,7 +1568,7 @@ func TestRowIDColumnIDImportRoaring(t *testing.T) {
 
 	// test clear imports
 	iterator = newTestIterator()
-	err = client.ImportField(field, iterator, OptImportClear(true))
+	err = client.ImportField(field, iterator, OptImportRoaring(true), OptImportClear(true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1613,7 +1601,7 @@ func TestRowIDColumnIDTimestampImportRoaring(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportField(field, iterator)
+	err = client.ImportField(field, iterator, OptImportRoaring(true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1651,7 +1639,7 @@ func TestRowIDColumnIDTimestampImportRoaring(t *testing.T) {
 
 	// test clear imports
 	iterator = newTestIterator()
-	err = client.ImportField(field, iterator, OptImportClear(true))
+	err = client.ImportField(field, iterator, OptImportRoaring(true), OptImportClear(true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1684,7 +1672,7 @@ func TestRowIDColumnIDTimestampImportRoaringNoStandardView(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportField(field, iterator)
+	err = client.ImportField(field, iterator, OptImportRoaring(true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1761,7 +1749,7 @@ func TestRowIDColumnIDImportFailsRoaring(t *testing.T) {
 		Column{RowID: 2, ColumnID: 3},
 		Column{RowID: 7, ColumnID: 1},
 	})
-	err := client.ImportField(field, iterator)
+	err := client.ImportField(field, iterator, OptImportRoaring(true))
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -1838,7 +1826,7 @@ func TestRowKeyColumnIDImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = client.ImportField(field, iterator)
+	err = client.ImportField(field, iterator, OptImportRoaring(true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2094,6 +2082,27 @@ func TestExportRowKeyColumnKey(t *testing.T) {
 	}
 }
 
+func TestTranslateRowKeys(t *testing.T) {
+	client := getClient()
+	field := index.Field("translate-rowkeys", OptFieldKeys(true))
+	client.EnsureField(field)
+	_, err := client.Query(index.BatchQuery(
+		field.Set("key1", 10),
+		field.Set("key2", 1000),
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rowIDs, err := client.translateRowKeys(field, []string{"key1", "key2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := []uint64{1, 2}
+	if !reflect.DeepEqual(target, rowIDs) {
+		t.Fatalf("%v != %v", target, rowIDs)
+	}
+}
+
 func TestCSVExportFailure(t *testing.T) {
 	server := getMockServer(404, []byte("sorry, not found"), -1)
 	defer server.Close()
@@ -2134,7 +2143,7 @@ func TestImportColumnsNoNodesError(t *testing.T) {
 		},
 		options: &FieldOptions{},
 	}
-	err := client.importColumns(field, 0, nil, nil, &ImportOptions{})
+	err := client.importColumns(field, 0, nil, nil, &ImportOptions{}, &importState{})
 	if err == nil {
 		t.Fatalf("should have failed")
 	}

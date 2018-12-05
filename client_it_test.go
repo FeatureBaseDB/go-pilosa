@@ -572,6 +572,7 @@ func TestSchema(t *testing.T) {
 	}
 	f := index.Field("schema-test-field",
 		OptFieldTypeSet(CacheTypeLRU, 9999),
+		OptFieldKeys(true),
 	)
 	err = client.EnsureField(f)
 	if err != nil {
@@ -581,16 +582,22 @@ func TestSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f = schema.indexes[index.Name()].fields["schema-test-field"]
-	if f == nil {
+	f2 := schema.indexes[index.Name()].fields["schema-test-field"]
+	if f2 == nil {
 		t.Fatal("Field should not be nil")
 	}
-	opt := f.options
+	opt := f2.options
 	if opt.cacheType != CacheTypeLRU {
 		t.Fatalf("cache type %s != %s", CacheTypeLRU, opt.cacheType)
 	}
 	if opt.cacheSize != 9999 {
 		t.Fatalf("cache size 9999 != %d", opt.cacheSize)
+	}
+	if !opt.keys {
+		t.Fatalf("keys true != %v", opt.keys)
+	}
+	if !reflect.DeepEqual(f.options, f2.options) {
+		t.Fatalf("%v != %v", f.options, f2.options)
 	}
 }
 

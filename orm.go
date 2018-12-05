@@ -582,6 +582,12 @@ func (fo *FieldOptions) Max() int64 {
 	return fo.max
 }
 
+// Keys returns whether this field uses keys instead of IDs
+func (fo *FieldOptions) Keys() bool {
+	return fo.keys
+}
+
+// NoStandardView suppresses creating the standard view for supported field types (currently, time)
 func (fo *FieldOptions) NoStandardView() bool {
 	return fo.noStandardView
 }

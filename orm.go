@@ -263,6 +263,14 @@ func (io *IndexOptions) withDefaults() (updated *IndexOptions) {
 	return
 }
 
+func (io IndexOptions) Keys() bool {
+	return io.keys
+}
+
+func (io IndexOptions) TrackExistence() bool {
+	return io.trackExistence
+}
+
 func (io IndexOptions) String() string {
 	mopt := map[string]interface{}{}
 	if io.keysSet {
@@ -582,6 +590,12 @@ func (fo *FieldOptions) Max() int64 {
 	return fo.max
 }
 
+// Keys returns whether this field uses keys instead of IDs
+func (fo *FieldOptions) Keys() bool {
+	return fo.keys
+}
+
+// NoStandardView suppresses creating the standard view for supported field types (currently, time)
 func (fo *FieldOptions) NoStandardView() bool {
 	return fo.noStandardView
 }

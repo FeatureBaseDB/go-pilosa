@@ -1210,8 +1210,10 @@ type SchemaOptions struct {
 
 func (so SchemaOptions) asIndexOptions() *IndexOptions {
 	return &IndexOptions{
-		keys:           so.Keys,
-		trackExistence: so.TrackExistence,
+		keys:              so.Keys,
+		keysSet:           true,
+		trackExistence:    so.TrackExistence,
+		trackExistenceSet: true,
 	}
 }
 

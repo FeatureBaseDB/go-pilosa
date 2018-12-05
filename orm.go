@@ -263,6 +263,14 @@ func (io *IndexOptions) withDefaults() (updated *IndexOptions) {
 	return
 }
 
+func (io IndexOptions) Keys() bool {
+	return io.keys
+}
+
+func (io IndexOptions) TrackExistence() bool {
+	return io.trackExistence
+}
+
 func (io IndexOptions) String() string {
 	mopt := map[string]interface{}{}
 	if io.keysSet {

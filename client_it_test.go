@@ -570,11 +570,14 @@ func TestSchema(t *testing.T) {
 	if len(schema.indexes) < 1 {
 		t.Fatalf("There should be at least 1 index in the schema")
 	}
+	index := schema.Index("schema-test-index",
+		OptIndexKeys(true),
+		OptIndexTrackExistence(false))
 	f := index.Field("schema-test-field",
 		OptFieldTypeSet(CacheTypeLRU, 9999),
 		OptFieldKeys(true),
 	)
-	err = client.EnsureField(f)
+	err = client.SyncSchema(schema)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -582,6 +585,11 @@ func TestSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	i2 := schema.indexes[index.Name()]
+	if !reflect.DeepEqual(index.options, i2.options) {
+		t.Fatalf("%v != %v", index.options, i2.options)
+	}
+
 	f2 := schema.indexes[index.Name()].fields["schema-test-field"]
 	if f2 == nil {
 		t.Fatal("Field should not be nil")

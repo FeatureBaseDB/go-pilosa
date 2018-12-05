@@ -1312,11 +1312,13 @@ type SchemaOptions struct {
 	Max            int64     `json:"max"`
 	Keys           bool      `json:"keys"`
 	NoStandardView bool      `json:"noStandardView"`
+	TrackExistence bool      `json:"trackExistence"`
 }
 
 func (so SchemaOptions) asIndexOptions() *IndexOptions {
 	return &IndexOptions{
-		keys: so.Keys,
+		keys:           so.Keys,
+		trackExistence: so.TrackExistence,
 	}
 }
 

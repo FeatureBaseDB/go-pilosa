@@ -51,6 +51,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	lru "github.com/hashicorp/golang-lru/simplelru"
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
@@ -339,42 +340,22 @@ func (c *Client) importColumns(field *Field,
 	}
 
 	if options.hasRoaring {
-		if field.index.options.keys {
-			// translating index keys is not supported yet
-			goto legacyImport
-		}
-
 		columns := make([]Column, 0, len(records))
 		for _, rec := range records {
 			columns = append(columns, rec.(Column))
 		}
 		if field.options.keys {
 			// attempt to translate row keys
-			uniqueMissingKeys := map[string]struct{}{}
-			for _, col := range columns {
-				if _, ok := state.rowKeyIDMap[col.RowKey]; !ok {
-					uniqueMissingKeys[col.RowKey] = struct{}{}
-					// missingKeys = append(missingKeys, col.RowKey)
-				}
+			err := c.translateRecordsRowKeys(state.rowKeyIDMap, field, columns)
+			if err != nil {
+				return errors.Wrap(err, "translating records row keys")
 			}
-			keys := make([]string, 0, len(uniqueMissingKeys))
-			for key := range uniqueMissingKeys {
-				keys = append(keys, key)
-			}
-			if len(keys) > 0 {
-				// translate missing keys
-				ids, err := c.translateRowKeys(field, keys)
-				if err != nil {
-					return err
-				}
-				for i, key := range keys {
-					state.rowKeyIDMap[key] = ids[i]
-				}
-			}
-			// replace RowKeys with RowIDs
-			for i, col := range columns {
-				col.RowID = state.rowKeyIDMap[col.RowKey]
-				columns[i] = col
+		}
+		if field.index.options.keys {
+			// attempt to translate column keys
+			err := c.translateRecordsColumnKeys(state.columnKeyIDMap, field.index, columns)
+			if err != nil {
+				return errors.Wrap(err, "translating records column keys")
 			}
 		}
 		uri := nodes[0].URI()
@@ -386,8 +367,6 @@ func (c *Client) importColumns(field *Field,
 		}
 		return c.importRoaringBitmap(uri, field, shard, views, options)
 	}
-
-legacyImport:
 
 	sort.Sort(recordSort(records))
 
@@ -401,16 +380,78 @@ legacyImport:
 	return errors.Wrap(err, "importing columns to nodes")
 }
 
+func (c *Client) translateRecordsRowKeys(rowKeyIDMap lru.LRUCache, field *Field, columns []Column) error {
+	uniqueMissingKeys := map[string]struct{}{}
+	for _, col := range columns {
+		if !rowKeyIDMap.Contains(col.RowKey) {
+			uniqueMissingKeys[col.RowKey] = struct{}{}
+		}
+	}
+	keys := make([]string, 0, len(uniqueMissingKeys))
+	for key := range uniqueMissingKeys {
+		keys = append(keys, key)
+	}
+	if len(keys) > 0 {
+		// translate missing keys
+		ids, err := c.translateRowKeys(field, keys)
+		if err != nil {
+			return err
+		}
+		for i, key := range keys {
+			rowKeyIDMap.Add(key, ids[i])
+		}
+	}
+	// replace RowKeys with RowIDs
+	for i, col := range columns {
+		if rowID, ok := rowKeyIDMap.Get(col.RowKey); ok {
+			col.RowID = rowID.(uint64)
+			columns[i] = col
+		} else {
+			return fmt.Errorf("Key '%s' does not exist in the rowKey to ID map", col.RowKey)
+		}
+	}
+	return nil
+}
+
+func (c *Client) translateRecordsColumnKeys(columnKeyIDMap lru.LRUCache, index *Index, columns []Column) error {
+	uniqueMissingKeys := map[string]struct{}{}
+	for _, col := range columns {
+		if !columnKeyIDMap.Contains(col.ColumnKey) {
+			uniqueMissingKeys[col.ColumnKey] = struct{}{}
+		}
+	}
+	keys := make([]string, 0, len(uniqueMissingKeys))
+	for key := range uniqueMissingKeys {
+		keys = append(keys, key)
+	}
+	if len(keys) > 0 {
+		// translate missing keys
+		ids, err := c.translateColumnKeys(index, keys)
+		if err != nil {
+			return err
+		}
+		for i, key := range keys {
+			columnKeyIDMap.Add(key, ids[i])
+		}
+	}
+	// replace ColumnKeys with ColumnIDs
+	for i, col := range columns {
+		if columnID, ok := columnKeyIDMap.Get(col.ColumnKey); ok {
+			col.ColumnID = columnID.(uint64)
+			columns[i] = col
+		} else {
+			return fmt.Errorf("Key '%s' does not exist in the columnKey to ID map", col.ColumnKey)
+		}
+	}
+	return nil
+}
+
 func (c *Client) hasRoaringImportSupport(field *Field) bool {
 	if field.options.fieldType != FieldTypeSet &&
 		field.options.fieldType != FieldTypeDefault &&
 		field.options.fieldType != FieldTypeBool &&
 		field.options.fieldType != FieldTypeTime {
 		// Roaring imports is available for only set, bool and time fields.
-		return false
-	}
-	if field.index.options.keys {
-		// Roaring imports is not available when columns keys are involved.
 		return false
 	}
 	// Check whether the roaring import endpoint exists
@@ -767,6 +808,18 @@ func (c *Client) translateRowKeys(field *Field, keys []string) ([]uint64, error)
 		Field: field.name,
 		Keys:  keys,
 	}
+	return c.translateKeys(req, keys)
+}
+
+func (c *Client) translateColumnKeys(index *Index, keys []string) ([]uint64, error) {
+	req := &pbuf.TranslateKeysRequest{
+		Index: index.name,
+		Keys:  keys,
+	}
+	return c.translateKeys(req, keys)
+}
+
+func (c *Client) translateKeys(req *pbuf.TranslateKeysRequest, keys []string) ([]uint64, error) {
 	reqData, err := proto.Marshal(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "marshalling traslate keys request")
@@ -780,7 +833,6 @@ func (c *Client) translateRowKeys(field *Field, keys []string) ([]uint64, error)
 	if err != nil {
 		return nil, errors.Wrap(err, "unmarshalling traslate keys response")
 	}
-
 	return idsResp.IDs, nil
 }
 
@@ -1158,8 +1210,8 @@ const (
 )
 
 type importState struct {
-	rowKeyIDMap    map[string]uint64
-	columnKeyIDMap map[string]uint64
+	rowKeyIDMap    lru.LRUCache
+	columnKeyIDMap lru.LRUCache
 }
 
 type ImportOptions struct {
@@ -1174,9 +1226,11 @@ type ImportOptions struct {
 		nodes []fragmentNode,
 		options *ImportOptions,
 		state *importState) error
-	wantRoaring bool
-	hasRoaring  bool
-	clear       bool
+	wantRoaring        bool
+	hasRoaring         bool
+	clear              bool
+	rowKeyCacheSize    int
+	columnKeyCacheSize int
 }
 
 func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
@@ -1191,6 +1245,12 @@ func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
 	}
 	if updated.batchSize <= 0 {
 		updated.batchSize = 100000
+	}
+	if updated.rowKeyCacheSize < updated.batchSize {
+		updated.rowKeyCacheSize = updated.batchSize
+	}
+	if updated.columnKeyCacheSize < updated.batchSize {
+		updated.columnKeyCacheSize = updated.batchSize
 	}
 	return
 }

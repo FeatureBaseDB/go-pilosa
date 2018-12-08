@@ -319,7 +319,7 @@ func (c *Client) ImportField(field *Field, iterator RecordIterator, options ...I
 	return c.importManager.Run(field, iterator, importOptions.withDefaults())
 }
 
-func (c *Client) importColumns(field *Field, shard uint64, records []Record, nodes []fragmentNode, options *ImportOptions) error {
+func (c *Client) importColumns(field *Field, shard uint64, records []Record, nodes []FragmentNode, options *ImportOptions) error {
 	eg := errgroup.Group{}
 
 	if len(nodes) == 0 {
@@ -328,13 +328,13 @@ func (c *Client) importColumns(field *Field, shard uint64, records []Record, nod
 
 	if options.roaring {
 		uri := nodes[0].URI()
-		var views viewImports
+		var views ViewImports
 		if field.options.fieldType == FieldTypeTime {
 			views = columnsToBitmapTimeField(field.options.timeQuantum, options.shardWidth, records, field.options.noStandardView)
 		} else {
 			views = columnsToBitmap(options.shardWidth, records)
 		}
-		return c.importRoaringBitmap(uri, field, shard, views, options)
+		return c.ImportRoaringBitmap(uri, field, shard, views, options)
 	}
 
 	for _, node := range nodes {
@@ -366,7 +366,7 @@ func (c *Client) hasRoaringImportSupport(field *Field) bool {
 	return false
 }
 
-func (c *Client) importValues(field *Field, shard uint64, vals []Record, nodes []fragmentNode, options *ImportOptions) error {
+func (c *Client) importValues(field *Field, shard uint64, vals []Record, nodes []FragmentNode, options *ImportOptions) error {
 	eg := errgroup.Group{}
 	for _, node := range nodes {
 		uri := &URI{
@@ -382,13 +382,13 @@ func (c *Client) importValues(field *Field, shard uint64, vals []Record, nodes [
 	return errors.Wrap(err, "importing values to nodes")
 }
 
-func (c *Client) fetchFragmentNodes(indexName string, shard uint64) ([]fragmentNode, error) {
+func (c *Client) FetchFragmentNodes(indexName string, shard uint64) ([]FragmentNode, error) {
 	path := fmt.Sprintf("/internal/fragment/nodes?shard=%d&index=%s", shard, indexName)
 	_, body, err := c.httpRequest("GET", path, []byte{}, nil, false)
 	if err != nil {
 		return nil, err
 	}
-	fragmentNodes := []fragmentNode{}
+	fragmentNodes := []FragmentNode{}
 	var fragmentNodeURIs []fragmentNodeRoot
 	err = json.Unmarshal(body, &fragmentNodeURIs)
 	if err != nil {
@@ -400,22 +400,22 @@ func (c *Client) fetchFragmentNodes(indexName string, shard uint64) ([]fragmentN
 	return fragmentNodes, nil
 }
 
-func (c *Client) fetchCoordinatorNode() (fragmentNode, error) {
+func (c *Client) fetchCoordinatorNode() (FragmentNode, error) {
 	status, err := c.Status()
 	if err != nil {
-		return fragmentNode{}, err
+		return FragmentNode{}, err
 	}
 	for _, node := range status.Nodes {
 		if node.IsCoordinator {
 			nodeURI := node.URI
-			return fragmentNode{
+			return FragmentNode{
 				Scheme: nodeURI.Scheme,
 				Host:   nodeURI.Host,
 				Port:   nodeURI.Port,
 			}, nil
 		}
 	}
-	return fragmentNode{}, errors.New("Coordinator node not found")
+	return FragmentNode{}, errors.New("Coordinator node not found")
 }
 
 func (c *Client) importNode(uri *URI, request *pbuf.ImportRequest, options *ImportOptions) error {
@@ -447,7 +447,7 @@ func (c *Client) importData(uri *URI, indexName string, fieldName string, data [
 	return nil
 }
 
-func (c *Client) importRoaringBitmap(uri *URI, field *Field, shard uint64, views viewImports, options *ImportOptions) error {
+func (c *Client) ImportRoaringBitmap(uri *URI, field *Field, shard uint64, views ViewImports, options *ImportOptions) error {
 	protoViews := []*pbuf.ImportRoaringRequestView{}
 	for name, bmp := range views {
 		buf := &bytes.Buffer{}
@@ -661,7 +661,7 @@ func (c *Client) statusToNodeShardsForIndex(status Status, indexName string) (ma
 	result := make(map[uint64]*URI)
 	if maxShard, ok := status.indexMaxShard[indexName]; ok {
 		for shard := 0; shard <= int(maxShard); shard++ {
-			fragmentNodes, err := c.fetchFragmentNodes(indexName, uint64(shard))
+			fragmentNodes, err := c.FetchFragmentNodes(indexName, uint64(shard))
 			if err != nil {
 				return nil, err
 			}
@@ -806,9 +806,9 @@ func columnsToImportRequest(field *Field, shard uint64, records []Record) *pbuf.
 	}
 }
 
-type viewImports map[string]*roaring.Bitmap
+type ViewImports map[string]*roaring.Bitmap
 
-func columnsToBitmap(shardWidth uint64, records []Record) viewImports {
+func columnsToBitmap(shardWidth uint64, records []Record) ViewImports {
 	bmp := roaring.NewBitmap()
 	for _, record := range records {
 		c := record.(Column)
@@ -817,9 +817,9 @@ func columnsToBitmap(shardWidth uint64, records []Record) viewImports {
 	return map[string]*roaring.Bitmap{"": bmp}
 }
 
-func columnsToBitmapTimeField(quantum TimeQuantum, shardWidth uint64, records []Record, noStandardView bool) viewImports {
+func columnsToBitmapTimeField(quantum TimeQuantum, shardWidth uint64, records []Record, noStandardView bool) ViewImports {
 	var standard *roaring.Bitmap
-	views := viewImports{}
+	views := ViewImports{}
 	if !noStandardView {
 		standard = roaring.NewBitmap()
 		views[""] = standard
@@ -1079,7 +1079,7 @@ type ImportOptions struct {
 	timeout               time.Duration
 	batchSize             int
 	statusChan            chan<- ImportStatusUpdate
-	importRecordsFunction func(field *Field, shard uint64, records []Record, nodes []fragmentNode, options *ImportOptions) error
+	importRecordsFunction func(field *Field, shard uint64, records []Record, nodes []FragmentNode, options *ImportOptions) error
 	roaring               bool
 	clear                 bool
 }
@@ -1131,7 +1131,7 @@ func OptImportClear(clear bool) ImportOption {
 	}
 }
 
-func importRecordsFunction(fun func(field *Field, shard uint64, records []Record, nodes []fragmentNode, options *ImportOptions) error) ImportOption {
+func importRecordsFunction(fun func(field *Field, shard uint64, records []Record, nodes []FragmentNode, options *ImportOptions) error) ImportOption {
 	return func(options *ImportOptions) error {
 		options.importRecordsFunction = fun
 		return nil
@@ -1139,16 +1139,16 @@ func importRecordsFunction(fun func(field *Field, shard uint64, records []Record
 }
 
 type fragmentNodeRoot struct {
-	URI fragmentNode `json:"uri"`
+	URI FragmentNode `json:"uri"`
 }
 
-type fragmentNode struct {
+type FragmentNode struct {
 	Scheme string `json:"scheme"`
 	Host   string `json:"host"`
 	Port   uint16 `json:"port"`
 }
 
-func (node fragmentNode) URI() *URI {
+func (node FragmentNode) URI() *URI {
 	return &URI{
 		scheme: node.Scheme,
 		host:   node.Host,

@@ -97,7 +97,7 @@ func recordImportWorker(id int, client *Client, field *Field, chans importWorker
 	statusChan := chans.status
 	recordChan := chans.records
 	errChan := chans.errs
-	shardNodes := map[uint64][]fragmentNode{}
+	shardNodes := map[uint64][]FragmentNode{}
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -109,7 +109,7 @@ func recordImportWorker(id int, client *Client, field *Field, chans importWorker
 	}()
 
 	importRecords := func(shard uint64, records []Record) error {
-		var nodes []fragmentNode
+		var nodes []FragmentNode
 		var ok bool
 		var err error
 		if nodes, ok = shardNodes[shard]; !ok {
@@ -119,9 +119,9 @@ func recordImportWorker(id int, client *Client, field *Field, chans importWorker
 				if err != nil {
 					return err
 				}
-				nodes = []fragmentNode{node}
+				nodes = []FragmentNode{node}
 			} else {
-				nodes, err = client.fetchFragmentNodes(field.index.name, shard)
+				nodes, err = client.FetchFragmentNodes(field.index.name, shard)
 				if err != nil {
 					return err
 				}

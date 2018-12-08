@@ -789,7 +789,7 @@ func TestImportWithBatchSizeExpectingZero(t *testing.T) {
 	}
 }
 
-func failingImportColumns(field *Field, shard uint64, records []Record, nodes []fragmentNode, options *ImportOptions) error {
+func failingImportColumns(field *Field, shard uint64, records []Record, nodes []FragmentNode, options *ImportOptions) error {
 	if len(records) > 0 {
 		return errors.New("some error")
 	}
@@ -851,7 +851,7 @@ func TestExportReaderReadBodyFailure(t *testing.T) {
 
 func TestFetchFragmentNodes(t *testing.T) {
 	client := getClient()
-	nodes, err := client.fetchFragmentNodes(index.Name(), 0)
+	nodes, err := client.FetchFragmentNodes(index.Name(), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -859,7 +859,7 @@ func TestFetchFragmentNodes(t *testing.T) {
 		t.Fatalf("1 node should be returned")
 	}
 	// running the same for coverage
-	nodes, err = client.fetchFragmentNodes(index.Name(), 0)
+	nodes, err = client.FetchFragmentNodes(index.Name(), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1152,7 +1152,7 @@ func TestDecodingFragmentNodesFails(t *testing.T) {
 	server := getMockServer(200, []byte("notjson"), 7)
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	_, err := client.fetchFragmentNodes("foo", 0)
+	_, err := client.FetchFragmentNodes("foo", 0)
 	if err == nil {
 		t.Fatalf("fetchFragmentNodes should fail when response from /fragment/nodes cannot be decoded")
 	}
@@ -2169,9 +2169,9 @@ func getMockServer(statusCode int, response []byte, contentLength int) *httptest
 	return httptest.NewServer(handler)
 }
 
-func fragmentNodesFromURL(url string) []fragmentNode {
+func fragmentNodesFromURL(url string) []FragmentNode {
 	serverURI := URIFromAddress(url)
-	nodes := []fragmentNode{
+	nodes := []FragmentNode{
 		{
 			Scheme: serverURI.Scheme(),
 			Host:   serverURI.Host(),

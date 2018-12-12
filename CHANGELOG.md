@@ -6,6 +6,8 @@
     * Added `field.ClearRow` call.
     * Added `index.Options` call.
     * Removed experimental import strategies.
+    * Deprecated `QueryResponse.Columns` function. Use `QueryResponse.ColumnAttrs` function instead.
+    * Deprecated `QueryResponse.Column` function.
 
 * **v1.1.0** (2018-09-25)
     * Compatible with Pilosa 1.1.

@@ -162,6 +162,9 @@ func TestQueryWithColumns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(response.ColumnAttrs()) != 1 {
+		t.Fatalf("Column count should be == 1")
+	}
 	columns := response.Columns()
 	if len(columns) != 1 {
 		t.Fatalf("Column count should be == 1")

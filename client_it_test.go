@@ -138,6 +138,30 @@ func TestQueryWithShards(t *testing.T) {
 	}
 }
 
+func TestExpImport(t *testing.T) {
+	Reset()
+	eclient := NewExpClient(getClient())
+	imp := eclient.NewImporter("go-testindex")
+
+	imp.Add(1, "test-field", 0)
+
+	imp.Flush()
+	err := eclient.Flush()
+	if err != nil {
+		t.Fatalf("flushing importer: %v", err)
+	}
+
+	resp, err := eclient.Query(testField.Row(0))
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+
+	if resp.Result().Row().Columns[0] != 1 {
+		t.Fatalf("Columns should be [1], but got %v", resp.Result().Row().Columns[0])
+	}
+
+}
+
 func TestQueryWithColumns(t *testing.T) {
 	Reset()
 	client := getClient()

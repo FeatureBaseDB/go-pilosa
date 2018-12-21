@@ -7,6 +7,7 @@
     * Added `field.ClearRow` call.
     * Added `index.Options` call.
     * Added support for roaring importing `RowIDColumnID` with timestamp data.
+    * Added support for clear imports. Pass `OptImportClear(true)` to `client.ImportField` to use it.
     * Added experimental *no standard view* support for time fields. Use `OptFieldTypeTime(quantum, true)` to activate it. See https://github.com/pilosa/pilosa/issues/1710 for more information.
     * Added `keys` and `trackExistence` to index options.
     * Removed experimental import strategies.

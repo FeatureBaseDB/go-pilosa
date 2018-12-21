@@ -51,9 +51,9 @@ workflows:
       - linter:
           requires:
             - build
-      - test-golang-1.10:
+      - test-golang-1.11:
           requires:
             - build
-      - test-golang-1.9:
+      - test-golang-1.10:
           requires:
             - build

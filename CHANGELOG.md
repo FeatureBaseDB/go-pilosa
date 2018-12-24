@@ -1,11 +1,17 @@
 # Change Log
 
-* **master**
-    * Added support for roaring imports which can speed up the import process by %30 for non-key column imports. This feature requires Pilosa on master branch.
+* **v1.2.0** (2018-12-21)
+    * **Compatible with Pilosa 1.2**
+    * Added support for roaring imports which can speed up the import process by %30 for non-key column imports.
     * Added mutex and bool fields.
     * Added `field.ClearRow` call.
     * Added `index.Options` call.
+    * Added support for roaring importing `RowIDColumnID` with timestamp data.
+    * Added support for clear imports. Pass `OptImportClear(true)` to `client.ImportField` to use it.
+    * Added experimental *no standard view* support for time fields. Use `OptFieldTypeTime(quantum, true)` to activate it. See https://github.com/pilosa/pilosa/issues/1710 for more information.
+    * Added `keys` and `trackExistence` to index options.
     * Removed experimental import strategies.
+    * Removed support for Go 1.9.
 
 * **v1.1.0** (2018-09-25)
     * Compatible with Pilosa 1.1.

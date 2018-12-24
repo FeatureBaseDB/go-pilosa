@@ -637,6 +637,184 @@ func TestRange(t *testing.T) {
 	}
 }
 
+func TestRows(t *testing.T) {
+	comparePQL(t,
+		"Rows(field='collaboration')",
+		collabField.Rows())
+}
+
+func TestRowsPrevious(t *testing.T) {
+	comparePQL(t,
+		"Rows(field='collaboration',previous=42)",
+		collabField.RowsPrevious(42))
+	comparePQL(t,
+		"Rows(field='collaboration',previous='forty-two')",
+		collabField.RowsPrevious("forty-two"))
+	q := collabField.RowsPrevious(1.2)
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+}
+
+func TestRowLimit(t *testing.T) {
+	comparePQL(t,
+		"Rows(field='collaboration',limit=10)",
+		collabField.RowsLimit(10))
+	q := collabField.RowsLimit(-1)
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+}
+
+func TestRowsColumn(t *testing.T) {
+	comparePQL(t,
+		"Rows(field='collaboration',column=1000)",
+		collabField.RowsColumn(1000))
+	comparePQL(t,
+		"Rows(field='collaboration',column='one-thousand')",
+		collabField.RowsColumn("one-thousand"))
+	q := collabField.RowsColumn(1.2)
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+}
+
+func TestRowsPreviousLimit(t *testing.T) {
+	comparePQL(t,
+		"Rows(field='collaboration',previous=42,limit=10)",
+		collabField.RowsPreviousLimit(42, 10))
+	comparePQL(t,
+		"Rows(field='collaboration',previous='forty-two',limit=10)",
+		collabField.RowsPreviousLimit("forty-two", 10))
+	q := collabField.RowsPreviousLimit(1.2, 10)
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+	q = collabField.RowsPreviousLimit("forty-two", -1)
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+}
+
+func TestRowsPreviousColumn(t *testing.T) {
+	comparePQL(t,
+		"Rows(field='collaboration',previous=42,column=1000)",
+		collabField.RowsPreviousColumn(42, 1000))
+	comparePQL(t,
+		"Rows(field='collaboration',previous='forty-two',column='one-thousand')",
+		collabField.RowsPreviousColumn("forty-two", "one-thousand"))
+	q := collabField.RowsPreviousColumn(1.2, 1000)
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+	q = collabField.RowsPreviousColumn("forty-two", 1.2)
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+}
+
+func TestRowLimitColumn(t *testing.T) {
+	comparePQL(t,
+		"Rows(field='collaboration',limit=10,column=1000)",
+		collabField.RowsLimitColumn(10, 1000))
+	comparePQL(t,
+		"Rows(field='collaboration',limit=10,column='one-thousand')",
+		collabField.RowsLimitColumn(10, "one-thousand"))
+	q := collabField.RowsLimitColumn(10, 1.2)
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+	q = collabField.RowsLimitColumn(-1, 1000)
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+}
+
+func TestRowsPreviousLimitColumn(t *testing.T) {
+	comparePQL(t,
+		"Rows(field='collaboration',previous=42,limit=10,column=1000)",
+		collabField.RowsPreviousLimitColumn(42, 10, 1000))
+	comparePQL(t,
+		"Rows(field='collaboration',previous='forty-two',limit=10,column='one-thousand')",
+		collabField.RowsPreviousLimitColumn("forty-two", 10, "one-thousand"))
+	q := collabField.RowsPreviousLimitColumn(1.2, 10, 1000)
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+	q = collabField.RowsPreviousLimitColumn(42, -1, 1000)
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+	q = collabField.RowsPreviousLimitColumn(42, 10, 1.2)
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+}
+
+func TestGroupBy(t *testing.T) {
+	field := sampleIndex.Field("test")
+	comparePQL(t,
+		"GroupBy(Rows(field='collaboration'))",
+		sampleIndex.GroupBy(collabField.Rows()))
+	comparePQL(t,
+		"GroupBy(Rows(field='collaboration'),Rows(field='test'))",
+		sampleIndex.GroupBy(collabField.Rows(), field.Rows()))
+	q := sampleIndex.GroupBy()
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+}
+
+func TestGroupByLimit(t *testing.T) {
+	field := sampleIndex.Field("test")
+	comparePQL(t,
+		"GroupBy(Rows(field='collaboration'),limit=10)",
+		sampleIndex.GroupByLimit(10, collabField.Rows()))
+	comparePQL(t,
+		"GroupBy(Rows(field='collaboration'),Rows(field='test'),limit=10)",
+		sampleIndex.GroupByLimit(10, collabField.Rows(), field.Rows()))
+	q := sampleIndex.GroupByLimit(10)
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+	q = sampleIndex.GroupByLimit(-1, collabField.Rows())
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+}
+
+func TestGroupByFilter(t *testing.T) {
+	field := sampleIndex.Field("test")
+	comparePQL(t,
+		"GroupBy(Rows(field='collaboration'),filter=Row(test=5))",
+		sampleIndex.GroupByFilter(field.Row(5), collabField.Rows()))
+	comparePQL(t,
+		"GroupBy(Rows(field='collaboration'),Rows(field='test'),filter=Row(test=5))",
+		sampleIndex.GroupByFilter(field.Row(5), collabField.Rows(), field.Rows()))
+	q := sampleIndex.GroupByFilter(field.Row(5))
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+}
+
+func TestGroupByLimitFilter(t *testing.T) {
+	field := sampleIndex.Field("test")
+	comparePQL(t,
+		"GroupBy(Rows(field='collaboration'),limit=10,filter=Row(test=5))",
+		sampleIndex.GroupByLimitFilter(10, field.Row(5), collabField.Rows()))
+	comparePQL(t,
+		"GroupBy(Rows(field='collaboration'),Rows(field='test'),limit=10,filter=Row(test=5))",
+		sampleIndex.GroupByLimitFilter(10, field.Row(5), collabField.Rows(), field.Rows()))
+	q := sampleIndex.GroupByLimitFilter(10, field.Row(5))
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+	q = sampleIndex.GroupByLimitFilter(-1, field.Row(5), collabField.Rows())
+	if q.Error() == nil {
+		t.Fatalf("should have failed")
+	}
+}
+
 func TestSetFieldOptions(t *testing.T) {
 	field := sampleIndex.Field("set-field", OptFieldTypeSet(CacheTypeRanked, 9999))
 	jsonString := field.options.String()

@@ -454,8 +454,8 @@ func TestGroupByQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 	target := []GroupCount{
-		GroupCount{Groups: []FieldRow{FieldRow{FieldName: "group-by-test", RowID: 1}}, Count: 2},
-		GroupCount{Groups: []FieldRow{FieldRow{FieldName: "group-by-test", RowID: 2}}, Count: 1},
+		{Groups: []FieldRow{{FieldName: "group-by-test", RowID: 1}}, Count: 2},
+		{Groups: []FieldRow{{FieldName: "group-by-test", RowID: 2}}, Count: 1},
 	}
 	if !reflect.DeepEqual(target, resp.Result().GroupCounts()) {
 		t.Fatalf("%v != %v", target, resp.Result().GroupCounts())

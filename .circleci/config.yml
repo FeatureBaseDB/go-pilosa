@@ -2,7 +2,7 @@ version: 2
 defaults: &defaults
   working_directory: /go/src/github.com/pilosa/go-pilosa
   docker:
-    - image: circleci/golang:1.10
+    - image: circleci/golang:1.11
 fast-checkout: &fast-checkout
   attach_workspace:
     at: .
@@ -30,18 +30,18 @@ jobs:
       - run: gometalinter --install
       - run: go get github.com/remyoudompheng/go-misc/deadcode
       - run: make gometalinter
-  test-golang-1.10: &base-test
+  test-golang-1.11: &base-test
     <<: *defaults
     steps:
       - *fast-checkout
       - run: make test-all
     docker:
-      - image: circleci/golang:1.10
+      - image: circleci/golang:1.11
       - image: pilosa/pilosa:master
-  test-golang-1.9:
+  test-golang-1.10:
     <<: *base-test
     docker:
-      - image: circleci/golang:1.9
+      - image: circleci/golang:1.10
       - image: pilosa/pilosa:master
 workflows:
   version: 2
@@ -51,9 +51,9 @@ workflows:
       - linter:
           requires:
             - build
-      - test-golang-1.10:
+      - test-golang-1.11:
           requires:
             - build
-      - test-golang-1.9:
+      - test-golang-1.10:
           requires:
             - build

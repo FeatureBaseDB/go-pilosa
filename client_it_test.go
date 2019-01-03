@@ -406,6 +406,63 @@ func TestClearRowQuery(t *testing.T) {
 	}
 }
 
+func TestRowsQuery(t *testing.T) {
+	client := getClient()
+	field := index.Field("rows-test")
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.Query(index.BatchQuery(
+		field.Set(1, 100),
+		field.Set(1, 200),
+		field.Set(2, 200),
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := client.Query(field.Rows())
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := RowIdentifiersResult{
+		IDs: []uint64{1, 2},
+	}
+	if !reflect.DeepEqual(target, resp.Result().RowIdentifiers()) {
+		t.Fatalf("%v != %v", target, resp.Result().RowIdentifiers())
+	}
+
+}
+
+func TestGroupByQuery(t *testing.T) {
+	client := getClient()
+	field := index.Field("group-by-test")
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.Query(index.BatchQuery(
+		field.Set(1, 100),
+		field.Set(1, 200),
+		field.Set(2, 200),
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := client.Query(index.GroupBy(field.Rows()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := []GroupCount{
+		GroupCount{Groups: []FieldRow{FieldRow{FieldName: "group-by-test", RowID: 1}}, Count: 2},
+		GroupCount{Groups: []FieldRow{FieldRow{FieldName: "group-by-test", RowID: 2}}, Count: 1},
+	}
+	if !reflect.DeepEqual(target, resp.Result().GroupCounts()) {
+		t.Fatalf("%v != %v", target, resp.Result().GroupCounts())
+	}
+
+}
+
 func TestCreateDeleteIndexField(t *testing.T) {
 	client := getClient()
 	index1 := NewIndex("to-be-deleted")

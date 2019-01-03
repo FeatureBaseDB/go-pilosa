@@ -76,7 +76,7 @@ It is possible to customize the behaviour of the underlying HTTP client by passi
 
 ```go
 client, err := pilosa.NewClient(cluster,
-	pilosa.OptClientConnectTimeout(1000),  // if can't connect in  a second, close the connection
+    pilosa.OptClientConnectTimeout(1000),  // if can't connect in  a second, close the connection
     pilosa.OptClientSocketTimeout(10000),  // if no response received in 10 seconds, close the connection
     pilosa.OptClientPoolSizePerRoute(3),  // number of connections in the pool per host
     pilosa.OptClientTotalPoolSize(10))   // number of total connections in the pool

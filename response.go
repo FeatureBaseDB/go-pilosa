@@ -117,7 +117,7 @@ func (qr *QueryResponse) Column() ColumnItem {
 	return qr.ColumnList[0]
 }
 
-// AllColumnAttrs returns all column attributes in the response.
+// ColumnAttrs returns all column attributes in the response.
 func (qr *QueryResponse) ColumnAttrs() []ColumnItem {
 	return qr.ColumnList
 }

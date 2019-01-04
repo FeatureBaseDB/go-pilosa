@@ -126,8 +126,8 @@ type QueryResult interface {
 	Count() int64
 	Value() int64
 	Changed() bool
-	RowIdentifiers() RowIdentifiersResult
 	GroupCounts() []GroupCount
+	RowIdentifiers() RowIdentifiersResult
 }
 
 func newQueryResultFromInternal(result *pbuf.QueryResult) (QueryResult, error) {

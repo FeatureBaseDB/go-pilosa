@@ -1,6 +1,9 @@
 # Change Log
 
 * **master**
+    * Deprecated `QueryResponse.Columns` function. Use `QueryResponse.ColumnAttrs` function instead.
+    * Deprecated `QueryResponse.Column` function.
+    * Removed support for Go 1.9.
     * Added `Rows` and `GroupBy` calls.
 
 * **v1.2.0** (2018-12-21)
@@ -14,7 +17,6 @@
     * Added experimental *no standard view* support for time fields. Use `OptFieldTypeTime(quantum, true)` to activate it. See https://github.com/pilosa/pilosa/issues/1710 for more information.
     * Added `keys` and `trackExistence` to index options.
     * Removed experimental import strategies.
-    * Removed support for Go 1.9.
 
 * **v1.1.0** (2018-09-25)
     * Compatible with Pilosa 1.1.

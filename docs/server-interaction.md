@@ -27,7 +27,7 @@ uri2, err := pilosa.NewURIFromAddress("index1.pilosa.com:20202");
 
 // create a URI with the given host and port
 uri3, err := pilosa.NewURIFromHostPort("index1.pilosa.com", 20202);
-``` 
+```
 
 ## Pilosa Client
 
@@ -76,7 +76,7 @@ It is possible to customize the behaviour of the underlying HTTP client by passi
 
 ```go
 client, err := pilosa.NewClient(cluster,
-	pilosa.OptClientConnectTimeout(1000),  // if can't connect in  a second, close the connection 
+    pilosa.OptClientConnectTimeout(1000),  // if can't connect in  a second, close the connection
     pilosa.OptClientSocketTimeout(10000),  // if no response received in 10 seconds, close the connection
     pilosa.OptClientPoolSizePerRoute(3),  // number of connections in the pool per host
     pilosa.OptClientTotalPoolSize(10))   // number of total connections in the pool
@@ -127,17 +127,14 @@ for _, result := range response.Results() {
 }
 ```
 
-Similarly, a `QueryResponse` struct may include a number of columns (column objects) if `Columns` query option was set to `true`:
+Similarly, a `QueryResponse` struct may include a number of column attributes if `ColumnAttrs` query option was set to `true`:
 
 ```go
 var column *pilosa.ColumnItem
 
-column = response.Column()
-// Act on the column
-
 // iterate over all columns
-for _, column = range response.Columns() {
-    // Act on the column
+for _, column = range response.ColumnAttrs() {
+    // Act on the column item
 }
 ```
 
@@ -175,4 +172,3 @@ If you are using a self signed certificate, just pass `pilosa.TLSConfig(&tls.Con
 ```go
 client, _ := pilosa.NewClient("https://01.pilosa.local:10501", pilosa.TLSConfig(&tls.Config{InsecureSkipVerify: true}))
 ```
-

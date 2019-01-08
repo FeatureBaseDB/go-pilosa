@@ -105,17 +105,24 @@ func (qr *QueryResponse) Result() QueryResult {
 	return qr.ResultList[0]
 }
 
-// Columns returns all columns in the response.
+// Columns returns all column attributes in the response.
+// *DEPRECATED*
 func (qr *QueryResponse) Columns() []ColumnItem {
 	return qr.ColumnList
 }
 
-// Column returns the first column.
+// Column returns the attributes for first column.
+// *DEPRECATED*
 func (qr *QueryResponse) Column() ColumnItem {
 	if len(qr.ColumnList) == 0 {
 		return ColumnItem{}
 	}
 	return qr.ColumnList[0]
+}
+
+// ColumnAttrs returns all column attributes in the response.
+func (qr *QueryResponse) ColumnAttrs() []ColumnItem {
+	return qr.ColumnList
 }
 
 // QueryResult represents one of the results in the response.

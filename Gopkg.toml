@@ -23,3 +23,7 @@
 [[constraint]]
   name = "github.com/pilosa/pilosa"
   branch = "master"
+
+[[constraint]]
+  name = "github.com/hashicorp/golang-lru"
+  version = "0.5.0"

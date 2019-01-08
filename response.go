@@ -48,6 +48,9 @@ const (
 	QueryResultTypeValCount
 	QueryResultTypeUint64
 	QueryResultTypeBool
+	QueryResultTypeRowIDs // this is not used by the client
+	QueryResultTypeGroupCounts
+	QueryResultTypeRowIdentifiers
 )
 
 // QueryResponse represents the response from a Pilosa query.
@@ -123,6 +126,8 @@ type QueryResult interface {
 	Count() int64
 	Value() int64
 	Changed() bool
+	GroupCounts() []GroupCount
+	RowIdentifiers() RowIdentifiersResult
 }
 
 func newQueryResultFromInternal(result *pbuf.QueryResult) (QueryResult, error) {
@@ -142,7 +147,16 @@ func newQueryResultFromInternal(result *pbuf.QueryResult) (QueryResult, error) {
 		return IntResult(result.N), nil
 	case QueryResultTypeBool:
 		return BoolResult(result.Changed), nil
+	case QueryResultTypeRowIdentifiers:
+		return &RowIdentifiersResult{
+			IDs:  result.RowIdentifiers.Rows,
+			Keys: result.RowIdentifiers.Keys,
+		}, nil
+	case QueryResultTypeGroupCounts:
+		return groupCountsFromInternal(result.GroupCounts), nil
+
 	}
+
 	return nil, ErrUnknownType
 }
 
@@ -170,12 +184,14 @@ func countItemsFromInternal(items []*pbuf.Pair) TopNResult {
 
 type TopNResult []CountResultItem
 
-func (TopNResult) Type() uint32                    { return QueryResultTypePairs }
-func (TopNResult) Row() RowResult                  { return RowResult{} }
-func (t TopNResult) CountItems() []CountResultItem { return t }
-func (TopNResult) Count() int64                    { return 0 }
-func (TopNResult) Value() int64                    { return 0 }
-func (TopNResult) Changed() bool                   { return false }
+func (TopNResult) Type() uint32                         { return QueryResultTypePairs }
+func (TopNResult) Row() RowResult                       { return RowResult{} }
+func (t TopNResult) CountItems() []CountResultItem      { return t }
+func (TopNResult) Count() int64                         { return 0 }
+func (TopNResult) Value() int64                         { return 0 }
+func (TopNResult) Changed() bool                        { return false }
+func (TopNResult) GroupCounts() []GroupCount            { return nil }
+func (TopNResult) RowIdentifiers() RowIdentifiersResult { return RowIdentifiersResult{} }
 
 // RowResult represents a result from Row, Union, Intersect, Difference and Range PQL calls.
 type RowResult struct {
@@ -197,12 +213,14 @@ func newRowResultFromInternal(row *pbuf.Row) (*RowResult, error) {
 	return result, nil
 }
 
-func (RowResult) Type() uint32                  { return QueryResultTypeRow }
-func (b RowResult) Row() RowResult              { return b }
-func (RowResult) CountItems() []CountResultItem { return nil }
-func (RowResult) Count() int64                  { return 0 }
-func (RowResult) Value() int64                  { return 0 }
-func (RowResult) Changed() bool                 { return false }
+func (RowResult) Type() uint32                         { return QueryResultTypeRow }
+func (b RowResult) Row() RowResult                     { return b }
+func (RowResult) CountItems() []CountResultItem        { return nil }
+func (RowResult) Count() int64                         { return 0 }
+func (RowResult) Value() int64                         { return 0 }
+func (RowResult) Changed() bool                        { return false }
+func (RowResult) GroupCounts() []GroupCount            { return nil }
+func (RowResult) RowIdentifiers() RowIdentifiersResult { return RowIdentifiersResult{} }
 
 func (b RowResult) MarshalJSON() ([]byte, error) {
 	columns := b.Columns
@@ -229,39 +247,102 @@ type ValCountResult struct {
 	Cnt int64 `json:"count"`
 }
 
-func (ValCountResult) Type() uint32                  { return QueryResultTypeValCount }
-func (ValCountResult) Row() RowResult                { return RowResult{} }
-func (ValCountResult) CountItems() []CountResultItem { return nil }
-func (c ValCountResult) Count() int64                { return c.Cnt }
-func (c ValCountResult) Value() int64                { return c.Val }
-func (ValCountResult) Changed() bool                 { return false }
+func (ValCountResult) Type() uint32                         { return QueryResultTypeValCount }
+func (ValCountResult) Row() RowResult                       { return RowResult{} }
+func (ValCountResult) CountItems() []CountResultItem        { return nil }
+func (c ValCountResult) Count() int64                       { return c.Cnt }
+func (c ValCountResult) Value() int64                       { return c.Val }
+func (ValCountResult) Changed() bool                        { return false }
+func (ValCountResult) GroupCounts() []GroupCount            { return nil }
+func (ValCountResult) RowIdentifiers() RowIdentifiersResult { return RowIdentifiersResult{} }
 
 type IntResult int64
 
-func (IntResult) Type() uint32                  { return QueryResultTypeUint64 }
-func (IntResult) Row() RowResult                { return RowResult{} }
-func (IntResult) CountItems() []CountResultItem { return nil }
-func (i IntResult) Count() int64                { return int64(i) }
-func (IntResult) Value() int64                  { return 0 }
-func (IntResult) Changed() bool                 { return false }
+func (IntResult) Type() uint32                         { return QueryResultTypeUint64 }
+func (IntResult) Row() RowResult                       { return RowResult{} }
+func (IntResult) CountItems() []CountResultItem        { return nil }
+func (i IntResult) Count() int64                       { return int64(i) }
+func (IntResult) Value() int64                         { return 0 }
+func (IntResult) Changed() bool                        { return false }
+func (IntResult) GroupCounts() []GroupCount            { return nil }
+func (IntResult) RowIdentifiers() RowIdentifiersResult { return RowIdentifiersResult{} }
 
 type BoolResult bool
 
-func (BoolResult) Type() uint32                  { return QueryResultTypeBool }
-func (BoolResult) Row() RowResult                { return RowResult{} }
-func (BoolResult) CountItems() []CountResultItem { return nil }
-func (BoolResult) Count() int64                  { return 0 }
-func (BoolResult) Value() int64                  { return 0 }
-func (b BoolResult) Changed() bool               { return bool(b) }
+func (BoolResult) Type() uint32                         { return QueryResultTypeBool }
+func (BoolResult) Row() RowResult                       { return RowResult{} }
+func (BoolResult) CountItems() []CountResultItem        { return nil }
+func (BoolResult) Count() int64                         { return 0 }
+func (BoolResult) Value() int64                         { return 0 }
+func (b BoolResult) Changed() bool                      { return bool(b) }
+func (BoolResult) GroupCounts() []GroupCount            { return nil }
+func (BoolResult) RowIdentifiers() RowIdentifiersResult { return RowIdentifiersResult{} }
 
 type NilResult struct{}
 
-func (NilResult) Type() uint32                  { return QueryResultTypeNil }
-func (NilResult) Row() RowResult                { return RowResult{} }
-func (NilResult) CountItems() []CountResultItem { return nil }
-func (NilResult) Count() int64                  { return 0 }
-func (NilResult) Value() int64                  { return 0 }
-func (NilResult) Changed() bool                 { return false }
+func (NilResult) Type() uint32                         { return QueryResultTypeNil }
+func (NilResult) Row() RowResult                       { return RowResult{} }
+func (NilResult) CountItems() []CountResultItem        { return nil }
+func (NilResult) Count() int64                         { return 0 }
+func (NilResult) Value() int64                         { return 0 }
+func (NilResult) Changed() bool                        { return false }
+func (NilResult) GroupCounts() []GroupCount            { return nil }
+func (NilResult) RowIdentifiers() RowIdentifiersResult { return RowIdentifiersResult{} }
+
+type FieldRow struct {
+	FieldName string `json:"field"`
+	RowID     uint64 `json:"rowID"`
+	RowKey    string `json:"rowKey"`
+}
+
+type GroupCount struct {
+	Groups []FieldRow `json:"groups"`
+	Count  int64      `json:"count"`
+}
+
+type GroupCountResult []GroupCount
+
+func (GroupCountResult) Type() uint32                         { return QueryResultTypeRowIdentifiers }
+func (GroupCountResult) Row() RowResult                       { return RowResult{} }
+func (GroupCountResult) CountItems() []CountResultItem        { return nil }
+func (GroupCountResult) Count() int64                         { return 0 }
+func (GroupCountResult) Value() int64                         { return 0 }
+func (GroupCountResult) Changed() bool                        { return false }
+func (r GroupCountResult) GroupCounts() []GroupCount          { return r }
+func (GroupCountResult) RowIdentifiers() RowIdentifiersResult { return RowIdentifiersResult{} }
+
+type RowIdentifiersResult struct {
+	IDs  []uint64 `json:"ids"`
+	Keys []string `json:"keys,omitempty"`
+}
+
+func (RowIdentifiersResult) Type() uint32                           { return QueryResultTypeRowIdentifiers }
+func (RowIdentifiersResult) Row() RowResult                         { return RowResult{} }
+func (RowIdentifiersResult) CountItems() []CountResultItem          { return nil }
+func (RowIdentifiersResult) Count() int64                           { return 0 }
+func (RowIdentifiersResult) Value() int64                           { return 0 }
+func (RowIdentifiersResult) Changed() bool                          { return false }
+func (RowIdentifiersResult) GroupCounts() []GroupCount              { return nil }
+func (r RowIdentifiersResult) RowIdentifiers() RowIdentifiersResult { return r }
+
+func groupCountsFromInternal(items []*pbuf.GroupCount) GroupCountResult {
+	result := make([]GroupCount, 0, len(items))
+	for _, g := range items {
+		groups := make([]FieldRow, 0, len(g.Group))
+		for _, f := range g.Group {
+			groups = append(groups, FieldRow{
+				FieldName: f.Field,
+				RowID:     f.RowID,
+				RowKey:    f.RowKey,
+			})
+		}
+		result = append(result, GroupCount{
+			Groups: groups,
+			Count:  int64(g.Count),
+		})
+	}
+	return GroupCountResult(result)
+}
 
 const (
 	stringType = 1

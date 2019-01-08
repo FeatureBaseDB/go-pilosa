@@ -1,5 +1,8 @@
 # Change Log
 
+* **master**
+    * Added `Rows` and `GroupBy` calls.
+
 * **v1.2.0** (2018-12-21)
     * **Compatible with Pilosa 1.2**
     * Added support for roaring imports which can speed up the import process by %30 for non-key column imports.

@@ -528,6 +528,50 @@ func (idx *Index) Options(row *PQLRowQuery, opts ...OptionsOption) *PQLBaseQuery
 	return NewPQLBaseQuery(text, idx, nil)
 }
 
+// GroupBy creates a GroupBy query with the given Rows queries
+func (idx *Index) GroupBy(rowsQueries ...*PQLRowsQuery) *PQLBaseQuery {
+	if len(rowsQueries) < 1 {
+		return NewPQLBaseQuery("", idx, errors.New("there should be at least one rows query"))
+	}
+	text := fmt.Sprintf("GroupBy(%s)", strings.Join(serializeGroupBy(rowsQueries...), ","))
+	return NewPQLBaseQuery(text, idx, nil)
+}
+
+// GroupByLimit creates a GroupBy query with the given limit and Rows queries
+func (idx *Index) GroupByLimit(limit int64, rowsQueries ...*PQLRowsQuery) *PQLBaseQuery {
+	if len(rowsQueries) < 1 {
+		return NewPQLBaseQuery("", idx, errors.New("there should be at least one rows query"))
+	}
+	if limit < 0 {
+		return NewPQLBaseQuery("", idx, errors.New("limit must be non-negative"))
+	}
+	text := fmt.Sprintf("GroupBy(%s,limit=%d)", strings.Join(serializeGroupBy(rowsQueries...), ","), limit)
+	return NewPQLBaseQuery(text, idx, nil)
+}
+
+// GroupByFilter creates a GroupBy query with the given filter and Rows queries
+func (idx *Index) GroupByFilter(filterQuery *PQLRowQuery, rowsQueries ...*PQLRowsQuery) *PQLBaseQuery {
+	if len(rowsQueries) < 1 {
+		return NewPQLBaseQuery("", idx, errors.New("there should be at least one rows query"))
+	}
+	filterText := filterQuery.serialize().String()
+	text := fmt.Sprintf("GroupBy(%s,filter=%s)", strings.Join(serializeGroupBy(rowsQueries...), ","), filterText)
+	return NewPQLBaseQuery(text, idx, nil)
+}
+
+// GroupByLimitFilter creates a GroupBy query with the given filter and Rows queries
+func (idx *Index) GroupByLimitFilter(limit int64, filterQuery *PQLRowQuery, rowsQueries ...*PQLRowsQuery) *PQLBaseQuery {
+	if len(rowsQueries) < 1 {
+		return NewPQLBaseQuery("", idx, errors.New("there should be at least one rows query"))
+	}
+	if limit < 0 {
+		return NewPQLBaseQuery("", idx, errors.New("limit must be non-negative"))
+	}
+	filterText := filterQuery.serialize().String()
+	text := fmt.Sprintf("GroupBy(%s,limit=%d,filter=%s)", strings.Join(serializeGroupBy(rowsQueries...), ","), limit, filterText)
+	return NewPQLBaseQuery(text, idx, nil)
+}
+
 func (idx *Index) rowOperation(name string, rows ...*PQLRowQuery) *PQLRowQuery {
 	var err error
 	args := make([]string, 0, len(rows))
@@ -539,6 +583,14 @@ func (idx *Index) rowOperation(name string, rows ...*PQLRowQuery) *PQLRowQuery {
 	}
 	query := NewPQLRowQuery(fmt.Sprintf("%s(%s)", name, strings.Join(args, ",")), idx, nil)
 	return query
+}
+
+func serializeGroupBy(rowsQueries ...*PQLRowsQuery) []string {
+	qs := make([]string, 0, len(rowsQueries))
+	for _, qry := range rowsQueries {
+		qs = append(qs, qry.serialize().String())
+	}
+	return qs
 }
 
 // FieldInfo represents schema information for a field.
@@ -1055,6 +1107,128 @@ func (field *Field) SetIntValue(colIDOrKey interface{}, value int) *PQLBaseQuery
 	}
 	q := fmt.Sprintf("Set(%s, %s=%d)", colStr, field.name, value)
 	return NewPQLBaseQuery(q, field.index, nil)
+}
+
+// PQLRowsQuery is the return type for Rows calls.
+type PQLRowsQuery struct {
+	index *Index
+	pql   string
+	err   error
+}
+
+// NewPQLRowsQuery creates a new PQLRowsQuery.
+func NewPQLRowsQuery(pql string, index *Index, err error) *PQLRowsQuery {
+	return &PQLRowsQuery{
+		index: index,
+		pql:   pql,
+		err:   err,
+	}
+}
+
+// Index returns the index for this query/
+func (q *PQLRowsQuery) Index() *Index {
+	return q.index
+}
+
+func (q *PQLRowsQuery) serialize() serializedQuery {
+	return newSerializedQuery(q.pql, false)
+}
+
+// Error returns the error or nil for this query.
+func (q PQLRowsQuery) Error() error {
+	return q.err
+}
+
+// Rows creates a Rows query with defaults
+func (field *Field) Rows() *PQLRowsQuery {
+	text := fmt.Sprintf("Rows(field='%s')", field.name)
+	return NewPQLRowsQuery(text, field.index, nil)
+}
+
+// RowsPrevious creates a Rows query with the given previous row ID/key
+func (field *Field) RowsPrevious(rowIDOrKey interface{}) *PQLRowsQuery {
+	idKey, err := formatIDKey(rowIDOrKey)
+	if err != nil {
+		return NewPQLRowsQuery("", field.index, err)
+	}
+	text := fmt.Sprintf("Rows(field='%s',previous=%s)", field.name, idKey)
+	return NewPQLRowsQuery(text, field.index, nil)
+}
+
+// RowsLimit creates a Rows query with the given limit
+func (field *Field) RowsLimit(limit int64) *PQLRowsQuery {
+	if limit < 0 {
+		return NewPQLRowsQuery("", field.index, errors.New("rows limit must be non-negative"))
+	}
+	text := fmt.Sprintf("Rows(field='%s',limit=%d)", field.name, limit)
+	return NewPQLRowsQuery(text, field.index, nil)
+}
+
+// RowsColumn creates a Rows query with the given column ID/key
+func (field *Field) RowsColumn(columnIDOrKey interface{}) *PQLRowsQuery {
+	idKey, err := formatIDKey(columnIDOrKey)
+	if err != nil {
+		return NewPQLRowsQuery("", field.index, err)
+	}
+	text := fmt.Sprintf("Rows(field='%s',column=%s)", field.name, idKey)
+	return NewPQLRowsQuery(text, field.index, nil)
+}
+
+// RowsPreviousLimit creates a Rows query with the given previous row ID/key and limit
+func (field *Field) RowsPreviousLimit(rowIDOrKey interface{}, limit int64) *PQLRowsQuery {
+	idKey, err := formatIDKey(rowIDOrKey)
+	if err != nil {
+		return NewPQLRowsQuery("", field.index, err)
+	}
+	if limit < 0 {
+		return NewPQLRowsQuery("", field.index, errors.New("rows limit must be non-negative"))
+	}
+	text := fmt.Sprintf("Rows(field='%s',previous=%s,limit=%d)", field.name, idKey, limit)
+	return NewPQLRowsQuery(text, field.index, nil)
+}
+
+// RowsPreviousColumn creates a Rows query with the given previous row ID/key and column ID/key
+func (field *Field) RowsPreviousColumn(rowIDOrKey interface{}, columnIDOrKey interface{}) *PQLRowsQuery {
+	rowIDKey, err := formatIDKey(rowIDOrKey)
+	if err != nil {
+		return NewPQLRowsQuery("", field.index, err)
+	}
+	columnIDKey, err := formatIDKey(columnIDOrKey)
+	if err != nil {
+		return NewPQLRowsQuery("", field.index, err)
+	}
+	text := fmt.Sprintf("Rows(field='%s',previous=%s,column=%s)", field.name, rowIDKey, columnIDKey)
+	return NewPQLRowsQuery(text, field.index, nil)
+}
+
+// RowsLimitColumn creates a Row query with the given limit and column ID/key
+func (field *Field) RowsLimitColumn(limit int64, columnIDOrKey interface{}) *PQLRowsQuery {
+	if limit < 0 {
+		return NewPQLRowsQuery("", field.index, errors.New("rows limit must be non-negative"))
+	}
+	columnIDKey, err := formatIDKey(columnIDOrKey)
+	if err != nil {
+		return NewPQLRowsQuery("", field.index, err)
+	}
+	text := fmt.Sprintf("Rows(field='%s',limit=%d,column=%s)", field.name, limit, columnIDKey)
+	return NewPQLRowsQuery(text, field.index, nil)
+}
+
+// RowsPreviousLimitColumn creates a Row query with the given previous row ID/key, limit and column ID/key
+func (field *Field) RowsPreviousLimitColumn(rowIDOrKey interface{}, limit int64, columnIDOrKey interface{}) *PQLRowsQuery {
+	rowIDKey, err := formatIDKey(rowIDOrKey)
+	if err != nil {
+		return NewPQLRowsQuery("", field.index, err)
+	}
+	if limit < 0 {
+		return NewPQLRowsQuery("", field.index, errors.New("rows limit must be non-negative"))
+	}
+	columnIDKey, err := formatIDKey(columnIDOrKey)
+	if err != nil {
+		return NewPQLRowsQuery("", field.index, err)
+	}
+	text := fmt.Sprintf("Rows(field='%s',previous=%s,limit=%d,column=%s)", field.name, rowIDKey, limit, columnIDKey)
+	return NewPQLRowsQuery(text, field.index, nil)
 }
 
 func (field *Field) binaryOperation(op string, n int) *PQLRowQuery {

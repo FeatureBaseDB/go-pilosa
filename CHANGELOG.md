@@ -4,7 +4,7 @@
     * Deprecated `QueryResponse.Columns` function. Use `QueryResponse.ColumnAttrs` function instead.
     * Deprecated `QueryResponse.Column` function.
     * Removed support for Go 1.9.
-
+    * Added `Rows` and `GroupBy` calls.
 
 * **v1.2.0** (2018-12-21)
     * **Compatible with Pilosa 1.2**

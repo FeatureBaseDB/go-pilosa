@@ -5,6 +5,9 @@
     * Deprecated `QueryResponse.Column` function.
     * Removed support for Go 1.9.
     * Added `Rows` and `GroupBy` calls.
+    * Added `index.Opts` and `field.Opts` functions, which return the options for an `Index` or `Field`.
+    * Deprecated `field.Options`. Use `field.Opts` instead.
+    * Field option getters are attached to `Field` type instead of `*Field` type.
 
 * **v1.2.0** (2018-12-21)
     * **Compatible with Pilosa 1.2**

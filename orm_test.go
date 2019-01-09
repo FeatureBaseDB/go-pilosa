@@ -132,12 +132,18 @@ func TestIndexOptions(t *testing.T) {
 	}
 
 	index = schema.Index("index-keys", OptIndexKeys(true))
+	if true != index.Opts().Keys() {
+		t.Fatalf("index keys %v != %v", true, index.Opts().Keys())
+	}
 	target = `{"options":{"keys":true}}`
 	if target != index.options.String() {
 		t.Fatalf("%s != %s", target, index.options.String())
 	}
 
 	index = schema.Index("index-trackexistence", OptIndexTrackExistence(false))
+	if false != index.Opts().TrackExistence() {
+		t.Fatalf("index trackExistene %v != %v", true, index.Opts().TrackExistence())
+	}
 	target = `{"options":{"trackExistence":false}}`
 	if target != index.options.String() {
 		t.Fatalf("%s != %s", target, index.options.String())
@@ -576,6 +582,10 @@ func TestStore(t *testing.T) {
 	comparePQL(t,
 		"Store(Row(collaboration=5),sample-field=10)",
 		sampleField.Store(collabField.Row(5), 10))
+	q := sampleField.Store(collabField.Row(5), 1.2)
+	if q.Error() == nil {
+		t.Fatalf("query error should be not nil")
+	}
 }
 
 func TestOptions(t *testing.T) {
@@ -586,6 +596,11 @@ func TestOptions(t *testing.T) {
 			OptOptionsExcludeColumns(true),
 			OptOptionsExcludeRowAttrs(true),
 			OptOptionsShards(1, 3),
+		))
+	comparePQL(t,
+		"Options(Row(collaboration=5),columnAttrs=true,excludeColumns=false,excludeRowAttrs=false)",
+		sampleIndex.Options(collabField.Row(5),
+			OptOptionsColumnAttrs(true),
 		))
 }
 
@@ -815,6 +830,13 @@ func TestGroupByLimitFilter(t *testing.T) {
 	}
 }
 
+func TestFieldOptions(t *testing.T) {
+	field := sampleIndex.Field("foo", OptFieldKeys(true))
+	if true != field.Opts().Keys() {
+		t.Fatalf("field keys: %v != %v", true, field.Opts().Keys())
+	}
+}
+
 func TestSetFieldOptions(t *testing.T) {
 	field := sampleIndex.Field("set-field", OptFieldTypeSet(CacheTypeRanked, 9999))
 	jsonString := field.options.String()
@@ -836,9 +858,12 @@ func TestIntFieldOptions(t *testing.T) {
 }
 
 func TestTimeFieldOptions(t *testing.T) {
-	field := sampleIndex.Field("time-field", OptFieldTypeTime(TimeQuantumDayHour))
+	field := sampleIndex.Field("time-field", OptFieldTypeTime(TimeQuantumDayHour, true))
+	if true != field.Opts().NoStandardView() {
+		t.Fatalf("field noStandardView %v != %v", true, field.Opts().NoStandardView())
+	}
 	jsonString := field.options.String()
-	targetString := `{"options":{"noStandardView":false,"type":"time","timeQuantum":"DH"}}`
+	targetString := `{"options":{"noStandardView":true,"type":"time","timeQuantum":"DH"}}`
 	if sortedString(targetString) != sortedString(jsonString) {
 		t.Fatalf("`%s` != `%s`", targetString, jsonString)
 	}

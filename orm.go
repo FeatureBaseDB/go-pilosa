@@ -414,12 +414,18 @@ func (idx *Index) Name() string {
 	return idx.name
 }
 
+// Opts returns the options of this index.
+func (idx *Index) Opts() IndexOptions {
+	return *idx.options
+}
+
 // Field creates a Field struct with the specified name and defaults.
 func (idx *Index) Field(name string, options ...FieldOption) *Field {
 	if field, ok := idx.fields[name]; ok {
 		return field
 	}
 	fieldOptions := &FieldOptions{}
+	fieldOptions = fieldOptions.withDefaults()
 	fieldOptions.addOptions(options...)
 	return idx.fieldWithOptions(name, fieldOptions)
 }
@@ -611,44 +617,44 @@ type FieldOptions struct {
 }
 
 // Type returns the type of the field. Currently "set", "int", or "time".
-func (fo *FieldOptions) Type() FieldType {
+func (fo FieldOptions) Type() FieldType {
 	return fo.fieldType
 }
 
 // TimeQuantum returns the configured time quantum for a time field. Empty
 // string otherwise.
-func (fo *FieldOptions) TimeQuantum() TimeQuantum {
+func (fo FieldOptions) TimeQuantum() TimeQuantum {
 	return fo.timeQuantum
 }
 
 // CacheType returns the configured cache type for a "set" field. Empty string
 // otherwise.
-func (fo *FieldOptions) CacheType() CacheType {
+func (fo FieldOptions) CacheType() CacheType {
 	return fo.cacheType
 }
 
 // CacheSize returns the cache size for a set field. Zero otherwise.
-func (fo *FieldOptions) CacheSize() int {
+func (fo FieldOptions) CacheSize() int {
 	return fo.cacheSize
 }
 
 // Min returns the minimum accepted value for an integer field. Zero otherwise.
-func (fo *FieldOptions) Min() int64 {
+func (fo FieldOptions) Min() int64 {
 	return fo.min
 }
 
 // Max returns the maximum accepted value for an integer field. Zero otherwise.
-func (fo *FieldOptions) Max() int64 {
+func (fo FieldOptions) Max() int64 {
 	return fo.max
 }
 
 // Keys returns whether this field uses keys instead of IDs
-func (fo *FieldOptions) Keys() bool {
+func (fo FieldOptions) Keys() bool {
 	return fo.keys
 }
 
 // NoStandardView suppresses creating the standard view for supported field types (currently, time)
-func (fo *FieldOptions) NoStandardView() bool {
+func (fo FieldOptions) NoStandardView() bool {
 	return fo.noStandardView
 }
 
@@ -656,6 +662,9 @@ func (fo *FieldOptions) withDefaults() (updated *FieldOptions) {
 	// copy options so the original is not updated
 	updated = &FieldOptions{}
 	*updated = *fo
+	if updated.fieldType == "" {
+		updated.fieldType = FieldTypeSet
+	}
 	return
 }
 
@@ -777,6 +786,11 @@ func newField(name string, index *Index) *Field {
 // Name returns the name of the field
 func (f *Field) Name() string {
 	return f.name
+}
+
+// Opts returns the options of the field
+func (f *Field) Opts() FieldOptions {
+	return *f.options
 }
 
 func (f *Field) copy() *Field {
@@ -1034,6 +1048,7 @@ const CacheSizeDefault = 0
 
 // Options returns the options set for the field. Which fields of the
 // FieldOptions struct are actually being used depends on the field's type.
+// *DEPRECATED*
 func (f *Field) Options() *FieldOptions {
 	return f.options
 }

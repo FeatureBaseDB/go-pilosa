@@ -340,32 +340,7 @@ func (c *Client) importColumns(field *Field,
 	}
 
 	if options.hasRoaring {
-		columns := make([]Column, 0, len(records))
-		for _, rec := range records {
-			columns = append(columns, rec.(Column))
-		}
-		if field.options.keys {
-			// attempt to translate row keys
-			err := c.translateRecordsRowKeys(state.rowKeyIDMap, field, columns)
-			if err != nil {
-				return errors.Wrap(err, "translating records row keys")
-			}
-		}
-		if field.index.options.keys {
-			// attempt to translate column keys
-			err := c.translateRecordsColumnKeys(state.columnKeyIDMap, field.index, columns)
-			if err != nil {
-				return errors.Wrap(err, "translating records column keys")
-			}
-		}
-		uri := nodes[0].URI()
-		var views viewImports
-		if field.options.fieldType == FieldTypeTime {
-			views = columnsToBitmapTimeField(field.options.timeQuantum, options.shardWidth, columns, field.options.noStandardView)
-		} else {
-			views = columnsToBitmap(options.shardWidth, columns)
-		}
-		return c.importRoaringBitmap(uri, field, shard, views, options)
+		return c.importColumnsRoaring(field, shard, records, nodes, options, state)
 	}
 
 	sort.Sort(recordSort(records))
@@ -378,6 +353,40 @@ func (c *Client) importColumns(field *Field,
 	}
 	err := eg.Wait()
 	return errors.Wrap(err, "importing columns to nodes")
+}
+
+func (c *Client) importColumnsRoaring(field *Field,
+	shard uint64,
+	records []Record,
+	nodes []fragmentNode,
+	options *ImportOptions,
+	state *importState) error {
+	columns := make([]Column, 0, len(records))
+	for _, rec := range records {
+		columns = append(columns, rec.(Column))
+	}
+	if field.options.keys {
+		// attempt to translate row keys
+		err := c.translateRecordsRowKeys(state.rowKeyIDMap, field, columns)
+		if err != nil {
+			return errors.Wrap(err, "translating records row keys")
+		}
+	}
+	if field.index.options.keys {
+		// attempt to translate column keys
+		err := c.translateRecordsColumnKeys(state.columnKeyIDMap, field.index, columns)
+		if err != nil {
+			return errors.Wrap(err, "translating records column keys")
+		}
+	}
+	uri := nodes[0].URI()
+	var views viewImports
+	if field.options.fieldType == FieldTypeTime {
+		views = columnsToBitmapTimeField(field.options.timeQuantum, options.shardWidth, columns, field.options.noStandardView)
+	} else {
+		views = columnsToBitmap(options.shardWidth, columns)
+	}
+	return c.importRoaringBitmap(uri, field, shard, views, options)
 }
 
 func (c *Client) translateRecordsRowKeys(rowKeyIDMap lru.LRUCache, field *Field, columns []Column) error {

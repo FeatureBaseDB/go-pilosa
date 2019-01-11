@@ -3,9 +3,9 @@ package pilosa
 import (
 	"fmt"
 	"io"
-	"sort"
 	"time"
 
+	lru "github.com/hashicorp/golang-lru/simplelru"
 	"github.com/pkg/errors"
 )
 
@@ -102,11 +102,24 @@ func recordImportWorker(id int, client *Client, field *Field, chans importWorker
 	defer func() {
 		if r := recover(); r != nil {
 			if err == nil {
-				err = fmt.Errorf("worker %d panic", id)
+				err = fmt.Errorf("worker %d panic: %v", id, r)
 			}
 		}
 		errChan <- err
 	}()
+
+	rowKeyIDMap, err := lru.NewLRU(options.rowKeyCacheSize, nil)
+	if err != nil {
+		panic(errors.Wrap(err, "while creating rowKey to ID map"))
+	}
+	columnKeyIDMap, err := lru.NewLRU(options.columnKeyCacheSize, nil)
+	if err != nil {
+		panic(errors.Wrap(err, "while creating columnKey to ID map"))
+	}
+	state := &importState{
+		rowKeyIDMap:    rowKeyIDMap,
+		columnKeyIDMap: columnKeyIDMap,
+	}
 
 	importRecords := func(shard uint64, records []Record) error {
 		var nodes []fragmentNode
@@ -128,8 +141,7 @@ func recordImportWorker(id int, client *Client, field *Field, chans importWorker
 			}
 		}
 		tic := time.Now()
-		sort.Sort(recordSort(records))
-		err = importFun(field, shard, records, nodes, &options)
+		err = importFun(field, shard, records, nodes, &options, state)
 		if err != nil {
 			return err
 		}

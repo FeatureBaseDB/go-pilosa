@@ -1705,6 +1705,9 @@ func TestRowIDColumnIDTimestampImportRoaring(t *testing.T) {
 	start := time.Date(2016, 1, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
 	response, err = client.Query(field.Range(10, start, end))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !reflect.DeepEqual(target, response.Result().Row().Columns) {
 		t.Fatalf("%v != %v", target, response.Result().Row().Columns)
 	}

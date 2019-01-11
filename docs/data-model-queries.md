@@ -137,6 +137,7 @@ Field:
 * `RowTopN(n uint64, row *PQLRowQuery) *PQLRowQuery`
 * `FilterFieldTopN(n uint64, row *PQLRowQuery, field string, values ...interface{}) *PQLRowQuery`
 * `Range(rowID uint64, start time.Time, end time.Time) *PQLRowQuery`
+* `RowRange(rowID uint64, start time.Time, end time.Time) *PQLRowQuery`
 * `SetRowAttrs(rowID uint64, attrs map[string]interface{}) *PQLBaseQuery`
 * `ClearRow(rowIDOrKey interface{}) *PQLBaseQuery`
 * `Store(row *PQLRowQuery, rowIDOrKey interface{}) *PQLBaseQuery`

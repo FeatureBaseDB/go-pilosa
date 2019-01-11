@@ -907,7 +907,21 @@ func (f *Field) filterAttrTopN(n uint64, row *PQLRowQuery, field string, values 
 
 // Range creates a Range query.
 // Similar to Row, but only returns columns which were set with timestamps between the given start and end timestamps.
+// *Deprecated at Pilosa 1.3*
 func (f *Field) Range(rowIDOrKey interface{}, start time.Time, end time.Time) *PQLRowQuery {
+	rowStr, err := formatIDKeyBool(rowIDOrKey)
+	if err != nil {
+		return NewPQLRowQuery("", f.index, err)
+	}
+	text := fmt.Sprintf("Range(%s=%s,%s,%s)", f.name, rowStr, start.Format(timeFormat), end.Format(timeFormat))
+	q := NewPQLRowQuery(text, f.index, nil)
+	return q
+}
+
+// RowRange creates a Row query with timestamps.
+// Similar to Row, but only returns columns which were set with timestamps between the given start and end timestamps.
+// *Introduced at Pilosa 1.3*
+func (f *Field) RowRange(rowIDOrKey interface{}, start time.Time, end time.Time) *PQLRowQuery {
 	rowStr, err := formatIDKeyBool(rowIDOrKey)
 	if err != nil {
 		return NewPQLRowQuery("", f.index, err)

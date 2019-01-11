@@ -44,12 +44,14 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	lru "github.com/hashicorp/golang-lru/simplelru"
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
@@ -303,39 +305,45 @@ func (c *Client) Schema() (*Schema, error) {
 
 // ImportField imports records from the given iterator.
 func (c *Client) ImportField(field *Field, iterator RecordIterator, options ...ImportOption) error {
-	importOptions := &ImportOptions{}
-	if field.options != nil && field.options.fieldType == FieldTypeInt {
-		importRecordsFunction(c.importValues)(importOptions)
-	} else {
-		// Check whether roaring imports is available
-		importOptions.roaring = c.hasRoaringImportSupport(field)
-		importRecordsFunction(c.importColumns)(importOptions)
-	}
+	importOptions := ImportOptions{}
 	for _, option := range options {
-		if err := option(importOptions); err != nil {
+		if err := option(&importOptions); err != nil {
 			return err
 		}
 	}
-	return c.importManager.Run(field, iterator, importOptions.withDefaults())
+	importOptions = importOptions.withDefaults()
+	if importOptions.importRecordsFunction == nil {
+		// if import records function was not already set, set it.
+		if field.options != nil && field.options.fieldType == FieldTypeInt {
+			importRecordsFunction(c.importValues)(&importOptions)
+		} else {
+			// Check whether roaring imports is available
+			if importOptions.wantRoaring {
+				importOptions.hasRoaring = c.hasRoaringImportSupport(field)
+			}
+			importRecordsFunction(c.importColumns)(&importOptions)
+		}
+	}
+	return c.importManager.Run(field, iterator, importOptions)
 }
 
-func (c *Client) importColumns(field *Field, shard uint64, records []Record, nodes []fragmentNode, options *ImportOptions) error {
+func (c *Client) importColumns(field *Field,
+	shard uint64,
+	records []Record,
+	nodes []fragmentNode,
+	options *ImportOptions,
+	state *importState) error {
 	eg := errgroup.Group{}
 
 	if len(nodes) == 0 {
 		return errors.New("No nodes to import to")
 	}
 
-	if options.roaring {
-		uri := nodes[0].URI()
-		var views viewImports
-		if field.options.fieldType == FieldTypeTime {
-			views = columnsToBitmapTimeField(field.options.timeQuantum, options.shardWidth, records, field.options.noStandardView)
-		} else {
-			views = columnsToBitmap(options.shardWidth, records)
-		}
-		return c.importRoaringBitmap(uri, field, shard, views, options)
+	if options.hasRoaring {
+		return c.importColumnsRoaring(field, shard, records, nodes, options, state)
 	}
+
+	sort.Sort(recordSort(records))
 
 	for _, node := range nodes {
 		uri := node.URI()
@@ -347,13 +355,112 @@ func (c *Client) importColumns(field *Field, shard uint64, records []Record, nod
 	return errors.Wrap(err, "importing columns to nodes")
 }
 
-func (c *Client) hasRoaringImportSupport(field *Field) bool {
-	if field.options.fieldType != FieldTypeSet && field.options.fieldType != FieldTypeBool && field.options.fieldType != FieldTypeTime {
-		// Roaring imports is available for only set, bool and time fields.
-		return false
+func (c *Client) importColumnsRoaring(field *Field,
+	shard uint64,
+	records []Record,
+	nodes []fragmentNode,
+	options *ImportOptions,
+	state *importState) error {
+	columns := make([]Column, 0, len(records))
+	for _, rec := range records {
+		columns = append(columns, rec.(Column))
 	}
-	if field.index.options.keys || field.options.keys {
-		// Roaring imports is not available when keys are involved.
+	if field.options.keys {
+		// attempt to translate row keys
+		err := c.translateRecordsRowKeys(state.rowKeyIDMap, field, columns)
+		if err != nil {
+			return errors.Wrap(err, "translating records row keys")
+		}
+	}
+	if field.index.options.keys {
+		// attempt to translate column keys
+		err := c.translateRecordsColumnKeys(state.columnKeyIDMap, field.index, columns)
+		if err != nil {
+			return errors.Wrap(err, "translating records column keys")
+		}
+	}
+	uri := nodes[0].URI()
+	var views viewImports
+	if field.options.fieldType == FieldTypeTime {
+		views = columnsToBitmapTimeField(field.options.timeQuantum, options.shardWidth, columns, field.options.noStandardView)
+	} else {
+		views = columnsToBitmap(options.shardWidth, columns)
+	}
+	return c.importRoaringBitmap(uri, field, shard, views, options)
+}
+
+func (c *Client) translateRecordsRowKeys(rowKeyIDMap lru.LRUCache, field *Field, columns []Column) error {
+	uniqueMissingKeys := map[string]struct{}{}
+	for _, col := range columns {
+		if !rowKeyIDMap.Contains(col.RowKey) {
+			uniqueMissingKeys[col.RowKey] = struct{}{}
+		}
+	}
+	keys := make([]string, 0, len(uniqueMissingKeys))
+	for key := range uniqueMissingKeys {
+		keys = append(keys, key)
+	}
+	if len(keys) > 0 {
+		// translate missing keys
+		ids, err := c.translateRowKeys(field, keys)
+		if err != nil {
+			return err
+		}
+		for i, key := range keys {
+			rowKeyIDMap.Add(key, ids[i])
+		}
+	}
+	// replace RowKeys with RowIDs
+	for i, col := range columns {
+		if rowID, ok := rowKeyIDMap.Get(col.RowKey); ok {
+			col.RowID = rowID.(uint64)
+			columns[i] = col
+		} else {
+			return fmt.Errorf("Key '%s' does not exist in the rowKey to ID map", col.RowKey)
+		}
+	}
+	return nil
+}
+
+func (c *Client) translateRecordsColumnKeys(columnKeyIDMap lru.LRUCache, index *Index, columns []Column) error {
+	uniqueMissingKeys := map[string]struct{}{}
+	for _, col := range columns {
+		if !columnKeyIDMap.Contains(col.ColumnKey) {
+			uniqueMissingKeys[col.ColumnKey] = struct{}{}
+		}
+	}
+	keys := make([]string, 0, len(uniqueMissingKeys))
+	for key := range uniqueMissingKeys {
+		keys = append(keys, key)
+	}
+	if len(keys) > 0 {
+		// translate missing keys
+		ids, err := c.translateColumnKeys(index, keys)
+		if err != nil {
+			return err
+		}
+		for i, key := range keys {
+			columnKeyIDMap.Add(key, ids[i])
+		}
+	}
+	// replace ColumnKeys with ColumnIDs
+	for i, col := range columns {
+		if columnID, ok := columnKeyIDMap.Get(col.ColumnKey); ok {
+			col.ColumnID = columnID.(uint64)
+			columns[i] = col
+		} else {
+			return fmt.Errorf("Key '%s' does not exist in the columnKey to ID map", col.ColumnKey)
+		}
+	}
+	return nil
+}
+
+func (c *Client) hasRoaringImportSupport(field *Field) bool {
+	if field.options.fieldType != FieldTypeSet &&
+		field.options.fieldType != FieldTypeDefault &&
+		field.options.fieldType != FieldTypeBool &&
+		field.options.fieldType != FieldTypeTime {
+		// Roaring imports is available for only set, bool and time fields.
 		return false
 	}
 	// Check whether the roaring import endpoint exists
@@ -366,7 +473,13 @@ func (c *Client) hasRoaringImportSupport(field *Field) bool {
 	return false
 }
 
-func (c *Client) importValues(field *Field, shard uint64, vals []Record, nodes []fragmentNode, options *ImportOptions) error {
+func (c *Client) importValues(field *Field,
+	shard uint64,
+	vals []Record,
+	nodes []fragmentNode,
+	options *ImportOptions,
+	state *importState) error {
+	sort.Sort(recordSort(vals))
 	eg := errgroup.Group{}
 	for _, node := range nodes {
 		uri := &URI{
@@ -698,6 +811,40 @@ func (c *Client) augmentHeaders(headers map[string]string) map[string]string {
 	return headers
 }
 
+func (c *Client) translateRowKeys(field *Field, keys []string) ([]uint64, error) {
+	req := &pbuf.TranslateKeysRequest{
+		Index: field.index.name,
+		Field: field.name,
+		Keys:  keys,
+	}
+	return c.translateKeys(req, keys)
+}
+
+func (c *Client) translateColumnKeys(index *Index, keys []string) ([]uint64, error) {
+	req := &pbuf.TranslateKeysRequest{
+		Index: index.name,
+		Keys:  keys,
+	}
+	return c.translateKeys(req, keys)
+}
+
+func (c *Client) translateKeys(req *pbuf.TranslateKeysRequest, keys []string) ([]uint64, error) {
+	reqData, err := proto.Marshal(req)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshalling traslate keys request")
+	}
+	resp, respData, err := c.httpRequest("POST", "/internal/translate/keys", reqData, defaultProtobufHeaders(), true)
+	if err := anyError(resp, err); err != nil {
+		return nil, err
+	}
+	idsResp := &pbuf.TranslateKeysResponse{}
+	err = proto.Unmarshal(respData, idsResp)
+	if err != nil {
+		return nil, errors.Wrap(err, "unmarshalling traslate keys response")
+	}
+	return idsResp.IDs, nil
+}
+
 func defaultProtobufHeaders() map[string]string {
 	return map[string]string{
 		"Content-Type": "application/x-protobuf",
@@ -808,30 +955,28 @@ func columnsToImportRequest(field *Field, shard uint64, records []Record) *pbuf.
 
 type viewImports map[string]*roaring.Bitmap
 
-func columnsToBitmap(shardWidth uint64, records []Record) viewImports {
+func columnsToBitmap(shardWidth uint64, columns []Column) viewImports {
 	bmp := roaring.NewBitmap()
-	for _, record := range records {
-		c := record.(Column)
-		bmp.DirectAdd(c.RowID*shardWidth + (c.ColumnID % shardWidth))
+	for _, col := range columns {
+		bmp.DirectAdd(col.RowID*shardWidth + (col.ColumnID % shardWidth))
 	}
 	return map[string]*roaring.Bitmap{"": bmp}
 }
 
-func columnsToBitmapTimeField(quantum TimeQuantum, shardWidth uint64, records []Record, noStandardView bool) viewImports {
+func columnsToBitmapTimeField(quantum TimeQuantum, shardWidth uint64, columns []Column, noStandardView bool) viewImports {
 	var standard *roaring.Bitmap
 	views := viewImports{}
 	if !noStandardView {
 		standard = roaring.NewBitmap()
 		views[""] = standard
 	}
-	for _, record := range records {
-		c := record.(Column)
-		b := c.RowID*shardWidth + (c.ColumnID % shardWidth)
+	for _, col := range columns {
+		b := col.RowID*shardWidth + (col.ColumnID % shardWidth)
 		if standard != nil {
 			standard.DirectAdd(b)
 		}
 		// TODO: cache time views
-		timeViews := viewsByTime(time.Unix(0, c.Timestamp).UTC(), quantum)
+		timeViews := viewsByTime(time.Unix(0, col.Timestamp).UTC(), quantum)
 		for _, name := range timeViews {
 			view, ok := views[name]
 			if !ok {
@@ -1073,15 +1218,28 @@ const (
 	TimeoutImport
 )
 
+type importState struct {
+	rowKeyIDMap    lru.LRUCache
+	columnKeyIDMap lru.LRUCache
+}
+
 type ImportOptions struct {
 	threadCount           int
 	shardWidth            uint64
 	timeout               time.Duration
 	batchSize             int
 	statusChan            chan<- ImportStatusUpdate
-	importRecordsFunction func(field *Field, shard uint64, records []Record, nodes []fragmentNode, options *ImportOptions) error
-	roaring               bool
-	clear                 bool
+	importRecordsFunction func(field *Field,
+		shard uint64,
+		records []Record,
+		nodes []fragmentNode,
+		options *ImportOptions,
+		state *importState) error
+	wantRoaring        bool
+	hasRoaring         bool
+	clear              bool
+	rowKeyCacheSize    int
+	columnKeyCacheSize int
 }
 
 func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
@@ -1096,6 +1254,12 @@ func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
 	}
 	if updated.batchSize <= 0 {
 		updated.batchSize = 100000
+	}
+	if updated.rowKeyCacheSize < updated.batchSize {
+		updated.rowKeyCacheSize = updated.batchSize
+	}
+	if updated.columnKeyCacheSize < updated.batchSize {
+		updated.columnKeyCacheSize = updated.batchSize
 	}
 	return
 }
@@ -1131,7 +1295,19 @@ func OptImportClear(clear bool) ImportOption {
 	}
 }
 
-func importRecordsFunction(fun func(field *Field, shard uint64, records []Record, nodes []fragmentNode, options *ImportOptions) error) ImportOption {
+func OptImportRoaring(enable bool) ImportOption {
+	return func(options *ImportOptions) error {
+		options.wantRoaring = enable
+		return nil
+	}
+}
+
+func importRecordsFunction(fun func(field *Field,
+	shard uint64,
+	records []Record,
+	nodes []fragmentNode,
+	options *ImportOptions,
+	state *importState) error) ImportOption {
 	return func(options *ImportOptions) error {
 		options.importRecordsFunction = fun
 		return nil

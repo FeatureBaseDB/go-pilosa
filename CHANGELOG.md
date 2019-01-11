@@ -6,8 +6,9 @@
     * Removed support for Go 1.9.
     * Added `Rows` and `GroupBy` calls.
     * Added `index.Opts` and `field.Opts` functions, which return the options for an `Index` or `Field`.
-    * Deprecated `field.Options`. Use `field.Opts` instead.
+    * Added roaring import support for `RowKeyColumnID`, `RowIDColumnKey` and `RowKeyColumnKey` type data. Pass `OptImportRoaring(true)` to `client.ImportField` to activate that.
     * Field option getters are attached to `Field` type instead of `*Field` type.
+    * Deprecated `field.Options`. Use `field.Opts` instead.
 
 * **v1.2.0** (2018-12-21)
     * **Compatible with Pilosa 1.2**

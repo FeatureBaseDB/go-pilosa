@@ -912,7 +912,7 @@ func (f *Field) Range(rowIDOrKey interface{}, start time.Time, end time.Time) *P
 	if err != nil {
 		return NewPQLRowQuery("", f.index, err)
 	}
-	text := fmt.Sprintf("Range(%s=%s,%s,%s)", f.name, rowStr, start.Format(timeFormat), end.Format(timeFormat))
+	text := fmt.Sprintf("Row(%s=%s,from='%s',to='%s')", f.name, rowStr, start.Format(timeFormat), end.Format(timeFormat))
 	q := NewPQLRowQuery(text, f.index, nil)
 	return q
 }

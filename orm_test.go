@@ -624,14 +624,31 @@ func TestRange(t *testing.T) {
 	start := time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2000, time.February, 2, 3, 4, 0, 0, time.UTC)
 	comparePQL(t,
-		"Row(collaboration=10,from='1970-01-01T00:00',to='2000-02-02T03:04')",
+		"Range(collaboration=10,1970-01-01T00:00,2000-02-02T03:04)",
 		collabField.Range(10, start, end))
 
 	comparePQL(t,
-		"Row(collaboration='foo',from='1970-01-01T00:00',to='2000-02-02T03:04')",
+		"Range(collaboration='foo',1970-01-01T00:00,2000-02-02T03:04)",
 		collabField.Range("foo", start, end))
 
 	q := collabField.Range(nil, start, end)
+	if q.err == nil {
+		t.Fatalf("should have failed")
+	}
+}
+
+func TestRowRange(t *testing.T) {
+	start := time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2000, time.February, 2, 3, 4, 0, 0, time.UTC)
+	comparePQL(t,
+		"Row(collaboration=10,from='1970-01-01T00:00',to='2000-02-02T03:04')",
+		collabField.RowRange(10, start, end))
+
+	comparePQL(t,
+		"Row(collaboration='foo',from='1970-01-01T00:00',to='2000-02-02T03:04')",
+		collabField.RowRange("foo", start, end))
+
+	q := collabField.RowRange(nil, start, end)
 	if q.err == nil {
 		t.Fatalf("should have failed")
 	}

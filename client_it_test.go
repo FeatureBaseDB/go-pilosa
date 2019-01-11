@@ -939,9 +939,9 @@ func TestFetchStatus(t *testing.T) {
 	}
 }
 
-func TestRangeQuery(t *testing.T) {
+func TestRowRangeQuery(t *testing.T) {
 	client := getClient()
-	field := index.Field("test-rangefield", OptFieldTypeTime(TimeQuantumMonthDayHour))
+	field := index.Field("test-rowrangefield", OptFieldTypeTime(TimeQuantumMonthDayHour))
 	err := client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)
@@ -956,7 +956,7 @@ func TestRangeQuery(t *testing.T) {
 	}
 	start := time.Date(2017, time.January, 5, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2018, time.January, 5, 0, 0, 0, 0, time.UTC)
-	resp, err := client.Query(field.Range(10, start, end))
+	resp, err := client.Query(field.RowRange(10, start, end))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1707,7 +1707,7 @@ func TestRowIDColumnIDTimestampImportRoaring(t *testing.T) {
 	target = []uint64{5, 7}
 	start := time.Date(2016, 1, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
-	response, err = client.Query(field.Range(10, start, end))
+	response, err = client.Query(field.RowRange(10, start, end))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1779,7 +1779,10 @@ func TestRowIDColumnIDTimestampImportRoaringNoStandardView(t *testing.T) {
 	target = []uint64{5, 7}
 	start := time.Date(2016, 1, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
-	response, err = client.Query(field.Range(10, start, end))
+	response, err = client.Query(field.RowRange(10, start, end))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !reflect.DeepEqual(target, response.Result().Row().Columns) {
 		t.Fatalf("%v != %v", target, response.Result().Row().Columns)
 	}

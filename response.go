@@ -309,7 +309,7 @@ type GroupCount struct {
 
 type GroupCountResult []GroupCount
 
-func (GroupCountResult) Type() uint32                         { return QueryResultTypeRowIdentifiers }
+func (GroupCountResult) Type() uint32                         { return QueryResultTypeGroupCounts }
 func (GroupCountResult) Row() RowResult                       { return RowResult{} }
 func (GroupCountResult) CountItems() []CountResultItem        { return nil }
 func (GroupCountResult) Count() int64                         { return 0 }

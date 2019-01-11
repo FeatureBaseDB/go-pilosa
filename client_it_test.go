@@ -1671,7 +1671,7 @@ func TestRowIDColumnIDImportRoaring(t *testing.T) {
 func TestRowIDColumnIDTimestampImportRoaring(t *testing.T) {
 	client := getClient()
 	iterator := newTestIteratorWithTimestamp()
-	field := index.Field("importfield-rowid-colid-time", OptFieldTypeTime(TimeQuantumMonthDayHour))
+	field := index.Field("importfield-rowid-colid-time", OptFieldTypeTime(TimeQuantumYearMonthDayHour))
 	err := client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)

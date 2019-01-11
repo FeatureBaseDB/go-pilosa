@@ -252,7 +252,7 @@ func TestTopNResult(t *testing.T) {
 	result := TopNResult{
 		CountResultItem{ID: 100, Count: 10},
 	}
-	expectResult(t, result, QueryResultTypePairs, RowResult{}, []CountResultItem{{100, "", 10}}, 0, 0, false)
+	expectResult(t, result, QueryResultTypePairs, RowResult{}, []CountResultItem{{100, "", 10}}, 0, 0, false, nil, RowIdentifiersResult{})
 }
 
 func TestRowResult(t *testing.T) {
@@ -262,7 +262,7 @@ func TestRowResult(t *testing.T) {
 	targetBmp := RowResult{
 		Columns: []uint64{1, 2, 3},
 	}
-	expectResult(t, result, QueryResultTypeRow, targetBmp, nil, 0, 0, false)
+	expectResult(t, result, QueryResultTypeRow, targetBmp, nil, 0, 0, false, nil, RowIdentifiersResult{})
 }
 
 func TestRowResultNilColumns(t *testing.T) {
@@ -280,25 +280,47 @@ func TestSumCountResult(t *testing.T) {
 		Val: 100,
 		Cnt: 50,
 	}
-	expectResult(t, result, QueryResultTypeValCount, RowResult{}, nil, 100, 50, false)
+	expectResult(t, result, QueryResultTypeValCount, RowResult{}, nil, 100, 50, false, nil, RowIdentifiersResult{})
 }
 
 func TestIntResult(t *testing.T) {
 	result := IntResult(11)
-	expectResult(t, result, QueryResultTypeUint64, RowResult{}, nil, 0, 11, false)
+	expectResult(t, result, QueryResultTypeUint64, RowResult{}, nil, 0, 11, false, nil, RowIdentifiersResult{})
 }
 
 func TestBoolResult(t *testing.T) {
 	result := BoolResult(true)
-	expectResult(t, result, QueryResultTypeBool, RowResult{}, nil, 0, 0, true)
+	expectResult(t, result, QueryResultTypeBool, RowResult{}, nil, 0, 0, true, nil, RowIdentifiersResult{})
 }
 
 func TestNilResult(t *testing.T) {
 	result := NilResult{}
-	expectResult(t, result, QueryResultTypeNil, RowResult{}, nil, 0, 0, false)
+	expectResult(t, result, QueryResultTypeNil, RowResult{}, nil, 0, 0, false, nil, RowIdentifiersResult{})
 }
 
-func expectResult(t *testing.T, r QueryResult, resultType uint32, bmp RowResult, countItems []CountResultItem, sum int64, count int64, changed bool) {
+func TestGroupCountResult(t *testing.T) {
+	result := GroupCountResult{
+		{Groups: []FieldRow{{FieldName: "f1", RowID: 1}}, Count: 2},
+		{Groups: []FieldRow{{FieldName: "f1", RowID: 2}}, Count: 1},
+	}
+	expectResult(t, result, QueryResultTypeGroupCounts, RowResult{}, nil, 0, 0, false, []GroupCount{
+		{Groups: []FieldRow{{FieldName: "f1", RowID: 1}}, Count: 2},
+		{Groups: []FieldRow{{FieldName: "f1", RowID: 2}}, Count: 1},
+	}, RowIdentifiersResult{})
+}
+
+func TestRowIdentifiersResult(t *testing.T) {
+	result := RowIdentifiersResult{
+		IDs: []uint64{1, 2, 3, 4},
+	}
+	expectResult(t, result, QueryResultTypeRowIdentifiers, RowResult{}, nil, 0, 0, false, nil, RowIdentifiersResult{
+		IDs: []uint64{1, 2, 3, 4},
+	})
+}
+
+func expectResult(t *testing.T, r QueryResult, resultType uint32, bmp RowResult,
+	countItems []CountResultItem, sum int64, count int64, changed bool,
+	groupCounts []GroupCount, rowIdentifiers RowIdentifiersResult) {
 	if resultType != r.Type() {
 		log.Fatalf("Result type: %d != %d", resultType, r.Type())
 	}
@@ -316,5 +338,11 @@ func expectResult(t *testing.T, r QueryResult, resultType uint32, bmp RowResult,
 	}
 	if changed != r.Changed() {
 		log.Fatalf("Changed: %v != %v", changed, r.Changed())
+	}
+	if !reflect.DeepEqual(groupCounts, r.GroupCounts()) {
+		log.Fatalf("Group counts: %v != %v", groupCounts, r.GroupCounts())
+	}
+	if !reflect.DeepEqual(rowIdentifiers, r.RowIdentifiers()) {
+		log.Fatalf("Row identifiers: %v != %v", rowIdentifiers, r.RowIdentifiers())
 	}
 }

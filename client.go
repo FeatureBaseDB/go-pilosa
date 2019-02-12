@@ -685,7 +685,21 @@ func (c *Client) ExportField(field *Field) (io.Reader, error) {
 	return newExportReader(c, shardURIs, field), nil
 }
 
-// Status returns the serves status.
+// Info returns the server's configuration/host information.
+func (c *Client) Info() (Info, error) {
+	_, data, err := c.httpRequest("GET", "/info", nil, nil, false)
+	if err != nil {
+		return Info{}, errors.Wrap(err, "requesting /info")
+	}
+	info := Info{}
+	err = json.Unmarshal(data, &info)
+	if err != nil {
+		return Info{}, errors.Wrap(err, "unmarshaling /info data")
+	}
+	return info, nil
+}
+
+// Status returns the server's status.
 func (c *Client) Status() (Status, error) {
 	_, data, err := c.httpRequest("GET", "/status", nil, nil, false)
 	if err != nil {
@@ -1420,6 +1434,16 @@ func (node fragmentNode) URI() *URI {
 		host:   node.Host,
 		port:   node.Port,
 	}
+}
+
+// Info contains the configuration/host information from a Pilosa server.
+type Info struct {
+	ShardWidth       uint64 `json:"shardWidth"`       // width of each shard
+	Memory           uint64 `json:"memory"`           // approximate host physical memory
+	CPUType          string `json:"cpuType"`          // "brand name string" from cpuid
+	CPUPhysicalCores int    `json:"CPUPhysicalCores"` // physical cores (cpuid)
+	CPULogicalCores  int    `json:"CPULogicalCores"`  // logical cores cpuid
+	CPUMHz           uint64 `json:"CPUMHz"`           // estimated clock speed
 }
 
 // Status contains the status information from a Pilosa server.

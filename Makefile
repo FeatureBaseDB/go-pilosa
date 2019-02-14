@@ -6,10 +6,11 @@ PILOSA_DOWNLOAD_URL ?= https://s3.amazonaws.com/build.pilosa.com/$(PILOSA_VERSIO
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
 GOOS ?= linux
 PILOSA_BIND ?= http://:10101
+export GO111MODULE=on
 
 all: test
 
-cover: vendor
+cover:
 	PILOSA_BIND=$(PILOSA_BIND) go test ./... -cover $(TESTFLAGS) -tags="fullcoverage" -covermode=count -coverprofile=build/coverage.out
 
 fast-cover:
@@ -21,18 +22,17 @@ generate:
 	sed -i -e 's/package internal;/package gopilosa_pbuf;/g' gopilosa_pbuf/public.proto
 	protoc --go_out=. gopilosa_pbuf/public.proto
 
-test: vendor
+test:
 	PILOSA_BIND=$(PILOSA_BIND) go test ./... -tags=nointegration $(TESTFLAGS)
 
-test-all: vendor
+test-all:
 	PILOSA_BIND=$(PILOSA_BIND) go test ./... $(TESTFLAGS)
 
-test-all-race: vendor
+test-all-race:
 	PILOSA_BIND=$(PILOSA_BIND) $(MAKE) test-all TESTFLAGS=-race
 
-vendor: Gopkg.toml
-	dep ensure -vendor-only
-	touch vendor
+vendor: go.mod
+	go mod vendor
 
 release:
 	printf "package pilosa\nconst Version = \"$(VERSION)\"" > version.go
@@ -60,7 +60,7 @@ build/$(PILOSA_VERSION_ID).tar.gz:
 	cd build && wget $(PILOSA_DOWNLOAD_URL)
 
 gometalinter:
-	gometalinter --vendor --disable-all \
+	GO111MODULE=off gometalinter --vendor --disable-all \
             --deadline=120s \
             --enable=deadcode \
             --enable=gochecknoinits \

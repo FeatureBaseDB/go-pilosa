@@ -59,7 +59,7 @@ build/$(PILOSA_VERSION_ID).tar.gz:
 	mkdir -p build
 	cd build && wget $(PILOSA_DOWNLOAD_URL)
 
-gometalinter:
+gometalinter: vendor
 	GO111MODULE=off gometalinter --vendor --disable-all \
             --deadline=120s \
             --enable=deadcode \

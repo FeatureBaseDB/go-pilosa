@@ -28,9 +28,7 @@ jobs:
     <<: *defaults
     steps:
       - *fast-checkout
-      - run: go get -u github.com/alecthomas/gometalinter
-      - run: gometalinter --install
-      - run: go get github.com/remyoudompheng/go-misc/deadcode
+      - run: make install-gometalinter
       - run: make gometalinter
   test-golang-1.12-rc: &base-test
     <<: *defaults

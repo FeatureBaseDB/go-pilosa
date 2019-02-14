@@ -70,3 +70,8 @@ gometalinter:
             --enable=vet \
             --exclude "^gopilosa_pbuf/.*\.go" \
             ./...
+
+install-gometalinter:
+	GO111MODULE=off go get -u github.com/alecthomas/gometalinter
+	GO111MODULE=off gometalinter --install
+	GO111MODULE=off go get github.com/remyoudompheng/go-misc/deadcode

@@ -710,7 +710,6 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 	if data == nil {
 		data = []byte{}
 	}
-	reader := bytes.NewReader(data)
 
 	// try at most maxHosts non-failed hosts; protect against broken cluster.removeHost
 	var response *http.Response
@@ -720,7 +719,7 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 		if err != nil {
 			return nil, nil, err
 		}
-		response, err = c.doRequest(host, method, path, c.augmentHeaders(headers), reader)
+		response, err = c.doRequest(host, method, path, c.augmentHeaders(headers), bytes.NewReader(data))
 		if err == nil {
 			break
 		}

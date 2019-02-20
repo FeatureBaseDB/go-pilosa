@@ -153,7 +153,7 @@ func NewClient(addrUriOrCluster interface{}, options ...ClientOption) (*Client, 
 			}
 			return newClientWithURI(uri, clientOptions), nil
 		} else if clientOptions.manualServerAddress {
-			return nil, errors.New("OptClientManualServerAddress requires a single URI or address")
+			return nil, ErrSingleServerAddressRequired
 		}
 		return newClientFromAddresses(u, clientOptions)
 	case *URI:
@@ -164,7 +164,7 @@ func NewClient(addrUriOrCluster interface{}, options ...ClientOption) (*Client, 
 			uriCopy := *u[0]
 			return newClientWithURI(&uriCopy, clientOptions), nil
 		} else if clientOptions.manualServerAddress {
-			return nil, errors.New("OptClientManualServerAddress requires a single URI or address")
+			return nil, ErrSingleServerAddressRequired
 		}
 		cluster = NewClusterWithHost(u...)
 	case *Cluster:

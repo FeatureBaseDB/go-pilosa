@@ -143,6 +143,28 @@ func TestNewClientWithInvalidAddr(t *testing.T) {
 	}
 }
 
+func TestNewClientManualAddressWithNoURIs(t *testing.T) {
+	_, err := NewClient([]string{}, OptClientManualServerAddress(true))
+	if err != ErrSingleServerAddressRequired {
+		t.Fatalf("%v != %v", ErrSingleServerAddressRequired, err)
+	}
+	_, err = NewClient([]*URI{}, OptClientManualServerAddress(true))
+	if err != ErrSingleServerAddressRequired {
+		t.Fatalf("%v != %v", ErrSingleServerAddressRequired, err)
+	}
+}
+
+func TestNewClientManualAddressWithMultipleURIs(t *testing.T) {
+	_, err := NewClient([]string{":9000", ":5000"}, OptClientManualServerAddress(true))
+	if err != ErrSingleServerAddressRequired {
+		t.Fatalf("%v != %v", ErrSingleServerAddressRequired, err)
+	}
+	_, err = NewClient([]*URI{URIFromAddress(":9000"), URIFromAddress(":5000")}, OptClientManualServerAddress(true))
+	if err != ErrSingleServerAddressRequired {
+		t.Fatalf("%v != %v", ErrSingleServerAddressRequired, err)
+	}
+}
+
 func ClientOptionErr(int) ClientOption {
 	return func(*ClientOptions) error {
 		return errors.New("Some error")

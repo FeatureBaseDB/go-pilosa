@@ -88,7 +88,23 @@ func TestNewClientWithErrorredOption(t *testing.T) {
 }
 
 func TestNewClient(t *testing.T) {
-	client, err := NewClient(":9999")
+	client, err := NewClient(":9999", OptClientManualServerAddress(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetURI := URIFromAddress(":9999")
+	if !reflect.DeepEqual(targetURI, client.manualServerURI) {
+		t.Fatalf("%v != %v", targetURI, client.manualServerURI)
+	}
+	targetFragmentNode := &fragmentNode{
+		Scheme: "http",
+		Host:   "localhost",
+		Port:   9999,
+	}
+	if !reflect.DeepEqual(targetFragmentNode, client.manualFragmentNode) {
+		t.Fatalf("%v != %v", targetFragmentNode, client.manualFragmentNode)
+	}
+	client, err = NewClient(":9999")
 	if err != nil {
 		t.Fatal(err)
 	}

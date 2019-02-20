@@ -67,12 +67,14 @@ type Client struct {
 	client  *http.Client
 	// User-Agent header cache. Not used until cluster-resize support branch is merged
 	// and user agent is saved here in NewClient
-	userAgent         string
-	importThreadCount int
-	importManager     *recordImportManager
-	logger            *log.Logger
-	coordinatorURI    *URI
-	coordinatorLock   *sync.RWMutex
+	userAgent          string
+	importThreadCount  int
+	importManager      *recordImportManager
+	logger             *log.Logger
+	coordinatorURI     *URI
+	coordinatorLock    *sync.RWMutex
+	manualFragmentNode *fragmentNode
+	manualServerURI    *URI
 }
 
 // DefaultClient creates a client with the default address and options.
@@ -95,18 +97,36 @@ func newClientFromAddresses(addresses []string, options *ClientOptions) (*Client
 }
 
 func newClientWithCluster(cluster *Cluster, options *ClientOptions) *Client {
+	client := newClientWithOptions(options)
+	client.cluster = cluster
+	return client
+}
+
+func newClientWithURI(uri *URI, options *ClientOptions) *Client {
+	client := newClientWithOptions(options)
+	if options.manualServerAddress {
+		fragmentNode := newFragmentNodeFromURI(uri)
+		client.manualFragmentNode = &fragmentNode
+		client.manualServerURI = uri
+		client.cluster = NewClusterWithHost()
+	}
+	client.cluster = NewClusterWithHost(uri)
+	return client
+}
+
+func newClientWithOptions(options *ClientOptions) *Client {
 	if options == nil {
 		options = &ClientOptions{}
 	}
 	options = options.withDefaults()
 	c := &Client{
-		cluster:         cluster,
 		client:          newHTTPClient(options.withDefaults()),
 		logger:          log.New(os.Stderr, "go-pilosa ", log.Flags()),
 		coordinatorLock: &sync.RWMutex{},
 	}
 	c.importManager = newRecordImportManager(c)
 	return c
+
 }
 
 // NewClient creates a client with the given address, URI, or cluster and options.
@@ -124,12 +144,28 @@ func NewClient(addrUriOrCluster interface{}, options ...ClientOption) (*Client, 
 		if err != nil {
 			return nil, err
 		}
-		cluster = NewClusterWithHost(uri)
+		return newClientWithURI(uri, clientOptions), nil
 	case []string:
+		if len(u) == 1 {
+			uri, err := NewURIFromAddress(u[0])
+			if err != nil {
+				return nil, err
+			}
+			return newClientWithURI(uri, clientOptions), nil
+		} else if clientOptions.manualServerAddress {
+			return nil, errors.New("OptClientManualServerAddress requires a single URI or address")
+		}
 		return newClientFromAddresses(u, clientOptions)
 	case *URI:
-		cluster = NewClusterWithHost(u)
+		uriCopy := *u
+		return newClientWithURI(&uriCopy, clientOptions), nil
 	case []*URI:
+		if len(u) == 1 {
+			uriCopy := *u[0]
+			return newClientWithURI(&uriCopy, clientOptions), nil
+		} else if clientOptions.manualServerAddress {
+			return nil, errors.New("OptClientManualServerAddress requires a single URI or address")
+		}
 		cluster = NewClusterWithHost(u...)
 	case *Cluster:
 		cluster = u
@@ -496,6 +532,9 @@ func (c *Client) importValues(field *Field,
 }
 
 func (c *Client) fetchFragmentNodes(indexName string, shard uint64) ([]fragmentNode, error) {
+	if c.manualFragmentNode != nil {
+		return []fragmentNode{*c.manualFragmentNode}, nil
+	}
 	path := fmt.Sprintf("/internal/fragment/nodes?shard=%d&index=%s", shard, indexName)
 	_, body, err := c.httpRequest("GET", path, []byte{}, nil, false)
 	if err != nil {
@@ -514,6 +553,9 @@ func (c *Client) fetchFragmentNodes(indexName string, shard uint64) ([]fragmentN
 }
 
 func (c *Client) fetchCoordinatorNode() (fragmentNode, error) {
+	if c.manualFragmentNode != nil {
+		return *c.manualFragmentNode, nil
+	}
 	status, err := c.Status()
 	if err != nil {
 		return fragmentNode{}, err
@@ -668,12 +710,12 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 	if data == nil {
 		data = []byte{}
 	}
+	reader := bytes.NewReader(data)
 
 	// try at most maxHosts non-failed hosts; protect against broken cluster.removeHost
 	var response *http.Response
 	var err error
 	for i := 0; i < maxHosts; i++ {
-		reader := bytes.NewReader(data)
 		host, err := c.host(useCoordinator)
 		if err != nil {
 			return nil, nil, err
@@ -682,13 +724,17 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 		if err == nil {
 			break
 		}
-		if useCoordinator {
-			c.coordinatorLock.Lock()
-			c.coordinatorURI = nil
-			c.coordinatorLock.Unlock()
-		} else {
-			c.cluster.RemoveHost(host)
+		if c.manualServerURI == nil {
+			if useCoordinator {
+				c.coordinatorLock.Lock()
+				c.coordinatorURI = nil
+				c.coordinatorLock.Unlock()
+			} else {
+				c.cluster.RemoveHost(host)
+			}
 		}
+		// TODO: exponential backoff
+		time.Sleep(1 * time.Second)
 	}
 	if response == nil {
 		return nil, nil, ErrTriedMaxHosts
@@ -711,6 +757,9 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 }
 
 func (c *Client) host(useCoordinator bool) (*URI, error) {
+	if c.manualServerURI != nil {
+		return c.manualServerURI, nil
+	}
 	var host *URI
 	if useCoordinator {
 		c.coordinatorLock.RLock()
@@ -1051,11 +1100,12 @@ func valsToImportRequest(field *Field, shard uint64, vals []Record) *pbuf.Import
 
 // ClientOptions control the properties of client connection to the server.
 type ClientOptions struct {
-	SocketTimeout    time.Duration
-	ConnectTimeout   time.Duration
-	PoolSizePerRoute int
-	TotalPoolSize    int
-	TLSConfig        *tls.Config
+	SocketTimeout       time.Duration
+	ConnectTimeout      time.Duration
+	PoolSizePerRoute    int
+	TotalPoolSize       int
+	TLSConfig           *tls.Config
+	manualServerAddress bool
 }
 
 func (co *ClientOptions) addOptions(options ...ClientOption) error {
@@ -1107,6 +1157,14 @@ func OptClientTotalPoolSize(size int) ClientOption {
 func OptClientTLSConfig(config *tls.Config) ClientOption {
 	return func(options *ClientOptions) error {
 		options.TLSConfig = config
+		return nil
+	}
+}
+
+// OptClientManualServerAddress forces the client use only the manual server address
+func OptClientManualServerAddress(enabled bool) ClientOption {
+	return func(options *ClientOptions) error {
+		options.manualServerAddress = enabled
 		return nil
 	}
 }
@@ -1322,6 +1380,14 @@ type fragmentNode struct {
 	Scheme string `json:"scheme"`
 	Host   string `json:"host"`
 	Port   uint16 `json:"port"`
+}
+
+func newFragmentNodeFromURI(uri *URI) fragmentNode {
+	return fragmentNode{
+		Scheme: uri.scheme,
+		Host:   uri.host,
+		Port:   uri.port,
+	}
 }
 
 func (node fragmentNode) URI() *URI {

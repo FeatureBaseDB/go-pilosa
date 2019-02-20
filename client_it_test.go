@@ -1605,6 +1605,68 @@ func TestRowIDColumnIDImport(t *testing.T) {
 	}
 }
 
+func TestRowIDColumnIDImportManualAddress(t *testing.T) {
+	client := getClientManualAddress()
+	iterator := newTestIterator()
+	field := index.Field("importfield-rowid-colid")
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.ImportField(field, iterator)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	target := []uint64{3, 1, 5}
+	bq := index.BatchQuery(
+		field.Row(2),
+		field.Row(7),
+		field.Row(10),
+	)
+	response, err := client.Query(bq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Results()) != 3 {
+		t.Fatalf("Result count should be 3")
+	}
+	for i, result := range response.Results() {
+		br := result.Row()
+		if len(br.Columns) < 1 {
+			t.Fatalf("1 or more keys should be returned")
+		}
+		if target[i] != br.Columns[0] {
+			t.Fatalf("%d != %d", target[i], br.Columns[0])
+		}
+	}
+
+	// test clear imports
+	iterator = newTestIterator()
+	err = client.ImportField(field, iterator, OptImportClear(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bq = index.BatchQuery(
+		field.Row(2),
+		field.Row(7),
+		field.Row(10),
+	)
+	response, err = client.Query(bq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Results()) != 3 {
+		t.Fatalf("Result count should be 3")
+	}
+	for _, result := range response.Results() {
+		br := result.Row()
+		if !reflect.DeepEqual([]uint64(nil), br.Columns) {
+			t.Fatalf("%#v != %#v", []uint64(nil), br.Columns)
+		}
+	}
+}
+
 func TestRowIDColumnIDImportRoaring(t *testing.T) {
 	client := getClient()
 	iterator := newTestIterator()
@@ -1838,6 +1900,48 @@ func TestRowIDColumnIDImportFailsRoaring(t *testing.T) {
 
 func TestCSVRowIDColumnKeyImport(t *testing.T) {
 	client := getClient()
+	iterator := NewArrayRecordIterator([]Record{
+		Column{RowID: 10, ColumnKey: "five"},
+		Column{RowID: 2, ColumnKey: "three"},
+		Column{RowID: 7, ColumnKey: "one"},
+	})
+	field := keysIndex.Field("importfield-rowid-colkey")
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.ImportField(field, iterator)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	target := []string{"three", "one", "five"}
+	bq := keysIndex.BatchQuery(
+		field.Row(2),
+		field.Row(7),
+		field.Row(10),
+	)
+
+	response, err := client.Query(bq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Results()) != 3 {
+		t.Fatalf("Result count should be 3")
+	}
+	for i, result := range response.Results() {
+		br := result.Row()
+		if len(br.Keys) < 1 {
+			t.Fatalf("1 or more keys should be returned")
+		}
+		if target[i] != br.Keys[0] {
+			t.Fatalf("%s != %s", target[i], br.Keys[0])
+		}
+	}
+}
+
+func TestCSVRowIDColumnKeyImportManualAddress(t *testing.T) {
+	client := getClientManualAddress()
 	iterator := NewArrayRecordIterator([]Record{
 		Column{RowID: 10, ColumnKey: "five"},
 		Column{RowID: 2, ColumnKey: "three"},
@@ -2296,6 +2400,23 @@ func getClient() *Client {
 	}
 	client, err = NewClient(uri,
 		OptClientTLSConfig(&tls.Config{InsecureSkipVerify: true}),
+	)
+	if err != nil {
+		panic(err)
+	}
+	return client
+}
+
+func getClientManualAddress() *Client {
+	var client *Client
+	var err error
+	uri, err := NewURIFromAddress(getPilosaBindAddress())
+	if err != nil {
+		panic(err)
+	}
+	client, err = NewClient(uri,
+		OptClientTLSConfig(&tls.Config{InsecureSkipVerify: true}),
+		OptClientManualServerAddress(true),
 	)
 	if err != nil {
 		panic(err)

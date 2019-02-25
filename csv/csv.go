@@ -16,13 +16,13 @@ import (
 type Format uint
 
 const (
-	// RowIDColumnID formatted data is ROW_ID,COLUMN_ID
+	// RowIDColumnID formatted data is ROW_ID,COLUMN_ID.
 	RowIDColumnID Format = iota
-	// RowIDColumnKey formatted data is ROW_ID,COLUMN_KEY
+	// RowIDColumnKey formatted data is ROW_ID,COLUMN_KEY.
 	RowIDColumnKey
-	// RowKeyColumnID formatted data is ROW_KEY,COLUMN_ID
+	// RowKeyColumnID formatted data is ROW_KEY,COLUMN_ID.
 	RowKeyColumnID
-	// RowKeyColumnKey formatted data is ROW_KEY,COLUMN_ID
+	// RowKeyColumnKey formatted data is ROW_KEY,COLUMN_ID.
 	RowKeyColumnKey
 	// ColumnID formatted data is COLUMN_ID. Valid only for value import.
 	ColumnID
@@ -110,17 +110,17 @@ func NewIterator(reader io.Reader, unmarshaller RecordUnmarshaller) *Iterator {
 	}
 }
 
-// NewColumnIterator creates a new iterator for column data
+// NewColumnIterator creates a new iterator for column data.
 func NewColumnIterator(format Format, reader io.Reader) *Iterator {
 	return NewIterator(reader, ColumnUnmarshaller(format))
 }
 
-// NewColumnIteratorWithTimestampFormat creates a new iterator for column data with timestamp
+// NewColumnIteratorWithTimestampFormat creates a new iterator for column data with timestamp.
 func NewColumnIteratorWithTimestampFormat(format Format, reader io.Reader, timestampFormat string) *Iterator {
 	return NewIterator(reader, ColumnUnmarshallerWithTimestamp(format, timestampFormat))
 }
 
-// NewValueIterator creates a new iterator for value data
+// NewValueIterator creates a new iterator for value data.
 func NewValueIterator(format Format, reader io.Reader) *Iterator {
 	return NewIterator(reader, FieldValueUnmarshaller(format))
 }

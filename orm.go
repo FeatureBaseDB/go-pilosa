@@ -1022,6 +1022,7 @@ func formatRowColIDKey(rowIDOrKey, colIDOrKey interface{}) (string, string, erro
 }
 
 // FieldType is the type of a field.
+// See: https://www.pilosa.com/docs/latest/data-model/#field-type
 type FieldType string
 
 const (

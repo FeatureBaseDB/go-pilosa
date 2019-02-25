@@ -1004,7 +1004,7 @@ func TestRangeField(t *testing.T) {
 	}
 }
 
-func TerstRangeField2(t *testing.T) {
+func TestRangeField2(t *testing.T) {
 	client := getClient()
 	field := index.Field("rangefield", OptFieldTypeInt(10, 20))
 	field2 := index.Field("rangefield-set")

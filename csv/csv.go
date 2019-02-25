@@ -12,21 +12,30 @@ import (
 	pilosa "github.com/pilosa/go-pilosa"
 )
 
+// Format is the format of the data in the CSV file.
 type Format uint
 
 const (
+	// RowIDColumnID formatted data is ROW_ID,COLUMN_ID
 	RowIDColumnID Format = iota
+	// RowIDColumnKey formatted data is ROW_ID,COLUMN_KEY
 	RowIDColumnKey
+	// RowKeyColumnID formatted data is ROW_KEY,COLUMN_ID
 	RowKeyColumnID
+	// RowKeyColumnKey formatted data is ROW_KEY,COLUMN_ID
 	RowKeyColumnKey
+	// ColumnID formatted data is COLUMN_ID. Valid only for value import.
 	ColumnID
+	// ColumnKey formatted data is COLUMN_KEY. Valud only for value import.
 	ColumnKey
 )
 
+// ColumnUnmarshaller creates a RecordUnmarshaller for importing columns with the given format.
 func ColumnUnmarshaller(format Format) RecordUnmarshaller {
 	return ColumnUnmarshallerWithTimestamp(format, "")
 }
 
+// ColumnUnmarshallerWithTimestamp creates a RecordUnmarshaller for importing columns with the given format and timestamp format.
 func ColumnUnmarshallerWithTimestamp(format Format, timestampFormat string) RecordUnmarshaller {
 	return func(text string) (pilosa.Record, error) {
 		var err error
@@ -78,6 +87,7 @@ func ColumnUnmarshallerWithTimestamp(format Format, timestampFormat string) Reco
 	}
 }
 
+// RecordUnmarshaller is a function which creates a Record from a CSV file line with column data.
 type RecordUnmarshaller func(text string) (pilosa.Record, error)
 
 // Iterator reads records from a Reader.
@@ -100,14 +110,17 @@ func NewIterator(reader io.Reader, unmarshaller RecordUnmarshaller) *Iterator {
 	}
 }
 
+// NewColumnIterator creates a new iterator for column data
 func NewColumnIterator(format Format, reader io.Reader) *Iterator {
 	return NewIterator(reader, ColumnUnmarshaller(format))
 }
 
+// NewColumnIteratorWithTimestampFormat creates a new iterator for column data with timestamp
 func NewColumnIteratorWithTimestampFormat(format Format, reader io.Reader, timestampFormat string) *Iterator {
 	return NewIterator(reader, ColumnUnmarshallerWithTimestamp(format, timestampFormat))
 }
 
+// NewValueIterator creates a new iterator for value data
 func NewValueIterator(format Format, reader io.Reader) *Iterator {
 	return NewIterator(reader, FieldValueUnmarshaller(format))
 }
@@ -133,6 +146,7 @@ func (c *Iterator) NextRecord() (pilosa.Record, error) {
 	return nil, io.EOF
 }
 
+// FieldValueUnmarshaller is a function which creates a Record from a CSV file line with value data.
 func FieldValueUnmarshaller(format Format) RecordUnmarshaller {
 	return func(text string) (pilosa.Record, error) {
 		parts := strings.Split(text, ",")

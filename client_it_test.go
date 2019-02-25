@@ -291,6 +291,9 @@ func TestTopNReturns(t *testing.T) {
 
 	client.Query(field.SetRowAttrs(10, map[string]interface{}{"foo": "bar"}))
 	response, err = client.Query(field.FilterAttrTopN(5, nil, "foo", "bar"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	items = response.Result().CountItems()
 	if len(items) != 1 {
 		t.Fatalf("There should be 1 count item: %v", items)
@@ -738,10 +741,10 @@ func (gen *ColumnGenerator) NextRecord() (Record, error) {
 	if gen.rowIndex >= gen.numRows {
 		return Column{}, io.EOF
 	}
-	gen.colIndex += 1
+	gen.colIndex++
 	if gen.colIndex >= gen.numColumns {
 		gen.colIndex = 0
-		gen.rowIndex += 1
+		gen.rowIndex++
 	}
 	return column, nil
 }
@@ -999,8 +1002,22 @@ func TestRangeField(t *testing.T) {
 	if resp.Result().Count() != 2 {
 		t.Fatalf("Count 2 != %d", resp.Result().Count())
 	}
+}
 
-	resp, err = client.Query(field.Min(field2.Row(1)))
+func TerstRangeField2(t *testing.T) {
+	client := getClient()
+	field := index.Field("rangefield", OptFieldTypeInt(10, 20))
+	field2 := index.Field("rangefield-set")
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.EnsureField(field2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := client.Query(field.Min(field2.Row(1)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1817,7 +1834,6 @@ func TestRowIDColumnIDTimestampImportRoaringNoStandardView(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	target := []uint64{3, 1, 5}
 	bq := index.BatchQuery(
 		field.Row(2),
 		field.Row(7),
@@ -1838,7 +1854,7 @@ func TestRowIDColumnIDTimestampImportRoaringNoStandardView(t *testing.T) {
 		}
 	}
 
-	target = []uint64{5, 7}
+	target := []uint64{5, 7}
 	start := time.Date(2016, 1, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
 	response, err = client.Query(field.RowRange(10, start, end))
@@ -2450,7 +2466,7 @@ func (ar *ArrayRecordIterator) NextRecord() (Record, error) {
 		return nil, io.EOF
 	}
 	rec := ar.records[ar.nextIndex]
-	ar.nextIndex += 1
+	ar.nextIndex++
 	return rec, nil
 }
 

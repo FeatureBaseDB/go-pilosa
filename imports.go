@@ -32,11 +32,13 @@
 
 package pilosa
 
+// Record is a Column or a FieldValue.
 type Record interface {
 	Shard(shardWidth uint64) uint64
 	Less(other Record) bool
 }
 
+// RecordIterator is an iterator for a record.
 type RecordIterator interface {
 	NextRecord() (Record, error)
 }
@@ -50,10 +52,12 @@ type Column struct {
 	Timestamp int64
 }
 
+// Shard returns the shard for this column.
 func (b Column) Shard(shardWidth uint64) uint64 {
 	return b.ColumnID / shardWidth
 }
 
+// Less returns true if this column sorts before the given Record.
 func (b Column) Less(other Record) bool {
 	if ob, ok := other.(Column); ok {
 		if b.RowID == ob.RowID {
@@ -72,10 +76,12 @@ type FieldValue struct {
 	Value     int64
 }
 
+// Shard returns the shard for this field value.
 func (v FieldValue) Shard(shardWidth uint64) uint64 {
 	return v.ColumnID / shardWidth
 }
 
+// Less returns true if this field value sorts before the given Record.
 func (v FieldValue) Less(other Record) bool {
 	if ov, ok := other.(FieldValue); ok {
 		return v.ColumnID < ov.ColumnID

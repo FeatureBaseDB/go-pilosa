@@ -44,7 +44,7 @@ func (rim recordImportManager) Run(field *Field, iterator RecordIterator, option
 			errs:    errChan,
 			status:  statusChan,
 		}
-		go recordImportWorker(i, rim.client, field, chans, options)
+		go recordImportWorker(i, rim.client, field, chans, &options)
 	}
 
 	var importErr error
@@ -71,7 +71,7 @@ sendRecords:
 	for done < threadCount {
 		select {
 		case workerErr := <-errChan:
-			done += 1
+			done++
 			if workerErr != nil {
 				importErr = workerErr
 				break sendRecords
@@ -90,10 +90,9 @@ sendRecords:
 	return importErr
 }
 
-func recordImportWorker(id int, client *Client, field *Field, chans importWorkerChannels, options ImportOptions) {
+func recordImportWorker(id int, client *Client, field *Field, chans importWorkerChannels, options *ImportOptions) {
 	var err error
 	batchForShard := map[uint64][]Record{}
-	importFun := options.importRecordsFunction
 	statusChan := chans.status
 	recordChan := chans.records
 	errChan := chans.errs
@@ -121,49 +120,13 @@ func recordImportWorker(id int, client *Client, field *Field, chans importWorker
 		columnKeyIDMap: columnKeyIDMap,
 	}
 
-	importRecords := func(shard uint64, records []Record) error {
-		var nodes []fragmentNode
-		var ok bool
-		var err error
-		if nodes, ok = shardNodes[shard]; !ok {
-			// if the data has row or column keys, send the data only to the coordinator
-			if field.index.options.keys || field.options.keys {
-				node, err := client.fetchCoordinatorNode()
-				if err != nil {
-					return err
-				}
-				nodes = []fragmentNode{node}
-			} else {
-				nodes, err = client.fetchFragmentNodes(field.index.name, shard)
-				if err != nil {
-					return err
-				}
-			}
-		}
-		tic := time.Now()
-		err = importFun(field, shard, records, nodes, &options, state)
-		if err != nil {
-			return err
-		}
-		took := time.Since(tic)
-		if statusChan != nil {
-			statusChan <- ImportStatusUpdate{
-				ThreadID:      id,
-				Shard:         shard,
-				ImportedCount: len(records),
-				Time:          took,
-			}
-		}
-		return nil
-	}
-
 	recordCount := 0
 	batchSize := options.batchSize
 	shardWidth := options.shardWidth
 
 readRecords:
 	for record := range recordChan {
-		recordCount += 1
+		recordCount++
 		shard := record.Shard(shardWidth)
 		batchForShard[shard] = append(batchForShard[shard], record)
 
@@ -172,7 +135,7 @@ readRecords:
 				if len(records) == 0 {
 					continue
 				}
-				err = importRecords(shard, records)
+				err = importRecords(id, client, field, shardNodes, shard, records, options, statusChan, state)
 				if err != nil {
 					break readRecords
 				}
@@ -191,13 +154,58 @@ readRecords:
 		if len(records) == 0 {
 			continue
 		}
-		err = importRecords(shard, records)
+		err = importRecords(id, client, field, shardNodes, shard, records, options, statusChan, state)
 		if err != nil {
 			break
 		}
 	}
 }
 
+func importRecords(id int, client *Client, field *Field,
+	shardNodes map[uint64][]fragmentNode,
+	shard uint64,
+	records []Record,
+	options *ImportOptions,
+	statusChan chan<- ImportStatusUpdate,
+	state *importState) error {
+
+	var nodes []fragmentNode
+	var ok bool
+	var err error
+	importFun := options.importRecordsFunction
+	if nodes, ok = shardNodes[shard]; !ok {
+		// if the data has row or column keys, send the data only to the coordinator
+		if field.index.options.keys || field.options.keys {
+			node, err := client.fetchCoordinatorNode()
+			if err != nil {
+				return err
+			}
+			nodes = []fragmentNode{node}
+		} else {
+			nodes, err = client.fetchFragmentNodes(field.index.name, shard)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	tic := time.Now()
+	err = importFun(field, shard, records, nodes, options, state)
+	if err != nil {
+		return err
+	}
+	took := time.Since(tic)
+	if statusChan != nil {
+		statusChan <- ImportStatusUpdate{
+			ThreadID:      id,
+			Shard:         shard,
+			ImportedCount: len(records),
+			Time:          took,
+		}
+	}
+	return nil
+}
+
+// ImportStatusUpdate contains the import progress information.
 type ImportStatusUpdate struct {
 	ThreadID      int
 	Shard         uint64

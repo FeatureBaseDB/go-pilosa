@@ -189,15 +189,31 @@ func countItemsFromInternal(items []*pbuf.Pair) TopNResult {
 	return TopNResult(result)
 }
 
+// TopNResult is returned from TopN call.
 type TopNResult []CountResultItem
 
-func (TopNResult) Type() uint32                         { return QueryResultTypePairs }
-func (TopNResult) Row() RowResult                       { return RowResult{} }
-func (t TopNResult) CountItems() []CountResultItem      { return t }
-func (TopNResult) Count() int64                         { return 0 }
-func (TopNResult) Value() int64                         { return 0 }
-func (TopNResult) Changed() bool                        { return false }
-func (TopNResult) GroupCounts() []GroupCount            { return nil }
+// Type is the type of this result.
+func (TopNResult) Type() uint32 { return QueryResultTypePairs }
+
+// Row returns a RowResult.
+func (TopNResult) Row() RowResult { return RowResult{} }
+
+// CountItems returns a CountResultItem slice.
+func (t TopNResult) CountItems() []CountResultItem { return t }
+
+// Count returns the result of a Count call.
+func (TopNResult) Count() int64 { return 0 }
+
+// Value returns the result of a Min, Max or Sum call.
+func (TopNResult) Value() int64 { return 0 }
+
+// Changed returns whether the corresponding Set or Clear call changed the value of a bit.
+func (TopNResult) Changed() bool { return false }
+
+// GroupCounts returns the result of a GroupBy call.
+func (TopNResult) GroupCounts() []GroupCount { return nil }
+
+// RowIdentifiers returns the result of a Rows call.
 func (TopNResult) RowIdentifiers() RowIdentifiersResult { return RowIdentifiersResult{} }
 
 // RowResult represents a result from Row, Union, Intersect, Difference and Range PQL calls.
@@ -220,15 +236,31 @@ func newRowResultFromInternal(row *pbuf.Row) (*RowResult, error) {
 	return result, nil
 }
 
-func (RowResult) Type() uint32                         { return QueryResultTypeRow }
-func (b RowResult) Row() RowResult                     { return b }
-func (RowResult) CountItems() []CountResultItem        { return nil }
-func (RowResult) Count() int64                         { return 0 }
-func (RowResult) Value() int64                         { return 0 }
-func (RowResult) Changed() bool                        { return false }
-func (RowResult) GroupCounts() []GroupCount            { return nil }
+// Type is the type of this result.
+func (RowResult) Type() uint32 { return QueryResultTypeRow }
+
+// Row returns a RowResult.
+func (b RowResult) Row() RowResult { return b }
+
+// CountItems returns a CountResultItem slice.
+func (RowResult) CountItems() []CountResultItem { return nil }
+
+// Count returns the result of a Count call.
+func (RowResult) Count() int64 { return 0 }
+
+// Value returns the result of a Min, Max or Sum call.
+func (RowResult) Value() int64 { return 0 }
+
+// Changed returns whether the corresponding Set or Clear call changed the value of a bit.
+func (RowResult) Changed() bool { return false }
+
+// GroupCounts returns the result of a GroupBy call.
+func (RowResult) GroupCounts() []GroupCount { return nil }
+
+// RowIdentifiers returns the result of a Rows call.
 func (RowResult) RowIdentifiers() RowIdentifiersResult { return RowIdentifiersResult{} }
 
+// MarshalJSON serializes this row result.
 func (b RowResult) MarshalJSON() ([]byte, error) {
 	columns := b.Columns
 	if columns == nil {
@@ -249,87 +281,185 @@ func (b RowResult) MarshalJSON() ([]byte, error) {
 	})
 }
 
+// ValCountResult is returned from Min, Max and Sum calls.
 type ValCountResult struct {
 	Val int64 `json:"val"`
 	Cnt int64 `json:"count"`
 }
 
-func (ValCountResult) Type() uint32                         { return QueryResultTypeValCount }
-func (ValCountResult) Row() RowResult                       { return RowResult{} }
-func (ValCountResult) CountItems() []CountResultItem        { return nil }
-func (c ValCountResult) Count() int64                       { return c.Cnt }
-func (c ValCountResult) Value() int64                       { return c.Val }
-func (ValCountResult) Changed() bool                        { return false }
-func (ValCountResult) GroupCounts() []GroupCount            { return nil }
+// Type is the type of this result.
+func (ValCountResult) Type() uint32 { return QueryResultTypeValCount }
+
+// Row returns a RowResult.
+func (ValCountResult) Row() RowResult { return RowResult{} }
+
+// CountItems returns a CountResultItem slice.
+func (ValCountResult) CountItems() []CountResultItem { return nil }
+
+// Count returns the result of a Count call.
+func (c ValCountResult) Count() int64 { return c.Cnt }
+
+// Value returns the result of a Min, Max or Sum call.
+func (c ValCountResult) Value() int64 { return c.Val }
+
+// Changed returns whether the corresponding Set or Clear call changed the value of a bit.
+func (ValCountResult) Changed() bool { return false }
+
+// GroupCounts returns the result of a GroupBy call.
+func (ValCountResult) GroupCounts() []GroupCount { return nil }
+
+// RowIdentifiers returns the result of a Rows call.
 func (ValCountResult) RowIdentifiers() RowIdentifiersResult { return RowIdentifiersResult{} }
 
+// IntResult is returned from Count call.
 type IntResult int64
 
-func (IntResult) Type() uint32                         { return QueryResultTypeUint64 }
-func (IntResult) Row() RowResult                       { return RowResult{} }
-func (IntResult) CountItems() []CountResultItem        { return nil }
-func (i IntResult) Count() int64                       { return int64(i) }
-func (IntResult) Value() int64                         { return 0 }
-func (IntResult) Changed() bool                        { return false }
-func (IntResult) GroupCounts() []GroupCount            { return nil }
+// Type is the type of this result.
+func (IntResult) Type() uint32 { return QueryResultTypeUint64 }
+
+// Row returns a RowResult.
+func (IntResult) Row() RowResult { return RowResult{} }
+
+// CountItems returns a CountResultItem slice.
+func (IntResult) CountItems() []CountResultItem { return nil }
+
+// Count returns the result of a Count call.
+func (i IntResult) Count() int64 { return int64(i) }
+
+// Value returns the result of a Min, Max or Sum call.
+func (IntResult) Value() int64 { return 0 }
+
+// Changed returns whether the corresponding Set or Clear call changed the value of a bit.
+func (IntResult) Changed() bool { return false }
+
+// GroupCounts returns the result of a GroupBy call.
+func (IntResult) GroupCounts() []GroupCount { return nil }
+
+// RowIdentifiers returns the result of a Rows call.
 func (IntResult) RowIdentifiers() RowIdentifiersResult { return RowIdentifiersResult{} }
 
+// BoolResult is returned from Set and Clear calls.
 type BoolResult bool
 
-func (BoolResult) Type() uint32                         { return QueryResultTypeBool }
-func (BoolResult) Row() RowResult                       { return RowResult{} }
-func (BoolResult) CountItems() []CountResultItem        { return nil }
-func (BoolResult) Count() int64                         { return 0 }
-func (BoolResult) Value() int64                         { return 0 }
-func (b BoolResult) Changed() bool                      { return bool(b) }
-func (BoolResult) GroupCounts() []GroupCount            { return nil }
+// Type is the type of this result.
+func (BoolResult) Type() uint32 { return QueryResultTypeBool }
+
+// Row returns a RowResult.
+func (BoolResult) Row() RowResult { return RowResult{} }
+
+// CountItems returns a CountResultItem slice.
+func (BoolResult) CountItems() []CountResultItem { return nil }
+
+// Count returns the result of a Count call.
+func (BoolResult) Count() int64 { return 0 }
+
+// Value returns the result of a Min, Max or Sum call.
+func (BoolResult) Value() int64 { return 0 }
+
+// Changed returns whether the corresponding Set or Clear call changed the value of a bit.
+func (b BoolResult) Changed() bool { return bool(b) }
+
+// GroupCounts returns the result of a GroupBy call.
+func (BoolResult) GroupCounts() []GroupCount { return nil }
+
+// RowIdentifiers returns the result of a Rows call.
 func (BoolResult) RowIdentifiers() RowIdentifiersResult { return RowIdentifiersResult{} }
 
+// NilResult is returned from calls which don't return a value, such as SetRowAttrs.
 type NilResult struct{}
 
-func (NilResult) Type() uint32                         { return QueryResultTypeNil }
-func (NilResult) Row() RowResult                       { return RowResult{} }
-func (NilResult) CountItems() []CountResultItem        { return nil }
-func (NilResult) Count() int64                         { return 0 }
-func (NilResult) Value() int64                         { return 0 }
-func (NilResult) Changed() bool                        { return false }
-func (NilResult) GroupCounts() []GroupCount            { return nil }
+// Type is the type of this result.
+func (NilResult) Type() uint32 { return QueryResultTypeNil }
+
+// Row returns a RowResult.
+func (NilResult) Row() RowResult { return RowResult{} }
+
+// CountItems returns a CountResultItem slice.
+func (NilResult) CountItems() []CountResultItem { return nil }
+
+// Count returns the result of a Count call.
+func (NilResult) Count() int64 { return 0 }
+
+// Value returns the result of a Min, Max or Sum call.
+func (NilResult) Value() int64 { return 0 }
+
+// Changed returns whether the corresponding Set or Clear call changed the value of a bit.
+func (NilResult) Changed() bool { return false }
+
+// GroupCounts returns the result of a GroupBy call.
+func (NilResult) GroupCounts() []GroupCount { return nil }
+
+// RowIdentifiers returns the result of a Rows call.
 func (NilResult) RowIdentifiers() RowIdentifiersResult { return RowIdentifiersResult{} }
 
+// FieldRow represents a Group in a GroupBy call result.
 type FieldRow struct {
 	FieldName string `json:"field"`
 	RowID     uint64 `json:"rowID"`
 	RowKey    string `json:"rowKey"`
 }
 
+// GroupCount contains groups and their count in a GroupBy call result.
 type GroupCount struct {
 	Groups []FieldRow `json:"groups"`
 	Count  int64      `json:"count"`
 }
 
+// GroupCountResult is returned from GroupBy call.
 type GroupCountResult []GroupCount
 
-func (GroupCountResult) Type() uint32                         { return QueryResultTypeGroupCounts }
-func (GroupCountResult) Row() RowResult                       { return RowResult{} }
-func (GroupCountResult) CountItems() []CountResultItem        { return nil }
-func (GroupCountResult) Count() int64                         { return 0 }
-func (GroupCountResult) Value() int64                         { return 0 }
-func (GroupCountResult) Changed() bool                        { return false }
-func (r GroupCountResult) GroupCounts() []GroupCount          { return r }
+// Type is the type of this result.
+func (GroupCountResult) Type() uint32 { return QueryResultTypeGroupCounts }
+
+// Row returns a RowResult.
+func (GroupCountResult) Row() RowResult { return RowResult{} }
+
+// CountItems returns a CountResultItem slice.
+func (GroupCountResult) CountItems() []CountResultItem { return nil }
+
+// Count returns the result of a Count call.
+func (GroupCountResult) Count() int64 { return 0 }
+
+// Value returns the result of a Min, Max or Sum call.
+func (GroupCountResult) Value() int64 { return 0 }
+
+// Changed returns whether the corresponding Set or Clear call changed the value of a bit.
+func (GroupCountResult) Changed() bool { return false }
+
+// GroupCounts returns the result of a GroupBy call.
+func (r GroupCountResult) GroupCounts() []GroupCount { return r }
+
+// RowIdentifiers returns the result of a Rows call.
 func (GroupCountResult) RowIdentifiers() RowIdentifiersResult { return RowIdentifiersResult{} }
 
+// RowIdentifiersResult is returned from a Rows call.
 type RowIdentifiersResult struct {
 	IDs  []uint64 `json:"ids"`
 	Keys []string `json:"keys,omitempty"`
 }
 
-func (RowIdentifiersResult) Type() uint32                           { return QueryResultTypeRowIdentifiers }
-func (RowIdentifiersResult) Row() RowResult                         { return RowResult{} }
-func (RowIdentifiersResult) CountItems() []CountResultItem          { return nil }
-func (RowIdentifiersResult) Count() int64                           { return 0 }
-func (RowIdentifiersResult) Value() int64                           { return 0 }
-func (RowIdentifiersResult) Changed() bool                          { return false }
-func (RowIdentifiersResult) GroupCounts() []GroupCount              { return nil }
+// Type is the type of this result.
+func (RowIdentifiersResult) Type() uint32 { return QueryResultTypeRowIdentifiers }
+
+// Row returns a RowResult.
+func (RowIdentifiersResult) Row() RowResult { return RowResult{} }
+
+// CountItems returns a CountResultItem slice.
+func (RowIdentifiersResult) CountItems() []CountResultItem { return nil }
+
+// Count returns the result of a Count call.
+func (RowIdentifiersResult) Count() int64 { return 0 }
+
+// Value returns the result of a Min, Max or Sum call.
+func (RowIdentifiersResult) Value() int64 { return 0 }
+
+// Changed returns whether the corresponding Set or Clear call changed the value of a bit.
+func (RowIdentifiersResult) Changed() bool { return false }
+
+// GroupCounts returns the result of a GroupBy call.
+func (RowIdentifiersResult) GroupCounts() []GroupCount { return nil }
+
+// RowIdentifiers returns the result of a Rows call.
 func (r RowIdentifiersResult) RowIdentifiers() RowIdentifiersResult { return r }
 
 func groupCountsFromInternal(items []*pbuf.GroupCount) GroupCountResult {

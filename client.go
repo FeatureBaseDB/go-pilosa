@@ -58,6 +58,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// PQLVersion is the version of PQL expected by the client
 const PQLVersion = "1.0"
 const maxHosts = 10
 
@@ -130,7 +131,7 @@ func newClientWithOptions(options *ClientOptions) *Client {
 }
 
 // NewClient creates a client with the given address, URI, or cluster and options.
-func NewClient(addrUriOrCluster interface{}, options ...ClientOption) (*Client, error) {
+func NewClient(addrURIOrCluster interface{}, options ...ClientOption) (*Client, error) {
 	var cluster *Cluster
 	clientOptions := &ClientOptions{}
 	err := clientOptions.addOptions(options...)
@@ -138,7 +139,7 @@ func NewClient(addrUriOrCluster interface{}, options ...ClientOption) (*Client, 
 		return nil, err
 	}
 
-	switch u := addrUriOrCluster.(type) {
+	switch u := addrURIOrCluster.(type) {
 	case string:
 		uri, err := NewURIFromAddress(u)
 		if err != nil {
@@ -1136,7 +1137,7 @@ func OptClientConnectTimeout(timeout time.Duration) ClientOption {
 	}
 }
 
-// OptPoolSizePerRoute is the maximum number of active connections in the pool to a host.
+// OptClientPoolSizePerRoute is the maximum number of active connections in the pool to a host.
 func OptClientPoolSizePerRoute(size int) ClientOption {
 	return func(options *ClientOptions) error {
 		options.PoolSizePerRoute = size
@@ -1267,19 +1268,12 @@ func OptQueryExcludeColumns(enable bool) QueryOption {
 	}
 }
 
-type ImportWorkerStrategy int
-
-const (
-	DefaultImport ImportWorkerStrategy = iota
-	BatchImport
-	TimeoutImport
-)
-
 type importState struct {
 	rowKeyIDMap    lru.LRUCache
 	columnKeyIDMap lru.LRUCache
 }
 
+// ImportOptions are the options for controlling the importer
 type ImportOptions struct {
 	threadCount           int
 	shardWidth            uint64
@@ -1324,6 +1318,7 @@ func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
 // ImportOption is used when running imports.
 type ImportOption func(options *ImportOptions) error
 
+// OptImportThreadCount is the number of goroutines allocated for import.
 func OptImportThreadCount(count int) ImportOption {
 	return func(options *ImportOptions) error {
 		options.threadCount = count
@@ -1331,6 +1326,7 @@ func OptImportThreadCount(count int) ImportOption {
 	}
 }
 
+// OptImportBatchSize is the number of records read before importing them.
 func OptImportBatchSize(batchSize int) ImportOption {
 	return func(options *ImportOptions) error {
 		options.batchSize = batchSize
@@ -1338,6 +1334,8 @@ func OptImportBatchSize(batchSize int) ImportOption {
 	}
 }
 
+// OptImportStatusChannel is a channel which carry import status information.
+// Make sure to read from this channel, otherwise the import process will stall.
 func OptImportStatusChannel(statusChan chan<- ImportStatusUpdate) ImportOption {
 	return func(options *ImportOptions) error {
 		options.statusChan = statusChan
@@ -1345,6 +1343,7 @@ func OptImportStatusChannel(statusChan chan<- ImportStatusUpdate) ImportOption {
 	}
 }
 
+// OptImportClear sets clear import, which clears bits instead of setting them.
 func OptImportClear(clear bool) ImportOption {
 	return func(options *ImportOptions) error {
 		options.clear = clear
@@ -1352,6 +1351,7 @@ func OptImportClear(clear bool) ImportOption {
 	}
 }
 
+// OptImportRoaring enables importing using roaring bitmaps which is more performant.
 func OptImportRoaring(enable bool) ImportOption {
 	return func(options *ImportOptions) error {
 		options.wantRoaring = enable
@@ -1405,6 +1405,7 @@ type Status struct {
 	indexMaxShard map[string]uint64
 }
 
+// StatusNode contains information about a node in the cluster.
 type StatusNode struct {
 	ID            string    `json:"id"`
 	URI           StatusURI `json:"uri"`
@@ -1418,6 +1419,7 @@ type StatusURI struct {
 	Port   uint16 `json:"port"`
 }
 
+// SchemaInfo contains the indexes.
 type SchemaInfo struct {
 	Indexes []SchemaIndex `json:"indexes"`
 }

@@ -263,14 +263,17 @@ func (io *IndexOptions) withDefaults() (updated *IndexOptions) {
 	return
 }
 
+// Keys return true if this index has keys.
 func (io IndexOptions) Keys() bool {
 	return io.keys
 }
 
+// TrackExistence returns true if existence is tracked for this index.
 func (io IndexOptions) TrackExistence() bool {
 	return io.trackExistence
 }
 
+// String serializes this index to a JSON string.
 func (io IndexOptions) String() string {
 	mopt := map[string]interface{}{}
 	if io.keysSet {
@@ -333,6 +336,7 @@ func (oo OptionsOptions) marshal() string {
 	return part1
 }
 
+// OptionsOption is an option for Index.Options call.
 type OptionsOption func(options *OptionsOptions)
 
 // OptOptionsColumnAttrs enables returning column attributes.
@@ -495,6 +499,7 @@ func (idx *Index) Xor(rows ...*PQLRowQuery) *PQLRowQuery {
 	return idx.rowOperation("Xor", rows...)
 }
 
+// Not creates a Not query.
 func (idx *Index) Not(row *PQLRowQuery) *PQLRowQuery {
 	return NewPQLRowQuery(fmt.Sprintf("Not(%s)", row.serialize()), idx, row.Error())
 }
@@ -1016,16 +1021,28 @@ func formatRowColIDKey(rowIDOrKey, colIDOrKey interface{}) (string, string, erro
 	return rowStr, colStr, err
 }
 
-// FieldType
+// FieldType is the type of a field.
+// See: https://www.pilosa.com/docs/latest/data-model/#field-type
 type FieldType string
 
 const (
+	// FieldTypeDefault is the default field type.
 	FieldTypeDefault FieldType = ""
-	FieldTypeSet     FieldType = "set"
-	FieldTypeInt     FieldType = "int"
-	FieldTypeTime    FieldType = "time"
-	FieldTypeMutex   FieldType = "mutex"
-	FieldTypeBool    FieldType = "bool"
+	// FieldTypeSet is the set field type.
+	// See: https://www.pilosa.com/docs/latest/data-model/#set
+	FieldTypeSet FieldType = "set"
+	// FieldTypeInt is the int field type.
+	// See: https://www.pilosa.com/docs/latest/data-model/#int
+	FieldTypeInt FieldType = "int"
+	// FieldTypeTime is the time field type.
+	// See: https://www.pilosa.com/docs/latest/data-model/#time
+	FieldTypeTime FieldType = "time"
+	// FieldTypeMutex is the mutex field type.
+	// See: https://www.pilosa.com/docs/latest/data-model/#mutex
+	FieldTypeMutex FieldType = "mutex"
+	// FieldTypeBool is the boolean field type.
+	// See: https://www.pilosa.com/docs/latest/data-model/#boolean
+	FieldTypeBool FieldType = "bool"
 )
 
 // TimeQuantum type represents valid time quantum values time fields.
@@ -1068,74 +1085,74 @@ func (f *Field) Options() *FieldOptions {
 }
 
 // LT creates a less than query.
-func (field *Field) LT(n int) *PQLRowQuery {
-	return field.binaryOperation("<", n)
+func (f *Field) LT(n int) *PQLRowQuery {
+	return f.binaryOperation("<", n)
 }
 
 // LTE creates a less than or equal query.
-func (field *Field) LTE(n int) *PQLRowQuery {
-	return field.binaryOperation("<=", n)
+func (f *Field) LTE(n int) *PQLRowQuery {
+	return f.binaryOperation("<=", n)
 }
 
 // GT creates a greater than query.
-func (field *Field) GT(n int) *PQLRowQuery {
-	return field.binaryOperation(">", n)
+func (f *Field) GT(n int) *PQLRowQuery {
+	return f.binaryOperation(">", n)
 }
 
 // GTE creates a greater than or equal query.
-func (field *Field) GTE(n int) *PQLRowQuery {
-	return field.binaryOperation(">=", n)
+func (f *Field) GTE(n int) *PQLRowQuery {
+	return f.binaryOperation(">=", n)
 }
 
 // Equals creates an equals query.
-func (field *Field) Equals(n int) *PQLRowQuery {
-	return field.binaryOperation("==", n)
+func (f *Field) Equals(n int) *PQLRowQuery {
+	return f.binaryOperation("==", n)
 }
 
 // NotEquals creates a not equals query.
-func (field *Field) NotEquals(n int) *PQLRowQuery {
-	return field.binaryOperation("!=", n)
+func (f *Field) NotEquals(n int) *PQLRowQuery {
+	return f.binaryOperation("!=", n)
 }
 
 // NotNull creates a not equal to null query.
-func (field *Field) NotNull() *PQLRowQuery {
-	text := fmt.Sprintf("Range(%s != null)", field.name)
-	q := NewPQLRowQuery(text, field.index, nil)
-	q.hasKeys = field.options.keys || field.index.options.keys
+func (f *Field) NotNull() *PQLRowQuery {
+	text := fmt.Sprintf("Range(%s != null)", f.name)
+	q := NewPQLRowQuery(text, f.index, nil)
+	q.hasKeys = f.options.keys || f.index.options.keys
 	return q
 }
 
 // Between creates a between query.
-func (field *Field) Between(a int, b int) *PQLRowQuery {
-	text := fmt.Sprintf("Range(%s >< [%d,%d])", field.name, a, b)
-	q := NewPQLRowQuery(text, field.index, nil)
-	q.hasKeys = field.options.keys || field.index.options.keys
+func (f *Field) Between(a int, b int) *PQLRowQuery {
+	text := fmt.Sprintf("Range(%s >< [%d,%d])", f.name, a, b)
+	q := NewPQLRowQuery(text, f.index, nil)
+	q.hasKeys = f.options.keys || f.index.options.keys
 	return q
 }
 
 // Sum creates a sum query.
-func (field *Field) Sum(row *PQLRowQuery) *PQLBaseQuery {
-	return field.valQuery("Sum", row)
+func (f *Field) Sum(row *PQLRowQuery) *PQLBaseQuery {
+	return f.valQuery("Sum", row)
 }
 
 // Min creates a min query.
-func (field *Field) Min(row *PQLRowQuery) *PQLBaseQuery {
-	return field.valQuery("Min", row)
+func (f *Field) Min(row *PQLRowQuery) *PQLBaseQuery {
+	return f.valQuery("Min", row)
 }
 
 // Max creates a min query.
-func (field *Field) Max(row *PQLRowQuery) *PQLBaseQuery {
-	return field.valQuery("Max", row)
+func (f *Field) Max(row *PQLRowQuery) *PQLBaseQuery {
+	return f.valQuery("Max", row)
 }
 
 // SetIntValue creates a Set query.
-func (field *Field) SetIntValue(colIDOrKey interface{}, value int) *PQLBaseQuery {
+func (f *Field) SetIntValue(colIDOrKey interface{}, value int) *PQLBaseQuery {
 	colStr, err := formatIDKey(colIDOrKey)
 	if err != nil {
-		return NewPQLBaseQuery("", field.index, err)
+		return NewPQLBaseQuery("", f.index, err)
 	}
-	q := fmt.Sprintf("Set(%s, %s=%d)", colStr, field.name, value)
-	return NewPQLBaseQuery(q, field.index, nil)
+	q := fmt.Sprintf("Set(%s, %s=%d)", colStr, f.name, value)
+	return NewPQLBaseQuery(q, f.index, nil)
 }
 
 // PQLRowsQuery is the return type for Rows calls.
@@ -1169,114 +1186,114 @@ func (q PQLRowsQuery) Error() error {
 }
 
 // Rows creates a Rows query with defaults
-func (field *Field) Rows() *PQLRowsQuery {
-	text := fmt.Sprintf("Rows(field='%s')", field.name)
-	return NewPQLRowsQuery(text, field.index, nil)
+func (f *Field) Rows() *PQLRowsQuery {
+	text := fmt.Sprintf("Rows(field='%s')", f.name)
+	return NewPQLRowsQuery(text, f.index, nil)
 }
 
 // RowsPrevious creates a Rows query with the given previous row ID/key
-func (field *Field) RowsPrevious(rowIDOrKey interface{}) *PQLRowsQuery {
+func (f *Field) RowsPrevious(rowIDOrKey interface{}) *PQLRowsQuery {
 	idKey, err := formatIDKey(rowIDOrKey)
 	if err != nil {
-		return NewPQLRowsQuery("", field.index, err)
+		return NewPQLRowsQuery("", f.index, err)
 	}
-	text := fmt.Sprintf("Rows(field='%s',previous=%s)", field.name, idKey)
-	return NewPQLRowsQuery(text, field.index, nil)
+	text := fmt.Sprintf("Rows(field='%s',previous=%s)", f.name, idKey)
+	return NewPQLRowsQuery(text, f.index, nil)
 }
 
 // RowsLimit creates a Rows query with the given limit
-func (field *Field) RowsLimit(limit int64) *PQLRowsQuery {
+func (f *Field) RowsLimit(limit int64) *PQLRowsQuery {
 	if limit < 0 {
-		return NewPQLRowsQuery("", field.index, errors.New("rows limit must be non-negative"))
+		return NewPQLRowsQuery("", f.index, errors.New("rows limit must be non-negative"))
 	}
-	text := fmt.Sprintf("Rows(field='%s',limit=%d)", field.name, limit)
-	return NewPQLRowsQuery(text, field.index, nil)
+	text := fmt.Sprintf("Rows(field='%s',limit=%d)", f.name, limit)
+	return NewPQLRowsQuery(text, f.index, nil)
 }
 
 // RowsColumn creates a Rows query with the given column ID/key
-func (field *Field) RowsColumn(columnIDOrKey interface{}) *PQLRowsQuery {
+func (f *Field) RowsColumn(columnIDOrKey interface{}) *PQLRowsQuery {
 	idKey, err := formatIDKey(columnIDOrKey)
 	if err != nil {
-		return NewPQLRowsQuery("", field.index, err)
+		return NewPQLRowsQuery("", f.index, err)
 	}
-	text := fmt.Sprintf("Rows(field='%s',column=%s)", field.name, idKey)
-	return NewPQLRowsQuery(text, field.index, nil)
+	text := fmt.Sprintf("Rows(field='%s',column=%s)", f.name, idKey)
+	return NewPQLRowsQuery(text, f.index, nil)
 }
 
 // RowsPreviousLimit creates a Rows query with the given previous row ID/key and limit
-func (field *Field) RowsPreviousLimit(rowIDOrKey interface{}, limit int64) *PQLRowsQuery {
+func (f *Field) RowsPreviousLimit(rowIDOrKey interface{}, limit int64) *PQLRowsQuery {
 	idKey, err := formatIDKey(rowIDOrKey)
 	if err != nil {
-		return NewPQLRowsQuery("", field.index, err)
+		return NewPQLRowsQuery("", f.index, err)
 	}
 	if limit < 0 {
-		return NewPQLRowsQuery("", field.index, errors.New("rows limit must be non-negative"))
+		return NewPQLRowsQuery("", f.index, errors.New("rows limit must be non-negative"))
 	}
-	text := fmt.Sprintf("Rows(field='%s',previous=%s,limit=%d)", field.name, idKey, limit)
-	return NewPQLRowsQuery(text, field.index, nil)
+	text := fmt.Sprintf("Rows(field='%s',previous=%s,limit=%d)", f.name, idKey, limit)
+	return NewPQLRowsQuery(text, f.index, nil)
 }
 
 // RowsPreviousColumn creates a Rows query with the given previous row ID/key and column ID/key
-func (field *Field) RowsPreviousColumn(rowIDOrKey interface{}, columnIDOrKey interface{}) *PQLRowsQuery {
+func (f *Field) RowsPreviousColumn(rowIDOrKey interface{}, columnIDOrKey interface{}) *PQLRowsQuery {
 	rowIDKey, err := formatIDKey(rowIDOrKey)
 	if err != nil {
-		return NewPQLRowsQuery("", field.index, err)
+		return NewPQLRowsQuery("", f.index, err)
 	}
 	columnIDKey, err := formatIDKey(columnIDOrKey)
 	if err != nil {
-		return NewPQLRowsQuery("", field.index, err)
+		return NewPQLRowsQuery("", f.index, err)
 	}
-	text := fmt.Sprintf("Rows(field='%s',previous=%s,column=%s)", field.name, rowIDKey, columnIDKey)
-	return NewPQLRowsQuery(text, field.index, nil)
+	text := fmt.Sprintf("Rows(field='%s',previous=%s,column=%s)", f.name, rowIDKey, columnIDKey)
+	return NewPQLRowsQuery(text, f.index, nil)
 }
 
 // RowsLimitColumn creates a Row query with the given limit and column ID/key
-func (field *Field) RowsLimitColumn(limit int64, columnIDOrKey interface{}) *PQLRowsQuery {
+func (f *Field) RowsLimitColumn(limit int64, columnIDOrKey interface{}) *PQLRowsQuery {
 	if limit < 0 {
-		return NewPQLRowsQuery("", field.index, errors.New("rows limit must be non-negative"))
+		return NewPQLRowsQuery("", f.index, errors.New("rows limit must be non-negative"))
 	}
 	columnIDKey, err := formatIDKey(columnIDOrKey)
 	if err != nil {
-		return NewPQLRowsQuery("", field.index, err)
+		return NewPQLRowsQuery("", f.index, err)
 	}
-	text := fmt.Sprintf("Rows(field='%s',limit=%d,column=%s)", field.name, limit, columnIDKey)
-	return NewPQLRowsQuery(text, field.index, nil)
+	text := fmt.Sprintf("Rows(field='%s',limit=%d,column=%s)", f.name, limit, columnIDKey)
+	return NewPQLRowsQuery(text, f.index, nil)
 }
 
 // RowsPreviousLimitColumn creates a Row query with the given previous row ID/key, limit and column ID/key
-func (field *Field) RowsPreviousLimitColumn(rowIDOrKey interface{}, limit int64, columnIDOrKey interface{}) *PQLRowsQuery {
+func (f *Field) RowsPreviousLimitColumn(rowIDOrKey interface{}, limit int64, columnIDOrKey interface{}) *PQLRowsQuery {
 	rowIDKey, err := formatIDKey(rowIDOrKey)
 	if err != nil {
-		return NewPQLRowsQuery("", field.index, err)
+		return NewPQLRowsQuery("", f.index, err)
 	}
 	if limit < 0 {
-		return NewPQLRowsQuery("", field.index, errors.New("rows limit must be non-negative"))
+		return NewPQLRowsQuery("", f.index, errors.New("rows limit must be non-negative"))
 	}
 	columnIDKey, err := formatIDKey(columnIDOrKey)
 	if err != nil {
-		return NewPQLRowsQuery("", field.index, err)
+		return NewPQLRowsQuery("", f.index, err)
 	}
-	text := fmt.Sprintf("Rows(field='%s',previous=%s,limit=%d,column=%s)", field.name, rowIDKey, limit, columnIDKey)
-	return NewPQLRowsQuery(text, field.index, nil)
+	text := fmt.Sprintf("Rows(field='%s',previous=%s,limit=%d,column=%s)", f.name, rowIDKey, limit, columnIDKey)
+	return NewPQLRowsQuery(text, f.index, nil)
 }
 
-func (field *Field) binaryOperation(op string, n int) *PQLRowQuery {
-	text := fmt.Sprintf("Range(%s %s %d)", field.name, op, n)
-	q := NewPQLRowQuery(text, field.index, nil)
-	q.hasKeys = field.options.keys || field.index.options.keys
+func (f *Field) binaryOperation(op string, n int) *PQLRowQuery {
+	text := fmt.Sprintf("Range(%s %s %d)", f.name, op, n)
+	q := NewPQLRowQuery(text, f.index, nil)
+	q.hasKeys = f.options.keys || f.index.options.keys
 	return q
 }
 
-func (field *Field) valQuery(op string, row *PQLRowQuery) *PQLBaseQuery {
+func (f *Field) valQuery(op string, row *PQLRowQuery) *PQLBaseQuery {
 	rowStr := ""
-	hasKeys := field.options.keys || field.index.options.keys
+	hasKeys := f.options.keys || f.index.options.keys
 	if row != nil {
 		serializedRow := row.serialize()
 		hasKeys = hasKeys || serializedRow.HasKeys
 		rowStr = fmt.Sprintf("%s,", serializedRow.String())
 	}
-	text := fmt.Sprintf("%s(%sfield='%s')", op, rowStr, field.name)
-	q := NewPQLBaseQuery(text, field.index, nil)
+	text := fmt.Sprintf("%s(%sfield='%s')", op, rowStr, f.name)
+	q := NewPQLBaseQuery(text, f.index, nil)
 	q.hasKeys = hasKeys
 	return q
 }

@@ -68,12 +68,13 @@ func (s *Schema) Index(name string, options ...IndexOption) *Index {
 	}
 	indexOptions := &IndexOptions{}
 	indexOptions.addOptions(options...)
-	return s.indexWithOptions(name, indexOptions)
+	return s.indexWithOptions(name, 0, indexOptions)
 }
 
-func (s *Schema) indexWithOptions(name string, options *IndexOptions) *Index {
+func (s *Schema) indexWithOptions(name string, shardWidth uint64, options *IndexOptions) *Index {
 	index := NewIndex(name)
 	index.options = options.withDefaults()
+	index.shardWidth = shardWidth
 	s.indexes[name] = index
 	return index
 }
@@ -371,9 +372,10 @@ func OptOptionsShards(shards ...uint64) OptionsOption {
 // Index is a Pilosa index. The purpose of the Index is to represent a data namespace.
 // You cannot perform cross-index queries. Column-level attributes are global to the Index.
 type Index struct {
-	name    string
-	options *IndexOptions
-	fields  map[string]*Field
+	name       string
+	options    *IndexOptions
+	fields     map[string]*Field
+	shardWidth uint64
 }
 
 func (idx *Index) String() string {
@@ -405,9 +407,10 @@ func (idx *Index) copy() *Index {
 		fields[name] = f.copy()
 	}
 	index := &Index{
-		name:    idx.name,
-		options: &IndexOptions{},
-		fields:  fields,
+		name:       idx.name,
+		options:    &IndexOptions{},
+		fields:     fields,
+		shardWidth: idx.shardWidth,
 	}
 	*index.options = *idx.options
 	return index

@@ -172,7 +172,7 @@ func TestIndexFields(t *testing.T) {
 func TestIndexToString(t *testing.T) {
 	schema1 := NewSchema()
 	index := schema1.Index("test-index")
-	target := fmt.Sprintf(`&pilosa.Index{name:"test-index", options:(*pilosa.IndexOptions)(%p), fields:map[string]*pilosa.Field{}}`, index.options)
+	target := fmt.Sprintf(`&pilosa.Index{name:"test-index", options:(*pilosa.IndexOptions)(%p), fields:map[string]*pilosa.Field{}, shardWidth:0x0}`, index.options)
 	if target != index.String() {
 		t.Fatalf("%s != %s", target, index.String())
 	}

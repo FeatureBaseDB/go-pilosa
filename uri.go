@@ -179,7 +179,7 @@ func (u *URI) Valid() bool {
 func parseAddress(address string) (uri *URI, err error) {
 	m := addressRegexp.FindStringSubmatch(address)
 	if m == nil {
-		return nil, errors.New("Invalid address")
+		return nil, ErrInvalidAddress
 	}
 	scheme := "http"
 	if m[2] != "" {

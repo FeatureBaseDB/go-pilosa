@@ -112,9 +112,9 @@ func TestNewClient(t *testing.T) {
 	if !reflect.DeepEqual(target, client.cluster.hosts) {
 		t.Fatalf("%v != %v", target, client.cluster.hosts)
 	}
-	client, err = NewClient(":invalid")
-	if err == nil {
-		t.Fatalf("should have failed")
+	client, err = NewClient([]string{":9999"})
+	if !reflect.DeepEqual(target, client.cluster.hosts) {
+		t.Fatalf("%v != %v", target, client.cluster.hosts)
 	}
 
 	client, err = NewClient([]*URI{URIFromAddress(":9999"), URIFromAddress(":8888")})
@@ -122,6 +122,15 @@ func TestNewClient(t *testing.T) {
 		t.Fatal(err)
 	}
 	target = []*URI{URIFromAddress(":9999"), URIFromAddress(":8888")}
+	if !reflect.DeepEqual(target, client.cluster.hosts) {
+		t.Fatalf("%v != %v", target, client.cluster.hosts)
+	}
+
+	client, err = NewClient([]*URI{URIFromAddress(":9999")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	target = []*URI{URIFromAddress(":9999")}
 	if !reflect.DeepEqual(target, client.cluster.hosts) {
 		t.Fatalf("%v != %v", target, client.cluster.hosts)
 	}
@@ -140,6 +149,14 @@ func TestNewClientWithInvalidAddr(t *testing.T) {
 	_, err := NewClient(10)
 	if err != ErrAddrURIClusterExpected {
 		t.Fatalf("%v != %v", ErrAddrURIClusterExpected, err)
+	}
+	_, err = NewClient(":invalid")
+	if err == nil {
+		t.Fatalf("should have failed")
+	}
+	_, err = NewClient([]string{"valid:8000", ":invalid"})
+	if err != ErrInvalidAddress {
+		t.Fatalf("Should have failed with ErrInvalidAddress")
 	}
 }
 

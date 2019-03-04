@@ -68,4 +68,5 @@ var (
 	ErrNoShard                     = NewError("Index has no shards")
 	ErrUnknownType                 = NewError("Unknown type")
 	ErrSingleServerAddressRequired = NewError("OptClientManualServerAddress requires a single URI or address")
+	ErrInvalidAddress              = NewError("Invalid address")
 )

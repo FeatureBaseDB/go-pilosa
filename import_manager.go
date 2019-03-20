@@ -25,7 +25,7 @@ type importWorkerChannels struct {
 	status  chan<- ImportStatusUpdate
 }
 
-func (rim recordImportManager) Run(field *Field, iterator RecordIterator, options ImportOptions) error {
+func (rim recordImportManager) run(field *Field, iterator RecordIterator, options ImportOptions) error {
 	shardWidth := field.index.shardWidth
 	threadCount := uint64(options.threadCount)
 	recordChans := make([]chan Record, threadCount)

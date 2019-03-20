@@ -60,6 +60,10 @@ import (
 
 // PQLVersion is the version of PQL expected by the client
 const PQLVersion = "1.0"
+
+// DefaultShardWidth is used if an index doesn't have it defined.
+const DefaultShardWidth = 1 << 20
+
 const maxHosts = 10
 
 // Client is the HTTP client for Pilosa server.
@@ -378,10 +382,11 @@ func (c *Client) ImportField(field *Field, iterator RecordIterator, options ...I
 			break
 		}
 		if field.index.shardWidth == 0 {
-			return fmt.Errorf("index '%s' doesn't have a shard width. Run client.SyncSchema before import.", field.index.name)
+			// the index does not have shard width, use the default
+			field.index.shardWidth = DefaultShardWidth
 		}
 	}
-	return c.importManager.Run(field, iterator, importOptions)
+	return c.importManager.run(field, iterator, importOptions)
 }
 
 func (c *Client) importColumns(field *Field,

@@ -111,6 +111,12 @@ func TestNewIndex(t *testing.T) {
 	if index1 != index2 {
 		t.Fatalf("calling schema.Index again should return the same index")
 	}
+	if !schema.HasIndex("index-name") {
+		t.Fatalf("HasIndex should return true")
+	}
+	if schema.HasIndex("index-x") {
+		t.Fatalf("HasIndex should return false")
+	}
 }
 
 func TestIndexCopy(t *testing.T) {
@@ -166,6 +172,12 @@ func TestIndexFields(t *testing.T) {
 	}
 	if !reflect.DeepEqual(target, fields) {
 		t.Fatalf("calling index.Fields should return fields")
+	}
+	if !index11.HasField("field1-1") {
+		t.Fatalf("HasField should return true")
+	}
+	if index11.HasField("field-x") {
+		t.Fatalf("HasField should return false")
 	}
 }
 

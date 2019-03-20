@@ -87,6 +87,12 @@ func (s *Schema) Indexes() map[string]*Index {
 	return result
 }
 
+// HasIndex returns true if the given index is in the schema.
+func (s *Schema) HasIndex(indexName string) bool {
+	_, ok := s.indexes[indexName]
+	return ok
+}
+
 func (s *Schema) diff(other *Schema) *Schema {
 	result := NewSchema()
 	for indexName, index := range s.indexes {
@@ -397,6 +403,12 @@ func (idx *Index) Fields() map[string]*Field {
 		result[k] = v.copy()
 	}
 	return result
+}
+
+// HasFields returns true if the given field exists in the index.
+func (idx *Index) HasField(fieldName string) bool {
+	_, ok := idx.fields[fieldName]
+	return ok
 }
 
 func (idx *Index) copy() *Index {

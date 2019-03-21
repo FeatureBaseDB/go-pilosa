@@ -26,7 +26,7 @@ test:
 	PILOSA_BIND=$(PILOSA_BIND) go test ./... -tags=nointegration $(TESTFLAGS)
 
 test-all:
-	PILOSA_BIND=$(PILOSA_BIND) go test ./... $(TESTFLAGS)
+	PILOSA_BIND=$(PILOSA_BIND) go test -count=1 ./... $(TESTFLAGS)
 
 test-all-race:
 	PILOSA_BIND=$(PILOSA_BIND) $(MAKE) test-all TESTFLAGS=-race

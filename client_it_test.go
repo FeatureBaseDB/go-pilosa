@@ -2097,6 +2097,47 @@ func TestRowKeyColumnKeyImport(t *testing.T) {
 	}
 }
 
+func TestRowKeyColumnKeyImportRoaring(t *testing.T) {
+	client := getClient()
+	iterator := NewArrayRecordIterator([]Record{
+		Column{RowKey: "ten", ColumnKey: "five"},
+		Column{RowKey: "two", ColumnKey: "three"},
+		Column{RowKey: "seven", ColumnKey: "one"},
+	})
+	field := keysIndex.Field("importfield-rowkey-colkey", OptFieldKeys(true))
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.ImportField(field, iterator, OptImportRoaring(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	target := []string{"three", "one", "five"}
+	bq := keysIndex.BatchQuery(
+		field.Row("two"),
+		field.Row("seven"),
+		field.Row("ten"),
+	)
+	response, err := client.Query(bq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Results()) != 3 {
+		t.Fatalf("Result count should be 3")
+	}
+	for i, result := range response.Results() {
+		br := result.Row()
+		if len(br.Keys) < 1 {
+			t.Fatalf("1 or more keys should be returned")
+		}
+		if target[i] != br.Keys[0] {
+			t.Fatalf("%s != %s", target[i], br.Keys[0])
+		}
+	}
+}
+
 func TestValueFieldImport(t *testing.T) {
 	newIterator := func() *ArrayRecordIterator {
 		return NewArrayRecordIterator([]Record{
@@ -2301,6 +2342,27 @@ func TestTranslateRowKeys(t *testing.T) {
 	target := []uint64{1, 2}
 	if !reflect.DeepEqual(target, rowIDs) {
 		t.Fatalf("%v != %v", target, rowIDs)
+	}
+}
+
+func TestTranslateColKeys(t *testing.T) {
+	client := getClient()
+	field := keysIndex.Field("translate-colkeys")
+	client.EnsureField(field)
+	_, err := client.Query(keysIndex.BatchQuery(
+		field.Set(10, "ten"),
+		field.Set(1000, "one-thousand"),
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	colIDs, err := client.translateColumnKeys(keysIndex, []string{"ten", "one-thousand"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := []uint64{5, 8}
+	if !reflect.DeepEqual(target, colIDs) {
+		t.Fatalf("%v != %v", target, colIDs)
 	}
 }
 

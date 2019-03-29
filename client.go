@@ -194,12 +194,12 @@ func (c *Client) Query(query PQLQuery, options ...interface{}) (*QueryResponse, 
 	if err != nil {
 		return nil, err
 	}
-	serializedQuery := query.serialize()
+	serializedQuery := query.Serialize()
 	data, err := makeRequestData(serializedQuery.String(), queryOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "making request data")
 	}
-	useCoordinator := serializedQuery.HasKeys
+	useCoordinator := serializedQuery.HasWriteKeys()
 	path := fmt.Sprintf("/index/%s/query", query.Index().name)
 	_, buf, err := c.httpRequest("POST", path, data, defaultProtobufHeaders(), useCoordinator)
 	if err != nil {

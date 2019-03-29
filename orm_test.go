@@ -957,7 +957,7 @@ func TestFormatIDKey(t *testing.T) {
 
 func comparePQL(t *testing.T, target string, q PQLQuery) {
 	t.Helper()
-	pql := q.serialize().String()
+	pql := q.Serialize().String()
 	if target != pql {
 		t.Fatalf("%s != %s", target, pql)
 	}

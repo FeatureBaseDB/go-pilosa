@@ -119,26 +119,35 @@ func (s *Schema) diff(other *Schema) *Schema {
 	return result
 }
 
-type serializedQuery struct {
-	Query   string
-	HasKeys bool
+type SerializedQuery interface {
+	String() string
+	HasWriteKeys() bool
 }
 
-func newSerializedQuery(query string, hasKeys bool) serializedQuery {
+type serializedQuery struct {
+	query        string
+	hasWriteKeys bool
+}
+
+func newSerializedQuery(query string, hasWriteKeys bool) serializedQuery {
 	return serializedQuery{
-		Query:   query,
-		HasKeys: hasKeys,
+		query:        query,
+		hasWriteKeys: hasWriteKeys,
 	}
 }
 
 func (s serializedQuery) String() string {
-	return s.Query
+	return s.query
+}
+
+func (s serializedQuery) HasWriteKeys() bool {
+	return s.hasWriteKeys
 }
 
 // PQLQuery is an interface for PQL queries.
 type PQLQuery interface {
 	Index() *Index
-	serialize() serializedQuery
+	Serialize() SerializedQuery
 	Error() error
 }
 
@@ -165,7 +174,7 @@ func (q *PQLBaseQuery) Index() *Index {
 	return q.index
 }
 
-func (q *PQLBaseQuery) serialize() serializedQuery {
+func (q *PQLBaseQuery) Serialize() SerializedQuery {
 	return newSerializedQuery(q.pql, q.hasKeys)
 }
 
@@ -187,7 +196,11 @@ func (q *PQLRowQuery) Index() *Index {
 	return q.index
 }
 
-func (q *PQLRowQuery) serialize() serializedQuery {
+func (q *PQLRowQuery) Serialize() SerializedQuery {
+	return q.serialize()
+}
+
+func (q *PQLRowQuery) serialize() SerializedQuery {
 	return newSerializedQuery(q.pql, q.hasKeys)
 }
 
@@ -219,7 +232,7 @@ func (q *PQLBatchQuery) Index() *Index {
 	return q.index
 }
 
-func (q *PQLBatchQuery) serialize() serializedQuery {
+func (q *PQLBatchQuery) Serialize() SerializedQuery {
 	query := strings.Join(q.queries, "")
 	return newSerializedQuery(query, q.hasKeys)
 }
@@ -234,8 +247,8 @@ func (q *PQLBatchQuery) Add(query PQLQuery) {
 	if err != nil {
 		q.err = err
 	}
-	serializedQuery := query.serialize()
-	q.hasKeys = q.hasKeys || serializedQuery.HasKeys
+	serializedQuery := query.Serialize()
+	q.hasKeys = q.hasKeys || serializedQuery.HasWriteKeys()
 	q.queries = append(q.queries, serializedQuery.String())
 }
 
@@ -462,8 +475,8 @@ func (idx *Index) BatchQuery(queries ...PQLQuery) *PQLBatchQuery {
 	stringQueries := make([]string, 0, len(queries))
 	hasKeys := false
 	for _, query := range queries {
-		serializedQuery := query.serialize()
-		hasKeys = hasKeys || serializedQuery.HasKeys
+		serializedQuery := query.Serialize()
+		hasKeys = hasKeys || serializedQuery.HasWriteKeys()
 		stringQueries = append(stringQueries, serializedQuery.String())
 	}
 	return &PQLBatchQuery{
@@ -524,7 +537,7 @@ func (idx *Index) Not(row *PQLRowQuery) *PQLRowQuery {
 func (idx *Index) Count(row *PQLRowQuery) *PQLBaseQuery {
 	serializedQuery := row.serialize()
 	q := NewPQLBaseQuery(fmt.Sprintf("Count(%s)", serializedQuery.String()), idx, nil)
-	q.hasKeys = q.hasKeys || serializedQuery.HasKeys
+	q.hasKeys = q.hasKeys || serializedQuery.HasWriteKeys()
 	return q
 }
 
@@ -976,7 +989,7 @@ func (f *Field) Store(row *PQLRowQuery, rowIDOrKey interface{}) *PQLBaseQuery {
 	if err != nil {
 		return NewPQLBaseQuery("", f.index, err)
 	}
-	return NewPQLBaseQuery(fmt.Sprintf("Store(%s,%s=%s)", row.serialize().Query, f.name, rowStr), f.index, nil)
+	return NewPQLBaseQuery(fmt.Sprintf("Store(%s,%s=%s)", row.serialize().String(), f.name, rowStr), f.index, nil)
 }
 
 func createAttributesString(attrs map[string]interface{}) (string, error) {
@@ -1191,7 +1204,11 @@ func (q *PQLRowsQuery) Index() *Index {
 	return q.index
 }
 
-func (q *PQLRowsQuery) serialize() serializedQuery {
+func (q *PQLRowsQuery) Serialize() SerializedQuery {
+	return q.serialize()
+}
+
+func (q *PQLRowsQuery) serialize() SerializedQuery {
 	return newSerializedQuery(q.pql, false)
 }
 
@@ -1304,7 +1321,7 @@ func (f *Field) valQuery(op string, row *PQLRowQuery) *PQLBaseQuery {
 	hasKeys := f.options.keys || f.index.options.keys
 	if row != nil {
 		serializedRow := row.serialize()
-		hasKeys = hasKeys || serializedRow.HasKeys
+		hasKeys = hasKeys || serializedRow.HasWriteKeys()
 		rowStr = fmt.Sprintf("%s,", serializedRow.String())
 	}
 	text := fmt.Sprintf("%s(%sfield='%s')", op, rowStr, f.name)

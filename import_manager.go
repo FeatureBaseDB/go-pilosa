@@ -3,6 +3,7 @@ package pilosa
 import (
 	"fmt"
 	"io"
+	"sort"
 	"time"
 
 	lru "github.com/hashicorp/golang-lru/simplelru"
@@ -192,6 +193,9 @@ func importRecords(id int, client *Client, field *Field,
 		}
 	}
 	tic := time.Now()
+	if !options.skipSort {
+		sort.Sort(recordSort(records))
+	}
 	err = importFun(field, shard, records, nodes, options, state)
 	if err != nil {
 		return err

@@ -128,6 +128,9 @@ readRecords:
 	for record := range recordChan {
 		recordCount++
 		shard := record.Shard(shardWidth)
+		if batchForShard[shard] == nil {
+			batchForShard[shard] = make([]Record, 0, batchSize)
+		}
 		batchForShard[shard] = append(batchForShard[shard], record)
 
 		if recordCount >= batchSize {
@@ -139,7 +142,7 @@ readRecords:
 				if err != nil {
 					break readRecords
 				}
-				batchForShard[shard] = nil
+				batchForShard[shard] = batchForShard[shard][:0]
 			}
 			recordCount = 0
 		}

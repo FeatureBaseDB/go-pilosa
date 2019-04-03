@@ -21,7 +21,7 @@ func newRecordImportManager(client *Client) *recordImportManager {
 }
 
 type importWorkerChannels struct {
-	records <-chan Record
+	records <-chan []Record
 	errs    chan<- error
 	status  chan<- ImportStatusUpdate
 }
@@ -29,7 +29,8 @@ type importWorkerChannels struct {
 func (rim recordImportManager) run(field *Field, iterator RecordIterator, options ImportOptions) error {
 	shardWidth := field.index.shardWidth
 	threadCount := uint64(options.threadCount)
-	recordChans := make([]chan Record, threadCount)
+	recordChans := make([]chan []Record, threadCount)
+	recordBufs := make([][]Record, threadCount)
 	errChan := make(chan error)
 	recordErrChan := make(chan error, 1)
 	statusChan := options.statusChan
@@ -39,7 +40,8 @@ func (rim recordImportManager) run(field *Field, iterator RecordIterator, option
 	}
 
 	for i := range recordChans {
-		recordChans[i] = make(chan Record, options.batchSize)
+		recordChans[i] = make(chan []Record, options.batchSize)
+		recordBufs[i] = make([]Record, 0, 16)
 		chans := importWorkerChannels{
 			records: recordChans[i],
 			errs:    errChan,
@@ -63,7 +65,19 @@ func (rim recordImportManager) run(field *Field, iterator RecordIterator, option
 				break
 			}
 			shard := record.Shard(shardWidth)
-			recordChans[shard%threadCount] <- record
+			idx := shard % threadCount
+			recordBufs[idx] = append(recordBufs[idx], record)
+			if len(recordBufs[idx]) == cap(recordBufs[idx]) {
+				recordChans[idx] <- recordBufs[idx]
+				recordBufs[idx] = make([]Record, 0, 16)
+			}
+		}
+		// send any trailing data
+		for idx, buf := range recordBufs {
+			if len(buf) > 0 {
+				recordChans[idx] <- buf
+				recordBufs[idx] = nil
+			}
 		}
 		recordErrChan <- err
 	}(iterator)
@@ -126,26 +140,28 @@ func recordImportWorker(id int, client *Client, field *Field, chans importWorker
 	shardWidth := field.index.shardWidth
 
 readRecords:
-	for record := range recordChan {
-		recordCount++
-		shard := record.Shard(shardWidth)
-		if batchForShard[shard] == nil {
-			batchForShard[shard] = make([]Record, 0, batchSize)
-		}
-		batchForShard[shard] = append(batchForShard[shard], record)
-
-		if recordCount >= batchSize {
-			for shard, records := range batchForShard {
-				if len(records) == 0 {
-					continue
-				}
-				err = importRecords(id, client, field, shardNodes, shard, records, options, statusChan, state)
-				if err != nil {
-					break readRecords
-				}
-				batchForShard[shard] = batchForShard[shard][:0]
+	for recordBatch := range recordChan {
+		for _, record := range recordBatch {
+			recordCount++
+			shard := record.Shard(shardWidth)
+			if batchForShard[shard] == nil {
+				batchForShard[shard] = make([]Record, 0, batchSize)
 			}
-			recordCount = 0
+			batchForShard[shard] = append(batchForShard[shard], record)
+
+			if recordCount >= batchSize {
+				for shard, records := range batchForShard {
+					if len(records) == 0 {
+						continue
+					}
+					err = importRecords(id, client, field, shardNodes, shard, records, options, statusChan, state)
+					if err != nil {
+						break readRecords
+					}
+					batchForShard[shard] = batchForShard[shard][:0]
+				}
+				recordCount = 0
+			}
 		}
 	}
 

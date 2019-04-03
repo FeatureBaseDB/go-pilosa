@@ -80,6 +80,10 @@ type Client struct {
 	coordinatorLock    *sync.RWMutex
 	manualFragmentNode *fragmentNode
 	manualServerURI    *URI
+
+	importLogFile    *os.File
+	importLogEncoder Encoder
+	logLock          sync.Mutex
 }
 
 // DefaultClient creates a client with the default address and options.
@@ -124,10 +128,21 @@ func newClientWithOptions(options *ClientOptions) *Client {
 		options = &ClientOptions{}
 	}
 	options = options.withDefaults()
+
 	c := &Client{
 		client:          newHTTPClient(options.withDefaults()),
 		logger:          log.New(os.Stderr, "go-pilosa ", log.Flags()),
 		coordinatorLock: &sync.RWMutex{},
+	}
+	if options.logLoc != nil {
+		var err error
+		c.importLogFile, err = ioutil.TempFile(*options.logLoc, "go-pilosaImport")
+		if err != nil {
+			c.logger.Printf("ERROR: couldn't create temp file for logging imports: %v", err)
+		} else {
+			c.logger.Printf("Logging imports to %v", c.importLogFile.Name())
+		}
+		c.importLogEncoder = NewImportLogEncoder(c.importLogFile)
 	}
 	c.importManager = newRecordImportManager(c)
 	return c
@@ -608,7 +623,7 @@ func (c *Client) importNode(uri *URI, request *pbuf.ImportRequest, options *Impo
 	if err != nil {
 		return errors.Wrap(err, "marshaling to protobuf")
 	}
-	return c.importData(uri, request.GetIndex(), request.GetField(), data, options)
+	return c.importData(uri, request.GetIndex(), request.GetField(), data, options, request.Shard)
 }
 
 func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest, options *ImportOptions) error {
@@ -616,13 +631,14 @@ func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest, opt
 	if err != nil {
 		return errors.Wrap(err, "marshaling to protobuf")
 	}
-	return c.importData(uri, request.GetIndex(), request.GetField(), data, options)
+	return c.importData(uri, request.GetIndex(), request.GetField(), data, options, request.Shard)
 }
 
-func (c *Client) importData(uri *URI, indexName string, fieldName string, data []byte, options *ImportOptions) error {
+func (c *Client) importData(uri *URI, indexName string, fieldName string, data []byte, options *ImportOptions, shard uint64) error {
 	params := url.Values{}
 	params.Add("clear", strconv.FormatBool(options.clear))
 	path := fmt.Sprintf("/index/%s/field/%s/import?%s", indexName, fieldName, params.Encode())
+	c.logImport(indexName, path, shard, data)
 	resp, err := c.doRequest(uri, "POST", path, defaultProtobufHeaders(), bytes.NewReader(data))
 	if err = anyError(resp, err); err != nil {
 		return errors.Wrap(err, "doing import")
@@ -656,6 +672,9 @@ func (c *Client) importRoaringBitmap(uri *URI, field *Field, shard uint64, views
 	if err != nil {
 		return err
 	}
+
+	c.logImport(field.index.Name(), path, shard, data)
+
 	resp, err := c.doRequest(uri, "POST", path, defaultProtobufHeaders(), bytes.NewReader(data))
 	if err = anyError(resp, err); err != nil {
 		return errors.Wrap(err, "doing import")
@@ -937,6 +956,54 @@ func (c *Client) translateKeys(req *pbuf.TranslateKeysRequest, keys []string) ([
 	return idsResp.IDs, nil
 }
 
+func (c *Client) logImport(index, path string, shard uint64, data []byte) {
+	if c.importLogFile == nil {
+		return
+	}
+	c.logLock.Lock()
+	go func() {
+		defer c.logLock.Unlock()
+		l := &importLog{
+			Index: index,
+			Path:  path,
+			Shard: shard,
+			Data:  data,
+		}
+		// Encode is actually threadsafe (with gob), but the lock above is
+		// helpful for knowing when we've finished all these goroutines.
+		err := c.importLogEncoder.Encode(l)
+		if err != nil {
+			c.logger.Printf("writing to import log: %v", err)
+		}
+	}()
+}
+
+func (c *Client) replayImport(r io.Reader) error {
+	dec := NewImportLogDecoder(r)
+	for {
+		l := &importLog{}
+		err := dec.Decode(l)
+		if err == io.EOF {
+			return nil
+		} else if err != nil {
+			return errors.Wrap(err, "decoding")
+		}
+
+		nodes, err := c.fetchFragmentNodes(l.Index, l.Shard)
+		if err != nil {
+			return errors.Wrap(err, "fetching fragment nodes")
+		}
+
+		for _, node := range nodes {
+			resp, err := c.doRequest(node.URI(), "POST", l.Path, defaultProtobufHeaders(), bytes.NewReader(l.Data))
+			if err = anyError(resp, err); err != nil {
+				return errors.Wrap(err, "doing import")
+			}
+			resp.Body.Close()
+		}
+	}
+}
+
 func defaultProtobufHeaders() map[string]string {
 	return map[string]string{
 		"Content-Type": "application/x-protobuf",
@@ -1149,6 +1216,8 @@ type ClientOptions struct {
 	TotalPoolSize       int
 	TLSConfig           *tls.Config
 	manualServerAddress bool
+
+	logLoc *string
 }
 
 func (co *ClientOptions) addOptions(options ...ClientOption) error {
@@ -1208,6 +1277,13 @@ func OptClientTLSConfig(config *tls.Config) ClientOption {
 func OptClientManualServerAddress(enabled bool) ClientOption {
 	return func(options *ClientOptions) error {
 		options.manualServerAddress = enabled
+		return nil
+	}
+}
+
+func OptClientLogImports(loc string) ClientOption {
+	return func(options *ClientOptions) error {
+		options.logLoc = &loc
 		return nil
 	}
 }

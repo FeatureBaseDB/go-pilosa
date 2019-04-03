@@ -4,8 +4,10 @@ package pilosa
 
 import (
 	"bytes"
+	"io"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"reflect"
 	"testing"
 	"testing/iotest"
@@ -50,5 +52,79 @@ func TestAnyError(t *testing.T) {
 		nil)
 	if err == nil {
 		t.Fatalf("should have gotten an error")
+	}
+}
+
+func TestImportWithReplay(t *testing.T) {
+	client := getClient(OptClientLogImports(""))
+
+	// the first iterator for creating the target
+	iterator := &ColumnGenerator{numRows: 10, numColumns: 1000}
+	target := map[uint64][]uint64{}
+	for {
+		rec, err := iterator.NextRecord()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if col, ok := rec.(Column); ok {
+			target[col.RowID] = append(target[col.RowID], col.ColumnID)
+		}
+	}
+	// the second iterator for the actual import
+	iterator = &ColumnGenerator{numRows: 10, numColumns: 1000}
+	field := index.Field("importfield-batchsize")
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statusChan := make(chan ImportStatusUpdate, 10)
+	err = client.ImportField(field, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(2), OptImportBatchSize(1000))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// delete index and recreate
+	Reset()
+	field = index.Field("importfield-batchsize")
+	err = client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.logLock.Lock()
+	defer client.logLock.Unlock()
+
+	if client.importLogFile == nil {
+		t.Fatalf("should have a log file")
+	}
+	err = client.importLogFile.Sync()
+	if err != nil {
+		t.Fatalf("syncing log file: %v", err)
+	}
+	name := client.importLogFile.Name()
+	err = client.importLogFile.Close()
+	if err != nil {
+		t.Fatalf("closing import log file: %v", err)
+	}
+
+	f, err := os.Open(name)
+	if err != nil {
+		t.Fatalf("opening import log file: %v", err)
+	}
+	err = client.replayImport(f)
+	if err != nil {
+		t.Fatalf("replaying import: %v", err)
+	}
+
+	for rowID, colIDs := range target {
+		resp, err := client.Query(field.Row(rowID))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(colIDs, resp.Result().Row().Columns) {
+			t.Fatalf("%v != %v", colIDs, resp.Result().Row().Columns)
+		}
 	}
 }

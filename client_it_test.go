@@ -2469,16 +2469,15 @@ func getMockPathServer(responses map[string]mockResponseItem) *httptest.Server {
 	return httptest.NewServer(handler)
 }
 
-func getClient() *Client {
+func getClient(options ...ClientOption) *Client {
 	var client *Client
 	var err error
 	uri, err := NewURIFromAddress(getPilosaBindAddress())
 	if err != nil {
 		panic(err)
 	}
-	client, err = NewClient(uri,
-		OptClientTLSConfig(&tls.Config{InsecureSkipVerify: true}),
-	)
+	options = append([]ClientOption{OptClientTLSConfig(&tls.Config{InsecureSkipVerify: true})}, options...)
+	client, err = NewClient(uri, options...)
 	if err != nil {
 		panic(err)
 	}

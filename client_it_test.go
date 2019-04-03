@@ -942,6 +942,29 @@ func TestFetchStatus(t *testing.T) {
 	}
 }
 
+func TestFetchInfo(t *testing.T) {
+	client := getClient()
+	info, err := client.Info()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.ShardWidth == 0 {
+		t.Fatalf("shard width should not be zero")
+	}
+	if info.Memory < (512 * 1024 * 1024) {
+		t.Fatalf("server memory [%d bytes] under 512MB seems highly improbable", info.Memory)
+	}
+	if info.CPUPhysicalCores < 1 || info.CPULogicalCores < 1 {
+		t.Fatalf("server did not detect any CPU cores")
+	}
+	if info.CPUType == "" {
+		t.Fatalf("server reported empty string for CPU type")
+	}
+	if info.CPUMHz == 0 {
+		t.Fatalf("server reported 0MHz processor")
+	}
+}
+
 func TestRowRangeQuery(t *testing.T) {
 	client := getClient()
 	field := index.Field("test-rowrangefield", OptFieldTypeTime(TimeQuantumMonthDayHour))

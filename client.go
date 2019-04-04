@@ -965,7 +965,11 @@ func (c *Client) logImport(index, path string, shard uint64, data []byte) {
 	}()
 }
 
-func (c *Client) replayImport(r io.Reader) error {
+// ReplayImport takes a data stream which was previously recorded by the import
+// logging functionality and imports it to Pilosa. The target cluster need not
+// be of the same size as the original cluster, but it must already have the
+// necessary schema in place.
+func (c *Client) ReplayImport(r io.Reader) error {
 	dec := NewImportLogDecoder(r)
 	for {
 		l := &importLog{}
@@ -976,13 +980,25 @@ func (c *Client) replayImport(r io.Reader) error {
 			return errors.Wrap(err, "decoding")
 		}
 
+		// regular import doesn't forward to replicas, so we have to get all
+		// the nodes.
 		nodes, err := c.fetchFragmentNodes(l.Index, l.Shard)
 		if err != nil {
 			return errors.Wrap(err, "fetching fragment nodes")
 		}
 
-		for _, node := range nodes {
-			resp, err := c.doRequest(node.URI(), "POST", l.Path, defaultProtobufHeaders(), bytes.NewReader(l.Data))
+		if !strings.Contains(l.Path, "/import-roaring/") {
+			for _, node := range nodes {
+				resp, err := c.doRequest(node.URI(), "POST", l.Path, defaultProtobufHeaders(), bytes.NewReader(l.Data))
+				if err = anyError(resp, err); err != nil {
+					return errors.Wrap(err, "doing import")
+				}
+				resp.Body.Close()
+			}
+		} else {
+			// import-roaring forwards on to all replicas, so we only import to
+			// one node.
+			resp, err := c.doRequest(nodes[0].URI(), "POST", l.Path, defaultProtobufHeaders(), bytes.NewReader(l.Data))
 			if err = anyError(resp, err); err != nil {
 				return errors.Wrap(err, "doing import")
 			}

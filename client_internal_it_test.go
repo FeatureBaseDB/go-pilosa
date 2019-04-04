@@ -113,7 +113,7 @@ func TestImportWithReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("opening import log file: %v", err)
 	}
-	err = client.replayImport(f)
+	err = client.ReplayImport(f)
 	if err != nil {
 		t.Fatalf("replaying import: %v", err)
 	}

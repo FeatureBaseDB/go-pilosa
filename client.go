@@ -81,7 +81,6 @@ type Client struct {
 	manualFragmentNode *fragmentNode
 	manualServerURI    *URI
 
-	importLogFile    *os.File
 	importLogEncoder Encoder
 	logLock          sync.Mutex
 }
@@ -135,14 +134,7 @@ func newClientWithOptions(options *ClientOptions) *Client {
 		coordinatorLock: &sync.RWMutex{},
 	}
 	if options.logLoc != nil {
-		var err error
-		c.importLogFile, err = ioutil.TempFile(*options.logLoc, "go-pilosaImport")
-		if err != nil {
-			c.logger.Printf("ERROR: couldn't create temp file for logging imports: %v", err)
-		} else {
-			c.logger.Printf("Logging imports to %v", c.importLogFile.Name())
-		}
-		c.importLogEncoder = NewImportLogEncoder(c.importLogFile)
+		c.importLogEncoder = NewImportLogEncoder(options.logLoc)
 	}
 	c.importManager = newRecordImportManager(c)
 	return c
@@ -944,7 +936,7 @@ func (c *Client) translateKeys(req *pbuf.TranslateKeysRequest, keys []string) ([
 }
 
 func (c *Client) logImport(index, path string, shard uint64, data []byte) {
-	if c.importLogFile == nil {
+	if c.importLogEncoder == nil {
 		return
 	}
 	c.logLock.Lock()
@@ -1220,7 +1212,7 @@ type ClientOptions struct {
 	TLSConfig           *tls.Config
 	manualServerAddress bool
 
-	logLoc *string
+	logLoc io.Writer
 }
 
 func (co *ClientOptions) addOptions(options ...ClientOption) error {
@@ -1284,9 +1276,9 @@ func OptClientManualServerAddress(enabled bool) ClientOption {
 	}
 }
 
-func OptClientLogImports(loc string) ClientOption {
+func OptClientLogImports(loc io.Writer) ClientOption {
 	return func(options *ClientOptions) error {
-		options.logLoc = &loc
+		options.logLoc = loc
 		return nil
 	}
 }

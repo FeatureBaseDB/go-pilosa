@@ -1271,22 +1271,21 @@ func TestImportNodeFails(t *testing.T) {
 		Field:      "bar",
 		Shard:      0,
 	}
-	err := client.importNode(uri, importRequest, defaultImportOptions())
+	data, err := proto.Marshal(importRequest)
+	if err != nil {
+		t.Fatalf("marshaling importRequest: %v", err)
+	}
+	err = client.importData(uri, "/index/foo/field/bar/import?clear=false", data)
 	if err == nil {
 		t.Fatalf("importNode should fail when posting to /import fails")
 	}
 }
 
-func TestImportNodeProtobufMarshalFails(t *testing.T) {
+func TestImportPathDataProtobufMarshalFails(t *testing.T) {
 	// even though this function isn't really an integration test,
-	// it needs to access importNode which is not
+	// it needs to access importPathData which is not
 	// available to client_test.go
-	client := getClient()
-	uri, err := NewURIFromAddress("http://does-not-matter.foo.bar")
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = client.importNode(uri, nil, defaultImportOptions())
+	_, _, err := importPathData(nil, 0, nil, nil)
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -1569,17 +1568,6 @@ func TestServerWarning(t *testing.T) {
 	_, err := client.Query(testField.Row(1))
 	if err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestValueCSVImportFailure(t *testing.T) {
-	server := getMockServer(404, []byte("sorry, not found"), -1)
-	defer server.Close()
-	client, _ := NewClient(server.URL)
-	uri := URIFromAddress(server.URL)
-	err := client.importValueNode(uri, nil, defaultImportOptions())
-	if err == nil {
-		t.Fatal("should have failed")
 	}
 }
 

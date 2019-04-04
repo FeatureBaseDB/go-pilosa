@@ -410,7 +410,6 @@ func (c *Client) importColumns(field *Field,
 	nodes []fragmentNode,
 	options *ImportOptions,
 	state *importState) error {
-	eg := errgroup.Group{}
 
 	if len(nodes) == 0 {
 		return errors.New("No nodes to import to")
@@ -422,13 +421,21 @@ func (c *Client) importColumns(field *Field,
 
 	sort.Sort(recordSort(records))
 
+	importReq := columnsToImportRequest(field, shard, records)
+	path, data, err := importPathData(field, shard, importReq, options)
+	if err != nil {
+		return err
+	}
+	c.logImport(importReq.GetIndex(), path, shard, data)
+
+	eg := errgroup.Group{}
 	for _, node := range nodes {
 		uri := node.URI()
 		eg.Go(func() error {
-			return c.importNode(uri, columnsToImportRequest(field, shard, records), options)
+			return c.importData(uri, path, data)
 		})
 	}
-	err := eg.Wait()
+	err = eg.Wait()
 	return errors.Wrap(err, "importing columns to nodes")
 }
 
@@ -558,20 +565,36 @@ func (c *Client) importValues(field *Field,
 	nodes []fragmentNode,
 	options *ImportOptions,
 	state *importState) error {
+
 	sort.Sort(recordSort(vals))
+
+	importReq := valsToImportRequest(field, shard, vals)
+	path, data, err := importPathData(field, shard, importReq, options)
+	if err != nil {
+		return err
+	}
+	c.logImport(importReq.GetIndex(), path, shard, data)
+
 	eg := errgroup.Group{}
 	for _, node := range nodes {
-		uri := &URI{
-			scheme: node.Scheme,
-			host:   node.Host,
-			port:   node.Port,
-		}
+		uri := node.URI()
 		eg.Go(func() error {
-			return c.importValueNode(uri, valsToImportRequest(field, shard, vals), options)
+			return c.importData(uri, path, data)
 		})
 	}
-	err := eg.Wait()
+	err = eg.Wait()
 	return errors.Wrap(err, "importing values to nodes")
+}
+
+func importPathData(field *Field, shard uint64, msg proto.Message, options *ImportOptions) (path string, data []byte, err error) {
+	data, err = proto.Marshal(msg)
+	if err != nil {
+		return "", nil, errors.Wrap(err, "marshaling to protobuf")
+	}
+	params := url.Values{}
+	params.Add("clear", strconv.FormatBool(options.clear))
+	path = fmt.Sprintf("/index/%s/field/%s/import?%s", field.index.Name(), field.Name(), params.Encode())
+	return path, data, nil
 }
 
 func (c *Client) fetchFragmentNodes(indexName string, shard uint64) ([]fragmentNode, error) {
@@ -616,27 +639,7 @@ func (c *Client) fetchCoordinatorNode() (fragmentNode, error) {
 	return fragmentNode{}, errors.New("Coordinator node not found")
 }
 
-func (c *Client) importNode(uri *URI, request *pbuf.ImportRequest, options *ImportOptions) error {
-	data, err := proto.Marshal(request)
-	if err != nil {
-		return errors.Wrap(err, "marshaling to protobuf")
-	}
-	return c.importData(uri, request.GetIndex(), request.GetField(), data, options, request.Shard)
-}
-
-func (c *Client) importValueNode(uri *URI, request *pbuf.ImportValueRequest, options *ImportOptions) error {
-	data, err := proto.Marshal(request)
-	if err != nil {
-		return errors.Wrap(err, "marshaling to protobuf")
-	}
-	return c.importData(uri, request.GetIndex(), request.GetField(), data, options, request.Shard)
-}
-
-func (c *Client) importData(uri *URI, indexName string, fieldName string, data []byte, options *ImportOptions, shard uint64) error {
-	params := url.Values{}
-	params.Add("clear", strconv.FormatBool(options.clear))
-	path := fmt.Sprintf("/index/%s/field/%s/import?%s", indexName, fieldName, params.Encode())
-	c.logImport(indexName, path, shard, data)
+func (c *Client) importData(uri *URI, path string, data []byte) error {
 	resp, err := c.doRequest(uri, "POST", path, defaultProtobufHeaders(), bytes.NewReader(data))
 	if err = anyError(resp, err); err != nil {
 		return errors.Wrap(err, "doing import")

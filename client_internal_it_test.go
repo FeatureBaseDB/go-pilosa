@@ -7,7 +7,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"os"
 	"reflect"
 	"testing"
 	"testing/iotest"
@@ -56,7 +55,8 @@ func TestAnyError(t *testing.T) {
 }
 
 func TestImportWithReplay(t *testing.T) {
-	client := getClient(OptClientLogImports(""))
+	buf := &bytes.Buffer{}
+	client := getClient(OptClientLogImports(buf))
 
 	// the first iterator for creating the target
 	iterator := &ColumnGenerator{numRows: 10, numColumns: 1000}
@@ -96,24 +96,11 @@ func TestImportWithReplay(t *testing.T) {
 	client.logLock.Lock()
 	defer client.logLock.Unlock()
 
-	if client.importLogFile == nil {
-		t.Fatalf("should have a log file")
-	}
-	err = client.importLogFile.Sync()
-	if err != nil {
-		t.Fatalf("syncing log file: %v", err)
-	}
-	name := client.importLogFile.Name()
-	err = client.importLogFile.Close()
-	if err != nil {
-		t.Fatalf("closing import log file: %v", err)
+	if client.importLogEncoder == nil {
+		t.Fatalf("should have a log encoder")
 	}
 
-	f, err := os.Open(name)
-	if err != nil {
-		t.Fatalf("opening import log file: %v", err)
-	}
-	err = client.ReplayImport(f)
+	err = client.ReplayImport(buf)
 	if err != nil {
 		t.Fatalf("replaying import: %v", err)
 	}

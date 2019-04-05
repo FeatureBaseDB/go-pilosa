@@ -12,18 +12,18 @@ type importLog struct {
 	Data  []byte
 }
 
-type Encoder interface {
+type encoder interface {
 	Encode(thing interface{}) error
 }
 
-func NewImportLogEncoder(w io.Writer) Encoder {
+func newImportLogEncoder(w io.Writer) encoder {
 	return gob.NewEncoder(w)
 }
 
-type Decoder interface {
+type decoder interface {
 	Decode(thing interface{}) error
 }
 
-func NewImportLogDecoder(r io.Reader) Decoder {
+func newImportLogDecoder(r io.Reader) decoder {
 	return gob.NewDecoder(r)
 }

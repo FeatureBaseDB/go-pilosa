@@ -81,7 +81,7 @@ type Client struct {
 	manualFragmentNode *fragmentNode
 	manualServerURI    *URI
 
-	importLogEncoder Encoder
+	importLogEncoder encoder
 	logLock          sync.Mutex
 }
 
@@ -134,7 +134,7 @@ func newClientWithOptions(options *ClientOptions) *Client {
 		coordinatorLock: &sync.RWMutex{},
 	}
 	if options.logLoc != nil {
-		c.importLogEncoder = NewImportLogEncoder(options.logLoc)
+		c.importLogEncoder = newImportLogEncoder(options.logLoc)
 	}
 	c.importManager = newRecordImportManager(c)
 	return c
@@ -957,12 +957,13 @@ func (c *Client) logImport(index, path string, shard uint64, data []byte) {
 	}()
 }
 
-// ReplayImport takes a data stream which was previously recorded by the import
+// ExperimentalReplayImport takes a data stream which was previously recorded by the import
 // logging functionality and imports it to Pilosa. The target cluster need not
 // be of the same size as the original cluster, but it must already have the
-// necessary schema in place.
-func (c *Client) ReplayImport(r io.Reader) error {
-	dec := NewImportLogDecoder(r)
+// necessary schema in place. It is an experimental method and may be changed or
+// removed.
+func (c *Client) ExperimentalReplayImport(r io.Reader) error {
+	dec := newImportLogDecoder(r)
 	for {
 		l := &importLog{}
 		err := dec.Decode(l)
@@ -1276,7 +1277,10 @@ func OptClientManualServerAddress(enabled bool) ClientOption {
 	}
 }
 
-func OptClientLogImports(loc io.Writer) ClientOption {
+// ExperimentalOptClientLogImports writes all imports to the given writer in
+// such a way that they can easily be replayed into another Pilosa cluster. It
+// is an experimental option and may be changed or removed.
+func ExperimentalOptClientLogImports(loc io.Writer) ClientOption {
 	return func(options *ClientOptions) error {
 		options.logLoc = loc
 		return nil

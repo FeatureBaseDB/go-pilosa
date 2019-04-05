@@ -56,7 +56,7 @@ func TestAnyError(t *testing.T) {
 
 func TestImportWithReplay(t *testing.T) {
 	buf := &bytes.Buffer{}
-	client := getClient(OptClientLogImports(buf))
+	client := getClient(ExperimentalOptClientLogImports(buf))
 
 	// the first iterator for creating the target
 	iterator := &ColumnGenerator{numRows: 10, numColumns: 1000}
@@ -100,7 +100,7 @@ func TestImportWithReplay(t *testing.T) {
 		t.Fatalf("should have a log encoder")
 	}
 
-	err = client.ReplayImport(buf)
+	err = client.ExperimentalReplayImport(buf)
 	if err != nil {
 		t.Fatalf("replaying import: %v", err)
 	}

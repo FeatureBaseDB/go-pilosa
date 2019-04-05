@@ -65,12 +65,12 @@ func TestEncodeDecode(t *testing.T) {
 			}
 			copy(nl.Data, test.Data)
 			buf := &bytes.Buffer{}
-			enc := NewImportLogEncoder(buf)
+			enc := newImportLogEncoder(buf)
 			err := enc.Encode(nl)
 			if err != nil {
 				t.Fatalf("writing to buf: %v", err)
 			}
-			dec := NewImportLogDecoder(buf)
+			dec := newImportLogDecoder(buf)
 			l2 := &importLog{}
 			err = dec.Decode(l2)
 			if err != nil {
@@ -95,7 +95,7 @@ func TestEncodeDecode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getting temp file: %v", err)
 	}
-	enc := NewImportLogEncoder(buf)
+	enc := newImportLogEncoder(buf)
 	for _, test := range tests {
 		a := &test
 		err := enc.Encode(a)
@@ -115,7 +115,7 @@ func TestEncodeDecode(t *testing.T) {
 		t.Fatalf("reopening: %v", err)
 	}
 
-	dec := NewImportLogDecoder(buf)
+	dec := newImportLogDecoder(buf)
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			l := &importLog{}

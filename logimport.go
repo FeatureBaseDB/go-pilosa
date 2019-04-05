@@ -6,10 +6,11 @@ import (
 )
 
 type importLog struct {
-	Index string
-	Path  string
-	Shard uint64
-	Data  []byte
+	Index     string
+	Path      string
+	Shard     uint64
+	IsRoaring bool
+	Data      []byte
 }
 
 type encoder interface {

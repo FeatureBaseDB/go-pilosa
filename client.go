@@ -133,8 +133,8 @@ func newClientWithOptions(options *ClientOptions) *Client {
 		logger:          log.New(os.Stderr, "go-pilosa ", log.Flags()),
 		coordinatorLock: &sync.RWMutex{},
 	}
-	if options.logLoc != nil {
-		c.importLogEncoder = newImportLogEncoder(options.logLoc)
+	if options.importLogWriter != nil {
+		c.importLogEncoder = newImportLogEncoder(options.importLogWriter)
 	}
 	c.importManager = newRecordImportManager(c)
 	return c
@@ -418,7 +418,7 @@ func (c *Client) importColumns(field *Field,
 	if err != nil {
 		return err
 	}
-	c.logImport(importReq.GetIndex(), path, shard, data)
+	c.logImport(importReq.GetIndex(), path, shard, false, data)
 
 	eg := errgroup.Group{}
 	for _, node := range nodes {
@@ -565,7 +565,7 @@ func (c *Client) importValues(field *Field,
 	if err != nil {
 		return err
 	}
-	c.logImport(importReq.GetIndex(), path, shard, data)
+	c.logImport(importReq.GetIndex(), path, shard, false, data)
 
 	eg := errgroup.Group{}
 	for _, node := range nodes {
@@ -666,7 +666,7 @@ func (c *Client) importRoaringBitmap(uri *URI, field *Field, shard uint64, views
 		return err
 	}
 
-	c.logImport(field.index.Name(), path, shard, data)
+	c.logImport(field.index.Name(), path, shard, true, data)
 
 	resp, err := c.doRequest(uri, "POST", path, defaultProtobufHeaders(), bytes.NewReader(data))
 	if err = anyError(resp, err); err != nil {
@@ -935,7 +935,7 @@ func (c *Client) translateKeys(req *pbuf.TranslateKeysRequest, keys []string) ([
 	return idsResp.IDs, nil
 }
 
-func (c *Client) logImport(index, path string, shard uint64, data []byte) {
+func (c *Client) logImport(index, path string, shard uint64, isRoaring bool, data []byte) {
 	if c.importLogEncoder == nil {
 		return
 	}
@@ -943,10 +943,11 @@ func (c *Client) logImport(index, path string, shard uint64, data []byte) {
 	go func() {
 		defer c.logLock.Unlock()
 		l := &importLog{
-			Index: index,
-			Path:  path,
-			Shard: shard,
-			Data:  data,
+			Index:     index,
+			Path:      path,
+			Shard:     shard,
+			IsRoaring: isRoaring,
+			Data:      data,
 		}
 		// Encode is actually threadsafe (with gob), but the lock above is
 		// helpful for knowing when we've finished all these goroutines.
@@ -980,7 +981,7 @@ func (c *Client) ExperimentalReplayImport(r io.Reader) error {
 			return errors.Wrap(err, "fetching fragment nodes")
 		}
 
-		if !strings.Contains(l.Path, "/import-roaring/") {
+		if !l.IsRoaring {
 			for _, node := range nodes {
 				resp, err := c.doRequest(node.URI(), "POST", l.Path, defaultProtobufHeaders(), bytes.NewReader(l.Data))
 				if err = anyError(resp, err); err != nil {
@@ -1213,7 +1214,7 @@ type ClientOptions struct {
 	TLSConfig           *tls.Config
 	manualServerAddress bool
 
-	logLoc io.Writer
+	importLogWriter io.Writer
 }
 
 func (co *ClientOptions) addOptions(options ...ClientOption) error {
@@ -1282,7 +1283,7 @@ func OptClientManualServerAddress(enabled bool) ClientOption {
 // is an experimental option and may be changed or removed.
 func ExperimentalOptClientLogImports(loc io.Writer) ClientOption {
 	return func(options *ClientOptions) error {
-		options.logLoc = loc
+		options.importLogWriter = loc
 		return nil
 	}
 }

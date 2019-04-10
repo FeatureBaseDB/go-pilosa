@@ -1128,7 +1128,7 @@ func columnsToImportRequest(field *Field, shard uint64, records []Record) *pbuf.
 type viewImports map[string]*roaring.Bitmap
 
 func columnsToBitmap(shardWidth uint64, columns []Column) viewImports {
-	bmp := roaring.NewBitmap()
+	bmp := roaring.NewBTreeBitmap()
 	for _, col := range columns {
 		bmp.DirectAdd(col.RowID*shardWidth + (col.ColumnID % shardWidth))
 	}
@@ -1139,7 +1139,7 @@ func columnsToBitmapTimeField(quantum TimeQuantum, shardWidth uint64, columns []
 	var standard *roaring.Bitmap
 	views := viewImports{}
 	if !noStandardView {
-		standard = roaring.NewBitmap()
+		standard = roaring.NewBTreeBitmap()
 		views[""] = standard
 	}
 	for _, col := range columns {
@@ -1152,7 +1152,7 @@ func columnsToBitmapTimeField(quantum TimeQuantum, shardWidth uint64, columns []
 		for _, name := range timeViews {
 			view, ok := views[name]
 			if !ok {
-				view = roaring.NewBitmap()
+				view = roaring.NewBTreeBitmap()
 				views[name] = view
 			}
 			view.DirectAdd(b)

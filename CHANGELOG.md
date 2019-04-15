@@ -8,6 +8,7 @@
     * Added `index.Opts` and `field.Opts` functions, which return the options for an `Index` or `Field`.
     * Added roaring import support for `RowKeyColumnID`, `RowIDColumnKey` and `RowKeyColumnKey` type data. Pass `OptImportRoaring(true)` to `client.ImportField` to activate that.
     * Added `OptClientManualServerAddress` function. Passing this option together with a single `URI` or address to `NewClient` causes the client use only the provided server address for fragment node and coordinator node addresses.
+    * Added support for [Open Tracing](https://opentracing.io).
     * Field option getters are attached to `Field` type instead of `*Field` type.
     * Deprecated `field.Options`. Use `field.Opts` instead.
     * Deprecated `Range` call. Use `RowRange` instead.

@@ -1,6 +1,6 @@
 # Tracing
 
-Go-Pilosa supports distrubed tracing via the [OpenTracing](https://opentracing.io/) API.
+Go-Pilosa supports distributed tracing via the [OpenTracing](https://opentracing.io/) API.
 
 In order to use a tracer with Go-Pilosa, you should:
 1. Create the tracer,

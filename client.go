@@ -140,6 +140,8 @@ func newClientWithOptions(options *ClientOptions) *Client {
 	}
 	if options.tracer == nil {
 		c.tracer = NoopTracer{}
+	} else {
+		c.tracer = options.tracer
 	}
 	c.importManager = newRecordImportManager(c)
 	return c

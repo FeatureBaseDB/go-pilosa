@@ -1273,7 +1273,7 @@ type ClientOptions struct {
 	TotalPoolSize       int
 	TLSConfig           *tls.Config
 	manualServerAddress bool
-	tracer              *opentracing.Tracer
+	tracer              opentracing.Tracer
 
 	importLogWriter io.Writer
 }
@@ -1351,7 +1351,7 @@ func ExperimentalOptClientLogImports(loc io.Writer) ClientOption {
 
 // OptClientTracer sets the Open Tracing tracer
 // See: https://opentracing.io
-func OptClientTracer(tracer *opentracing.Tracer) ClientOption {
+func OptClientTracer(tracer opentracing.Tracer) ClientOption {
 	return func(options *ClientOptions) error {
 		options.tracer = tracer
 		return nil

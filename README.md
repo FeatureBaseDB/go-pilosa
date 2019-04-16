@@ -107,6 +107,10 @@ See: [Server Interaction](docs/server-interaction.md)
 
 See: [Importing and Exporting Data](docs/imports-exports.md)
 
+### Other Documentation
+
+* [Tracing](docs/tracing.md)
+
 ## Contributing
 
 See: [CONTRIBUTING](CONTRIBUTING.md)

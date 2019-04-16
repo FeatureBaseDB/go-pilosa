@@ -52,6 +52,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	lru "github.com/hashicorp/golang-lru/simplelru"
+	"github.com/opentracing/opentracing-go"
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
@@ -80,6 +81,7 @@ type Client struct {
 	coordinatorLock    *sync.RWMutex
 	manualFragmentNode *fragmentNode
 	manualServerURI    *URI
+	tracer             opentracing.Tracer
 
 	importLogEncoder encoder
 	logLock          sync.Mutex
@@ -135,6 +137,11 @@ func newClientWithOptions(options *ClientOptions) *Client {
 	}
 	if options.importLogWriter != nil {
 		c.importLogEncoder = newImportLogEncoder(options.importLogWriter)
+	}
+	if options.tracer == nil {
+		c.tracer = NoopTracer{}
+	} else {
+		c.tracer = options.tracer
 	}
 	c.importManager = newRecordImportManager(c)
 	return c
@@ -193,6 +200,9 @@ func NewClient(addrURIOrCluster interface{}, options ...ClientOption) (*Client, 
 // Query runs the given query against the server with the given options.
 // Pass nil for default options.
 func (c *Client) Query(query PQLQuery, options ...interface{}) (*QueryResponse, error) {
+	span := c.tracer.StartSpan("Client.Query")
+	defer span.Finish()
+
 	if err := query.Error(); err != nil {
 		return nil, err
 	}
@@ -226,6 +236,9 @@ func (c *Client) Query(query PQLQuery, options ...interface{}) (*QueryResponse, 
 
 // CreateIndex creates an index on the server using the given Index struct.
 func (c *Client) CreateIndex(index *Index) error {
+	span := c.tracer.StartSpan("Client.CreateIndex")
+	defer span.Finish()
+
 	data := []byte(index.options.String())
 	path := fmt.Sprintf("/index/%s", index.name)
 	response, _, err := c.httpRequest("POST", path, data, nil, false)
@@ -241,6 +254,9 @@ func (c *Client) CreateIndex(index *Index) error {
 
 // CreateField creates a field on the server using the given Field struct.
 func (c *Client) CreateField(field *Field) error {
+	span := c.tracer.StartSpan("Client.CreateField")
+	defer span.Finish()
+
 	data := []byte(field.options.String())
 	path := fmt.Sprintf("/index/%s/field/%s", field.index.name, field.name)
 	response, _, err := c.httpRequest("POST", path, data, nil, false)
@@ -273,6 +289,9 @@ func (c *Client) EnsureField(field *Field) error {
 
 // DeleteIndex deletes an index on the server.
 func (c *Client) DeleteIndex(index *Index) error {
+	span := c.tracer.StartSpan("Client.DeleteIndex")
+	defer span.Finish()
+
 	path := fmt.Sprintf("/index/%s", index.name)
 	_, _, err := c.httpRequest("DELETE", path, nil, nil, false)
 	return err
@@ -281,6 +300,9 @@ func (c *Client) DeleteIndex(index *Index) error {
 
 // DeleteField deletes a field on the server.
 func (c *Client) DeleteField(field *Field) error {
+	span := c.tracer.StartSpan("Client.DeleteField")
+	defer span.Finish()
+
 	path := fmt.Sprintf("/index/%s/field/%s", field.index.name, field.name)
 	_, _, err := c.httpRequest("DELETE", path, nil, nil, false)
 	return err
@@ -290,6 +312,9 @@ func (c *Client) DeleteField(field *Field) error {
 // creates the indexes and fields in the schema on the server side.
 // This function does not delete indexes and the fields on the server side nor in the schema.
 func (c *Client) SyncSchema(schema *Schema) error {
+	span := c.tracer.StartSpan("Client.SyncSchema")
+	defer span.Finish()
+
 	serverSchema, err := c.Schema()
 	if err != nil {
 		return err
@@ -336,6 +361,9 @@ func (c *Client) syncSchema(schema *Schema, serverSchema *Schema) error {
 
 // Schema returns the indexes and fields on the server.
 func (c *Client) Schema() (*Schema, error) {
+	span := c.tracer.StartSpan("Client.Schema")
+	defer span.Finish()
+
 	var indexes []SchemaIndex
 	indexes, err := c.readSchema()
 	if err != nil {
@@ -353,6 +381,9 @@ func (c *Client) Schema() (*Schema, error) {
 
 // ImportField imports records from the given iterator.
 func (c *Client) ImportField(field *Field, iterator RecordIterator, options ...ImportOption) error {
+	span := c.tracer.StartSpan("Client.ImportField")
+	defer span.Finish()
+
 	importOptions := ImportOptions{}
 	for _, option := range options {
 		if err := option(&importOptions); err != nil {
@@ -681,6 +712,9 @@ func (c *Client) importRoaringBitmap(uri *URI, field *Field, shard uint64, views
 
 // ExportField exports columns for a field.
 func (c *Client) ExportField(field *Field) (io.Reader, error) {
+	span := c.tracer.StartSpan("Client.ExportField")
+	defer span.Finish()
+
 	var shardsMax map[string]uint64
 	var err error
 
@@ -703,6 +737,9 @@ func (c *Client) ExportField(field *Field) (io.Reader, error) {
 
 // Info returns the server's configuration/host information.
 func (c *Client) Info() (Info, error) {
+	span := c.tracer.StartSpan("Client.Info")
+	defer span.Finish()
+
 	_, data, err := c.httpRequest("GET", "/info", nil, nil, false)
 	if err != nil {
 		return Info{}, errors.Wrap(err, "requesting /info")
@@ -717,6 +754,9 @@ func (c *Client) Info() (Info, error) {
 
 // Status returns the server's status.
 func (c *Client) Status() (Status, error) {
+	span := c.tracer.StartSpan("Client.Status")
+	defer span.Finish()
+
 	_, data, err := c.httpRequest("GET", "/status", nil, nil, false)
 	if err != nil {
 		return Status{}, errors.Wrap(err, "requesting /status")
@@ -758,6 +798,9 @@ func (c *Client) shardsMax() (map[string]uint64, error) {
 // HttpRequest sends an HTTP request to the Pilosa server.
 // **NOTE**: This function is experimental and may be removed in later revisions.
 func (c *Client) HttpRequest(method string, path string, data []byte, headers map[string]string) (*http.Response, []byte, error) {
+	span := c.tracer.StartSpan("Client.HttpRequest")
+	defer span.Finish()
+
 	return c.httpRequest(method, path, data, headers, false)
 }
 
@@ -980,6 +1023,9 @@ func (c *Client) logImport(index, path string, shard uint64, isRoaring bool, dat
 // necessary schema in place. It is an experimental method and may be changed or
 // removed.
 func (c *Client) ExperimentalReplayImport(r io.Reader) error {
+	span := c.tracer.StartSpan("Client.ExperimentalReplayImport")
+	defer span.Finish()
+
 	dec := newImportLogDecoder(r)
 	for {
 		l := &importLog{}
@@ -1229,6 +1275,7 @@ type ClientOptions struct {
 	TotalPoolSize       int
 	TLSConfig           *tls.Config
 	manualServerAddress bool
+	tracer              opentracing.Tracer
 
 	importLogWriter io.Writer
 }
@@ -1300,6 +1347,15 @@ func OptClientManualServerAddress(enabled bool) ClientOption {
 func ExperimentalOptClientLogImports(loc io.Writer) ClientOption {
 	return func(options *ClientOptions) error {
 		options.importLogWriter = loc
+		return nil
+	}
+}
+
+// OptClientTracer sets the Open Tracing tracer
+// See: https://opentracing.io
+func OptClientTracer(tracer opentracing.Tracer) ClientOption {
+	return func(options *ClientOptions) error {
+		options.tracer = tracer
 		return nil
 	}
 }

@@ -1,6 +1,7 @@
 # Change Log
 
-* **master**
+* **v1.3.0** (2019-04-19)
+    * **Compatible with Pilosa 1.2 and 1.3**
     * Deprecated `QueryResponse.Columns` function. Use `QueryResponse.ColumnAttrs` function instead.
     * Deprecated `QueryResponse.Column` function.
     * Removed support for Go 1.9.
@@ -8,8 +9,11 @@
     * Added `index.Opts` and `field.Opts` functions, which return the options for an `Index` or `Field`.
     * Added roaring import support for `RowKeyColumnID`, `RowIDColumnKey` and `RowKeyColumnKey` type data. Pass `OptImportRoaring(true)` to `client.ImportField` to activate that.
     * Added `OptClientManualServerAddress` function. Passing this option together with a single `URI` or address to `NewClient` causes the client use only the provided server address for fragment node and coordinator node addresses.
-    * Added support for [Open Tracing](https://opentracing.io).
+    * Added support for [Open Tracing](https://opentracing.io). See: [Tracing documentation](docs/tracing.md).
+    * Added `OptImportSort` which enables/disables bit sorting before imports. Disabling bit sorting may improve import performance for already sortedd data.
+    * Added support for automatically loading shard width per index.
     * Field option getters are attached to `Field` type instead of `*Field` type.
+    * Performance improvements.
     * Deprecated `field.Options`. Use `field.Opts` instead.
     * Deprecated `Range` call. Use `RowRange` instead.
 

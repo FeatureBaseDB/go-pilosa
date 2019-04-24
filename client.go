@@ -471,6 +471,7 @@ func (c *Client) importColumnsRoaring(field *Field,
 	options *ImportOptions,
 	state *importState) error {
 
+	var err error
 	shardWidth := field.index.shardWidth
 	columns := make([]Column, 0, len(records))
 	for _, rec := range records {
@@ -478,14 +479,28 @@ func (c *Client) importColumnsRoaring(field *Field,
 	}
 	if field.options.keys {
 		// attempt to translate row keys
-		err := c.translateRecordsRowKeys(state.rowKeyIDMap, field, columns)
+		if state.rowKeyIDMap == nil {
+			// create the row key cache if it doesn't exist
+			state.rowKeyIDMap, err = lru.NewLRU(options.rowKeyCacheSize, nil)
+			if err != nil {
+				panic(errors.Wrap(err, "while creating rowKey to ID map"))
+			}
+		}
+		err = c.translateRecordsRowKeys(state.rowKeyIDMap, field, columns)
 		if err != nil {
 			return errors.Wrap(err, "translating records row keys")
 		}
 	}
 	if field.index.options.keys {
 		// attempt to translate column keys
-		err := c.translateRecordsColumnKeys(state.columnKeyIDMap, field.index, columns)
+		if state.columnKeyIDMap == nil {
+			// create the column key cache if it doesn't exist
+			state.columnKeyIDMap, err = lru.NewLRU(options.columnKeyCacheSize, nil)
+			if err != nil {
+				panic(errors.Wrap(err, "while creating columnKey to ID map"))
+			}
+		}
+		err = c.translateRecordsColumnKeys(state.columnKeyIDMap, field.index, columns)
 		if err != nil {
 			return errors.Wrap(err, "translating records column keys")
 		}
@@ -1496,12 +1511,8 @@ func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
 	if updated.batchSize <= 0 {
 		updated.batchSize = 100000
 	}
-	if updated.rowKeyCacheSize < updated.batchSize {
-		updated.rowKeyCacheSize = updated.batchSize
-	}
-	if updated.columnKeyCacheSize < updated.batchSize {
-		updated.columnKeyCacheSize = updated.batchSize
-	}
+	updated.rowKeyCacheSize = updated.batchSize
+	updated.columnKeyCacheSize = updated.batchSize
 	return
 }
 

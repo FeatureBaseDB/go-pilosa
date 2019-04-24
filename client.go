@@ -397,7 +397,7 @@ func (c *Client) ImportField(field *Field, iterator RecordIterator, options ...I
 			importRecordsFunction(c.importValues)(&importOptions)
 		} else {
 			// Check whether roaring imports is available
-			if importOptions.wantRoaring {
+			if importOptions.wantRoaring != nil && *importOptions.wantRoaring == true {
 				importOptions.hasRoaring = c.hasRoaringImportSupport(field)
 			}
 			importRecordsFunction(c.importColumns)(&importOptions)
@@ -1491,7 +1491,7 @@ type ImportOptions struct {
 		nodes []fragmentNode,
 		options *ImportOptions,
 		state *importState) error
-	wantRoaring        bool
+	wantRoaring        *bool
 	hasRoaring         bool
 	clear              bool
 	rowKeyCacheSize    int
@@ -1510,6 +1510,11 @@ func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
 	}
 	if updated.batchSize <= 0 {
 		updated.batchSize = 100000
+	}
+	// roaring import is default. See: https://github.com/pilosa/go-pilosa/issues/226
+	if updated.wantRoaring == nil {
+		wantRoaring := true
+		updated.wantRoaring = &wantRoaring
 	}
 	updated.rowKeyCacheSize = updated.batchSize
 	updated.columnKeyCacheSize = updated.batchSize
@@ -1555,7 +1560,7 @@ func OptImportClear(clear bool) ImportOption {
 // OptImportRoaring enables importing using roaring bitmaps which is more performant.
 func OptImportRoaring(enable bool) ImportOption {
 	return func(options *ImportOptions) error {
-		options.wantRoaring = enable
+		options.wantRoaring = &enable
 		return nil
 	}
 }

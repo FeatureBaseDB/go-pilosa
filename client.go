@@ -51,9 +51,9 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	lru "github.com/hashicorp/golang-lru/simplelru"
 	"github.com/opentracing/opentracing-go"
 	pbuf "github.com/pilosa/go-pilosa/gopilosa_pbuf"
+	"github.com/pilosa/go-pilosa/lru"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -397,7 +397,7 @@ func (c *Client) ImportField(field *Field, iterator RecordIterator, options ...I
 			importRecordsFunction(c.importValues)(&importOptions)
 		} else {
 			// Check whether roaring imports is available
-			if importOptions.wantRoaring {
+			if importOptions.wantRoaring != nil && *importOptions.wantRoaring == true {
 				importOptions.hasRoaring = c.hasRoaringImportSupport(field)
 			}
 			importRecordsFunction(c.importColumns)(&importOptions)
@@ -471,6 +471,7 @@ func (c *Client) importColumnsRoaring(field *Field,
 	options *ImportOptions,
 	state *importState) error {
 
+	var err error
 	shardWidth := field.index.shardWidth
 	columns := make([]Column, 0, len(records))
 	for _, rec := range records {
@@ -478,14 +479,28 @@ func (c *Client) importColumnsRoaring(field *Field,
 	}
 	if field.options.keys {
 		// attempt to translate row keys
-		err := c.translateRecordsRowKeys(state.rowKeyIDMap, field, columns)
+		if state.rowKeyIDMap == nil {
+			// create the row key cache if it doesn't exist
+			state.rowKeyIDMap, err = lru.NewLRU(options.rowKeyCacheSize)
+			if err != nil {
+				panic(errors.Wrap(err, "while creating rowKey to ID map"))
+			}
+		}
+		err = c.translateRecordsRowKeys(state.rowKeyIDMap, field, columns)
 		if err != nil {
 			return errors.Wrap(err, "translating records row keys")
 		}
 	}
 	if field.index.options.keys {
 		// attempt to translate column keys
-		err := c.translateRecordsColumnKeys(state.columnKeyIDMap, field.index, columns)
+		if state.columnKeyIDMap == nil {
+			// create the column key cache if it doesn't exist
+			state.columnKeyIDMap, err = lru.NewLRU(options.columnKeyCacheSize)
+			if err != nil {
+				panic(errors.Wrap(err, "while creating columnKey to ID map"))
+			}
+		}
+		err = c.translateRecordsColumnKeys(state.columnKeyIDMap, field.index, columns)
 		if err != nil {
 			return errors.Wrap(err, "translating records column keys")
 		}
@@ -500,7 +515,7 @@ func (c *Client) importColumnsRoaring(field *Field,
 	return c.importRoaringBitmap(uri, field, shard, views, options)
 }
 
-func (c *Client) translateRecordsRowKeys(rowKeyIDMap lru.LRUCache, field *Field, columns []Column) error {
+func (c *Client) translateRecordsRowKeys(rowKeyIDMap *lru.LRU, field *Field, columns []Column) error {
 	uniqueMissingKeys := map[string]struct{}{}
 	for _, col := range columns {
 		if !rowKeyIDMap.Contains(col.RowKey) {
@@ -524,7 +539,7 @@ func (c *Client) translateRecordsRowKeys(rowKeyIDMap lru.LRUCache, field *Field,
 	// replace RowKeys with RowIDs
 	for i, col := range columns {
 		if rowID, ok := rowKeyIDMap.Get(col.RowKey); ok {
-			col.RowID = rowID.(uint64)
+			col.RowID = rowID
 			columns[i] = col
 		} else {
 			return fmt.Errorf("Key '%s' does not exist in the rowKey to ID map", col.RowKey)
@@ -533,7 +548,7 @@ func (c *Client) translateRecordsRowKeys(rowKeyIDMap lru.LRUCache, field *Field,
 	return nil
 }
 
-func (c *Client) translateRecordsColumnKeys(columnKeyIDMap lru.LRUCache, index *Index, columns []Column) error {
+func (c *Client) translateRecordsColumnKeys(columnKeyIDMap *lru.LRU, index *Index, columns []Column) error {
 	uniqueMissingKeys := map[string]struct{}{}
 	for _, col := range columns {
 		if !columnKeyIDMap.Contains(col.ColumnKey) {
@@ -557,7 +572,7 @@ func (c *Client) translateRecordsColumnKeys(columnKeyIDMap lru.LRUCache, index *
 	// replace ColumnKeys with ColumnIDs
 	for i, col := range columns {
 		if columnID, ok := columnKeyIDMap.Get(col.ColumnKey); ok {
-			col.ColumnID = columnID.(uint64)
+			col.ColumnID = columnID
 			columns[i] = col
 		} else {
 			return fmt.Errorf("Key '%s' does not exist in the columnKey to ID map", col.ColumnKey)
@@ -1460,8 +1475,8 @@ func OptQueryExcludeColumns(enable bool) QueryOption {
 }
 
 type importState struct {
-	rowKeyIDMap    lru.LRUCache
-	columnKeyIDMap lru.LRUCache
+	rowKeyIDMap    *lru.LRU
+	columnKeyIDMap *lru.LRU
 }
 
 // ImportOptions are the options for controlling the importer
@@ -1476,7 +1491,7 @@ type ImportOptions struct {
 		nodes []fragmentNode,
 		options *ImportOptions,
 		state *importState) error
-	wantRoaring        bool
+	wantRoaring        *bool
 	hasRoaring         bool
 	clear              bool
 	rowKeyCacheSize    int
@@ -1496,12 +1511,13 @@ func (opt *ImportOptions) withDefaults() (updated ImportOptions) {
 	if updated.batchSize <= 0 {
 		updated.batchSize = 100000
 	}
-	if updated.rowKeyCacheSize < updated.batchSize {
-		updated.rowKeyCacheSize = updated.batchSize
+	// roaring import is default. See: https://github.com/pilosa/go-pilosa/issues/226
+	if updated.wantRoaring == nil {
+		wantRoaring := true
+		updated.wantRoaring = &wantRoaring
 	}
-	if updated.columnKeyCacheSize < updated.batchSize {
-		updated.columnKeyCacheSize = updated.batchSize
-	}
+	updated.rowKeyCacheSize = updated.batchSize
+	updated.columnKeyCacheSize = updated.batchSize
 	return
 }
 
@@ -1544,7 +1560,7 @@ func OptImportClear(clear bool) ImportOption {
 // OptImportRoaring enables importing using roaring bitmaps which is more performant.
 func OptImportRoaring(enable bool) ImportOption {
 	return func(options *ImportOptions) error {
-		options.wantRoaring = enable
+		options.wantRoaring = &enable
 		return nil
 	}
 }

@@ -6,7 +6,6 @@ import (
 	"sort"
 	"time"
 
-	lru "github.com/hashicorp/golang-lru/simplelru"
 	"github.com/pkg/errors"
 )
 
@@ -122,19 +121,7 @@ func recordImportWorker(id int, client *Client, field *Field, chans importWorker
 		errChan <- err
 	}()
 
-	rowKeyIDMap, err := lru.NewLRU(options.rowKeyCacheSize, nil)
-	if err != nil {
-		panic(errors.Wrap(err, "while creating rowKey to ID map"))
-	}
-	columnKeyIDMap, err := lru.NewLRU(options.columnKeyCacheSize, nil)
-	if err != nil {
-		panic(errors.Wrap(err, "while creating columnKey to ID map"))
-	}
-	state := &importState{
-		rowKeyIDMap:    rowKeyIDMap,
-		columnKeyIDMap: columnKeyIDMap,
-	}
-
+	state := &importState{}
 	recordCount := 0
 	batchSize := options.batchSize
 	shardWidth := field.index.shardWidth

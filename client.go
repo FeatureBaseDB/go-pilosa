@@ -1033,17 +1033,17 @@ func (c *Client) ExperimentalReplayImport(r io.Reader, concurrency int) error {
 	eg := &errgroup.Group{}
 	for i := 0; i < concurrency; i++ {
 		eg.Go(func() error {
-			for l := range work {
+			for log := range work {
 				// regular import doesn't forward to replicas, so we have to get all
 				// the nodes.
-				nodes, err := c.fetchFragmentNodes(l.Index, l.Shard)
+				nodes, err := c.fetchFragmentNodes(log.Index, log.Shard)
 				if err != nil {
 					return errors.Wrap(err, "fetching fragment nodes")
 				}
 
-				if !l.IsRoaring {
+				if !log.IsRoaring {
 					for _, node := range nodes {
-						resp, err := c.doRequest(node.URI(), "POST", l.Path, defaultProtobufHeaders(), bytes.NewReader(l.Data))
+						resp, err := c.doRequest(node.URI(), "POST", log.Path, defaultProtobufHeaders(), bytes.NewReader(log.Data))
 						if err = anyError(resp, err); err != nil {
 							return errors.Wrap(err, "doing import")
 						}
@@ -1052,7 +1052,7 @@ func (c *Client) ExperimentalReplayImport(r io.Reader, concurrency int) error {
 				} else {
 					// import-roaring forwards on to all replicas, so we only import to
 					// one node.
-					resp, err := c.doRequest(nodes[0].URI(), "POST", l.Path, defaultProtobufHeaders(), bytes.NewReader(l.Data))
+					resp, err := c.doRequest(nodes[0].URI(), "POST", log.Path, defaultProtobufHeaders(), bytes.NewReader(log.Data))
 					if err = anyError(resp, err); err != nil {
 						return errors.Wrap(err, "doing import")
 					}
@@ -1067,12 +1067,12 @@ func (c *Client) ExperimentalReplayImport(r io.Reader, concurrency int) error {
 	dec := newImportLogDecoder(r)
 	var err error
 	for {
-		l := importLog{}
-		err = dec.Decode(&l)
+		log := importLog{}
+		err = dec.Decode(&log)
 		if err != nil {
 			break
 		}
-		work <- &l
+		work <- &log
 	}
 
 	// close work channel (now workers can exit)

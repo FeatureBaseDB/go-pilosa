@@ -1037,45 +1037,66 @@ func (c *Client) logImport(index, path string, shard uint64, isRoaring bool, dat
 // be of the same size as the original cluster, but it must already have the
 // necessary schema in place. It is an experimental method and may be changed or
 // removed.
-func (c *Client) ExperimentalReplayImport(r io.Reader) error {
+func (c *Client) ExperimentalReplayImport(r io.Reader, concurrency int) error {
 	span := c.tracer.StartSpan("Client.ExperimentalReplayImport")
 	defer span.Finish()
 
-	dec := newImportLogDecoder(r)
-	for {
-		l := &importLog{}
-		err := dec.Decode(l)
-		if err == io.EOF {
-			return nil
-		} else if err != nil {
-			return errors.Wrap(err, "decoding")
-		}
+	// make work channel
+	work := make(chan *importLog, concurrency*2)
 
-		// regular import doesn't forward to replicas, so we have to get all
-		// the nodes.
-		nodes, err := c.fetchFragmentNodes(l.Index, l.Shard)
-		if err != nil {
-			return errors.Wrap(err, "fetching fragment nodes")
-		}
-
-		if !l.IsRoaring {
-			for _, node := range nodes {
-				resp, err := c.doRequest(node.URI(), "POST", l.Path, defaultProtobufHeaders(), bytes.NewReader(l.Data))
-				if err = anyError(resp, err); err != nil {
-					return errors.Wrap(err, "doing import")
+	// spawn <concurrency> workers to read from channel
+	eg := &errgroup.Group{}
+	for i := 0; i < concurrency; i++ {
+		eg.Go(func() error {
+			for l := range work {
+				// regular import doesn't forward to replicas, so we have to get all
+				// the nodes.
+				nodes, err := c.fetchFragmentNodes(l.Index, l.Shard)
+				if err != nil {
+					return errors.Wrap(err, "fetching fragment nodes")
 				}
-				resp.Body.Close()
+
+				if !l.IsRoaring {
+					for _, node := range nodes {
+						resp, err := c.doRequest(node.URI(), "POST", l.Path, defaultProtobufHeaders(), bytes.NewReader(l.Data))
+						if err = anyError(resp, err); err != nil {
+							return errors.Wrap(err, "doing import")
+						}
+						resp.Body.Close()
+					}
+				} else {
+					// import-roaring forwards on to all replicas, so we only import to
+					// one node.
+					resp, err := c.doRequest(nodes[0].URI(), "POST", l.Path, defaultProtobufHeaders(), bytes.NewReader(l.Data))
+					if err = anyError(resp, err); err != nil {
+						return errors.Wrap(err, "doing import")
+					}
+					resp.Body.Close()
+				}
 			}
-		} else {
-			// import-roaring forwards on to all replicas, so we only import to
-			// one node.
-			resp, err := c.doRequest(nodes[0].URI(), "POST", l.Path, defaultProtobufHeaders(), bytes.NewReader(l.Data))
-			if err = anyError(resp, err); err != nil {
-				return errors.Wrap(err, "doing import")
-			}
-			resp.Body.Close()
-		}
+			return nil
+		})
 	}
+
+	// populate work channel
+	dec := newImportLogDecoder(r)
+	var err error
+	for {
+		l := importLog{}
+		err = dec.Decode(&l)
+		if err != nil {
+			break
+		}
+		work <- &l
+	}
+
+	// close work channel (now workers can exit)
+	close(work)
+	waitErr := eg.Wait()
+	if err != io.EOF {
+		return errors.Wrap(err, "decoding")
+	}
+	return errors.Wrap(waitErr, "waiting")
 }
 
 func defaultProtobufHeaders() map[string]string {

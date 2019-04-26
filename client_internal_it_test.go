@@ -100,7 +100,7 @@ func TestImportWithReplay(t *testing.T) {
 		t.Fatalf("should have a log encoder")
 	}
 
-	err = client.ExperimentalReplayImport(buf)
+	err = client.ExperimentalReplayImport(buf, 2)
 	if err != nil {
 		t.Fatalf("replaying import: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestImportWithReplay(t *testing.T) {
 			t.Fatal(err)
 		}
 		if !reflect.DeepEqual(colIDs, resp.Result().Row().Columns) {
-			t.Fatalf("%v != %v", colIDs, resp.Result().Row().Columns)
+			t.Fatalf("row: %v: %v != %v", rowID, colIDs, resp.Result().Row().Columns)
 		}
 	}
 }

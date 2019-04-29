@@ -8,8 +8,10 @@ import (
 	"io/ioutil"
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 	"testing/iotest"
+	"time"
 )
 
 func TestNewClientFromAddresses(t *testing.T) {
@@ -113,5 +115,59 @@ func TestImportWithReplay(t *testing.T) {
 		if !reflect.DeepEqual(colIDs, resp.Result().Row().Columns) {
 			t.Fatalf("row: %v: %v != %v", rowID, colIDs, resp.Result().Row().Columns)
 		}
+	}
+}
+
+func TestImportWithReplayErrors(t *testing.T) {
+	buf := &bytes.Buffer{}
+	client := getClient(ExperimentalOptClientLogImports(buf))
+
+	// the first iterator for creating the target
+	iterator := &ColumnGenerator{numRows: 10, numColumns: 1000}
+	target := map[uint64][]uint64{}
+	for {
+		rec, err := iterator.NextRecord()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if col, ok := rec.(Column); ok {
+			target[col.RowID] = append(target[col.RowID], col.ColumnID)
+		}
+	}
+	// the second iterator for the actual import
+	iterator = &ColumnGenerator{numRows: 10, numColumns: 1000}
+	field := index.Field("importfield-batchsize")
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	statusChan := make(chan ImportStatusUpdate, 1000)
+	err = client.ImportField(field, iterator, OptImportStatusChannel(statusChan), OptImportThreadCount(2), OptImportBatchSize(100))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// delete index, but don't recreate
+	Reset()
+
+	result := make(chan error)
+	go func() {
+		result <- client.ExperimentalReplayImport(buf, 2)
+	}()
+
+	select {
+	case err := <-result:
+		if err == nil {
+			t.Fatalf("import shouldn't have worked")
+		}
+		if !strings.Contains(err.Error(), "waiting: ") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	case <-time.After(time.Second * 5):
+		t.Fatal("import replay hanging when no schema created")
 	}
 }

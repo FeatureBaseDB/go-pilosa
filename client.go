@@ -82,6 +82,10 @@ type Client struct {
 	manualFragmentNode *fragmentNode
 	manualServerURI    *URI
 	tracer             opentracing.Tracer
+	// Number of retries if an HTTP request fails
+	retrials          int
+	minRetrySleepTime time.Duration
+	maxRetrySleepTime time.Duration
 
 	importLogEncoder encoder
 	logLock          sync.Mutex
@@ -143,6 +147,9 @@ func newClientWithOptions(options *ClientOptions) *Client {
 	} else {
 		c.tracer = options.tracer
 	}
+	c.retrials = 0
+	c.minRetrySleepTime = 1 * time.Second
+	c.maxRetrySleepTime = 2 * time.Minute
 	c.importManager = newRecordImportManager(c)
 	return c
 
@@ -591,7 +598,10 @@ func (c *Client) hasRoaringImportSupport(field *Field) bool {
 	}
 	// Check whether the roaring import endpoint exists
 	path := makeRoaringImportPath(field, 0, url.Values{})
-	resp, _, _ := c.httpRequest("GET", path, nil, nil, false)
+	resp, _, err := c.httpRequest("GET", path, nil, nil, false)
+	if err != nil {
+		return false
+	}
 	if resp.StatusCode == http.StatusMethodNotAllowed || resp.StatusCode == http.StatusOK {
 		// Roaring import endpoint exists
 		return true
@@ -680,7 +690,7 @@ func (c *Client) fetchCoordinatorNode() (fragmentNode, error) {
 }
 
 func (c *Client) importData(uri *URI, path string, data []byte) error {
-	resp, err := c.doRequest(uri, "POST", path, defaultProtobufHeaders(), bytes.NewReader(data))
+	resp, err := c.doRequest(uri, "POST", path, defaultProtobufHeaders(), data)
 	if err = anyError(resp, err); err != nil {
 		return errors.Wrap(err, "doing import")
 	}
@@ -716,7 +726,7 @@ func (c *Client) importRoaringBitmap(uri *URI, field *Field, shard uint64, views
 
 	c.logImport(field.index.Name(), path, shard, true, data)
 
-	resp, err := c.doRequest(uri, "POST", path, defaultProtobufHeaders(), bytes.NewReader(data))
+	resp, err := c.doRequest(uri, "POST", path, defaultProtobufHeaders(), data)
 	if err = anyError(resp, err); err != nil {
 		return errors.Wrap(err, "doing import")
 	}
@@ -835,7 +845,7 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 		if err != nil {
 			return nil, nil, err
 		}
-		response, err = c.doRequest(host, method, path, c.augmentHeaders(headers), bytes.NewReader(data))
+		response, err = c.doRequest(host, method, path, c.augmentHeaders(headers), data)
 		if err == nil {
 			break
 		}
@@ -925,12 +935,40 @@ func anyError(resp *http.Response, err error) error {
 }
 
 // doRequest creates and performs an http request.
-func (c *Client) doRequest(host *URI, method, path string, headers map[string]string, reader io.Reader) (*http.Response, error) {
-	req, err := makeRequest(host, method, path, headers, reader)
-	if err != nil {
-		return nil, errors.Wrap(err, "building request")
+func (c *Client) doRequest(host *URI, method, path string, headers map[string]string, data []byte) (*http.Response, error) {
+	var resp *http.Response
+	var err error
+	var req *http.Request
+	retrial := 1 + c.retrials
+	sleepTime := c.minRetrySleepTime
+	for retrial > 0 {
+		req, err = makeRequest(host, method, path, headers, data)
+		if err != nil {
+			return nil, errors.Wrap(err, "building request")
+		}
+		retrial -= 1
+		resp, err = c.client.Do(req)
+		if err == nil {
+			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				return resp, nil
+			}
+			if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+				return resp, nil
+			}
+			c.logger.Printf("request failed with: %d, retrying (%d)", resp.StatusCode, retrial)
+		} else {
+			c.logger.Printf("request failed with: %s, retrying (%d)", err.Error(), retrial)
+		}
+		time.Sleep(sleepTime)
+		sleepTime *= 2
+		if sleepTime > c.maxRetrySleepTime {
+			sleepTime = c.maxRetrySleepTime
+		}
 	}
-	return c.client.Do(req)
+	if err != nil {
+		return nil, errors.Wrap(err, "max retrials exceeded")
+	}
+	return nil, errors.New("max retrials exceeded")
 }
 
 // statusToNodeShardsForIndex finds the hosts which contains shards for the given index
@@ -1058,7 +1096,7 @@ func (c *Client) ExperimentalReplayImport(r io.Reader, concurrency int) error {
 
 				if !log.IsRoaring {
 					for _, node := range nodes {
-						resp, err := c.doRequest(node.URI(), "POST", log.Path, defaultProtobufHeaders(), bytes.NewReader(log.Data))
+						resp, err := c.doRequest(node.URI(), "POST", log.Path, defaultProtobufHeaders(), log.Data)
 						if err = anyError(resp, err); err != nil {
 							return errors.Wrap(err, "doing import")
 						}
@@ -1067,7 +1105,7 @@ func (c *Client) ExperimentalReplayImport(r io.Reader, concurrency int) error {
 				} else {
 					// import-roaring forwards on to all replicas, so we only import to
 					// one node.
-					resp, err := c.doRequest(nodes[0].URI(), "POST", log.Path, defaultProtobufHeaders(), bytes.NewReader(log.Data))
+					resp, err := c.doRequest(nodes[0].URI(), "POST", log.Path, defaultProtobufHeaders(), log.Data)
 					if err = anyError(resp, err); err != nil {
 						return errors.Wrap(err, "doing import")
 					}
@@ -1107,8 +1145,8 @@ func defaultProtobufHeaders() map[string]string {
 	}
 }
 
-func makeRequest(host *URI, method, path string, headers map[string]string, reader io.Reader) (*http.Request, error) {
-	request, err := http.NewRequest(method, host.Normalize()+path, reader)
+func makeRequest(host *URI, method, path string, headers map[string]string, data []byte) (*http.Request, error) {
+	request, err := http.NewRequest(method, host.Normalize()+path, bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
@@ -1312,6 +1350,7 @@ type ClientOptions struct {
 	TLSConfig           *tls.Config
 	manualServerAddress bool
 	tracer              opentracing.Tracer
+	retrials            int
 
 	importLogWriter io.Writer
 }
@@ -1392,6 +1431,17 @@ func ExperimentalOptClientLogImports(loc io.Writer) ClientOption {
 func OptClientTracer(tracer opentracing.Tracer) ClientOption {
 	return func(options *ClientOptions) error {
 		options.tracer = tracer
+		return nil
+	}
+}
+
+// OptClientRetrials sets the number of retries on HTTP request failures.
+func OptClientRetrials(retrials int) ClientOption {
+	return func(options *ClientOptions) error {
+		if retrials < 0 {
+			return errors.New("retrials must be non-negative")
+		}
+		options.retrials = retrials
 		return nil
 	}
 }

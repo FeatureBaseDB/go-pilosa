@@ -952,7 +952,9 @@ func (c *Client) doRequest(host *URI, method, path string, headers map[string]st
 			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 				return resp, nil
 			}
-			if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+			// Pilosa nodes sometimes return 400, we retry in that case.
+			// No need to retry in other 4xx cases.
+			if resp.StatusCode > 400 && resp.StatusCode < 500 {
 				return resp, nil
 			}
 			c.logger.Printf("request failed with: %d, retrying (%d)", resp.StatusCode, tries)

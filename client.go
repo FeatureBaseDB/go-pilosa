@@ -147,7 +147,7 @@ func newClientWithOptions(options *ClientOptions) *Client {
 	} else {
 		c.tracer = options.tracer
 	}
-	c.retries = 0
+	c.retries = options.retries
 	c.minRetrySleepTime = 1 * time.Second
 	c.maxRetrySleepTime = 2 * time.Minute
 	c.importManager = newRecordImportManager(c)

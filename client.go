@@ -83,7 +83,7 @@ type Client struct {
 	manualServerURI    *URI
 	tracer             opentracing.Tracer
 	// Number of retries if an HTTP request fails
-	retrials          int
+	retries           int
 	minRetrySleepTime time.Duration
 	maxRetrySleepTime time.Duration
 
@@ -147,7 +147,7 @@ func newClientWithOptions(options *ClientOptions) *Client {
 	} else {
 		c.tracer = options.tracer
 	}
-	c.retrials = 0
+	c.retries = 0
 	c.minRetrySleepTime = 1 * time.Second
 	c.maxRetrySleepTime = 2 * time.Minute
 	c.importManager = newRecordImportManager(c)
@@ -939,14 +939,14 @@ func (c *Client) doRequest(host *URI, method, path string, headers map[string]st
 	var resp *http.Response
 	var err error
 	var req *http.Request
-	retrial := 1 + c.retrials
+	tries := 1 + c.retries
 	sleepTime := c.minRetrySleepTime
-	for retrial > 0 {
+	for tries > 0 {
 		req, err = makeRequest(host, method, path, headers, data)
 		if err != nil {
 			return nil, errors.Wrap(err, "building request")
 		}
-		retrial -= 1
+		tries--
 		resp, err = c.client.Do(req)
 		if err == nil {
 			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
@@ -955,9 +955,9 @@ func (c *Client) doRequest(host *URI, method, path string, headers map[string]st
 			if resp.StatusCode >= 400 && resp.StatusCode < 500 {
 				return resp, nil
 			}
-			c.logger.Printf("request failed with: %d, retrying (%d)", resp.StatusCode, retrial)
+			c.logger.Printf("request failed with: %d, retrying (%d)", resp.StatusCode, tries)
 		} else {
-			c.logger.Printf("request failed with: %s, retrying (%d)", err.Error(), retrial)
+			c.logger.Printf("request failed with: %s, retrying (%d)", err.Error(), tries)
 		}
 		time.Sleep(sleepTime)
 		sleepTime *= 2
@@ -1350,7 +1350,7 @@ type ClientOptions struct {
 	TLSConfig           *tls.Config
 	manualServerAddress bool
 	tracer              opentracing.Tracer
-	retrials            int
+	retries             int
 
 	importLogWriter io.Writer
 }
@@ -1435,13 +1435,13 @@ func OptClientTracer(tracer opentracing.Tracer) ClientOption {
 	}
 }
 
-// OptClientRetrials sets the number of retries on HTTP request failures.
-func OptClientRetrials(retrials int) ClientOption {
+// OptClientRetries sets the number of retries on HTTP request failures.
+func OptClientRetries(retries int) ClientOption {
 	return func(options *ClientOptions) error {
-		if retrials < 0 {
-			return errors.New("retrials must be non-negative")
+		if retries < 0 {
+			return errors.New("retries must be non-negative")
 		}
-		options.retrials = retrials
+		options.retries = retries
 		return nil
 	}
 }

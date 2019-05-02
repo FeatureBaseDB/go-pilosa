@@ -598,8 +598,9 @@ func (c *Client) hasRoaringImportSupport(field *Field) bool {
 	}
 	// Check whether the roaring import endpoint exists
 	path := makeRoaringImportPath(field, 0, url.Values{})
-	resp, _, err := c.httpRequest("GET", path, nil, nil, false)
-	if err != nil {
+	// err may contain an HTTP error, but we don't use it.
+	resp, _, _ := c.httpRequest("GET", path, nil, nil, false)
+	if resp == nil {
 		return false
 	}
 	if resp.StatusCode == http.StatusMethodNotAllowed || resp.StatusCode == http.StatusOK {
@@ -968,9 +969,9 @@ func (c *Client) doRequest(host *URI, method, path string, headers map[string]st
 		}
 	}
 	if err != nil {
-		return nil, errors.Wrap(err, "max retrials exceeded")
+		return nil, errors.Wrap(err, "max retries exceeded")
 	}
-	return nil, errors.New("max retrials exceeded")
+	return nil, errors.New("max retries exceeded")
 }
 
 // statusToNodeShardsForIndex finds the hosts which contains shards for the given index

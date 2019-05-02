@@ -147,7 +147,7 @@ func newClientWithOptions(options *ClientOptions) *Client {
 	} else {
 		c.tracer = options.tracer
 	}
-	c.retries = options.retries
+	c.retries = *options.retries
 	c.minRetrySleepTime = 1 * time.Second
 	c.maxRetrySleepTime = 2 * time.Minute
 	c.importManager = newRecordImportManager(c)
@@ -1352,7 +1352,7 @@ type ClientOptions struct {
 	TLSConfig           *tls.Config
 	manualServerAddress bool
 	tracer              opentracing.Tracer
-	retries             int
+	retries             *int
 
 	importLogWriter io.Writer
 }
@@ -1443,7 +1443,7 @@ func OptClientRetries(retries int) ClientOption {
 		if retries < 0 {
 			return errors.New("retries must be non-negative")
 		}
-		options.retries = retries
+		options.retries = &retries
 		return nil
 	}
 }
@@ -1471,6 +1471,10 @@ func (co *ClientOptions) withDefaults() (updated *ClientOptions) {
 	}
 	if updated.TLSConfig == nil {
 		updated.TLSConfig = &tls.Config{}
+	}
+	if updated.retries == nil {
+		retries := 2
+		updated.retries = &retries
 	}
 	return
 }

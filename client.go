@@ -940,6 +940,8 @@ func (c *Client) doRequest(host *URI, method, path string, headers map[string]st
 	var resp *http.Response
 	var err error
 	var req *http.Request
+	var content []byte
+
 	tries := 1 + c.retries
 	sleepTime := c.minRetrySleepTime
 	for tries > 0 {
@@ -958,20 +960,21 @@ func (c *Client) doRequest(host *URI, method, path string, headers map[string]st
 			if resp.StatusCode > 400 && resp.StatusCode < 500 {
 				return resp, nil
 			}
-			c.logger.Printf("request failed with: %d, retrying (%d)", resp.StatusCode, tries)
-		} else {
-			c.logger.Printf("request failed with: %s, retrying (%d)", err.Error(), tries)
+			content, err = ioutil.ReadAll(resp.Body)
+			resp.Body.Close()
+			if err != nil {
+				return nil, err
+			}
+			err = errors.New(strings.TrimSpace(string(content)))
 		}
+		c.logger.Printf("request failed with: %s, retrying (%d)", err.Error(), tries)
 		time.Sleep(sleepTime)
 		sleepTime *= 2
 		if sleepTime > c.maxRetrySleepTime {
 			sleepTime = c.maxRetrySleepTime
 		}
 	}
-	if err != nil {
-		return nil, errors.Wrap(err, "max retries exceeded")
-	}
-	return nil, errors.New("max retries exceeded")
+	return nil, errors.Wrap(err, "max retries exceeded")
 }
 
 // statusToNodeShardsForIndex finds the hosts which contains shards for the given index

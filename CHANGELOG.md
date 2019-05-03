@@ -1,5 +1,8 @@
 # Change Log
 
+* **next**
+    * The client retries failed HTTP requests, by default 2 times. Use `OptClientRetries` to set the number of retries.
+
 * **v1.3.0** (2019-04-19)
     * **Compatible with Pilosa 1.2 and 1.3**
     * Deprecated `QueryResponse.Columns` function. Use `QueryResponse.ColumnAttrs` function instead.

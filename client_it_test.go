@@ -541,7 +541,7 @@ func TestIndexAlreadyExists(t *testing.T) {
 }
 
 func TestQueryWithEmptyClusterFails(t *testing.T) {
-	client, _ := NewClient(DefaultCluster())
+	client, _ := NewClient(DefaultCluster(), OptClientRetries(0))
 	attrs := map[string]interface{}{"a": 1}
 	_, err := client.Query(index.SetColumnAttrs(0, attrs))
 	if err != ErrEmptyCluster {
@@ -552,7 +552,7 @@ func TestQueryWithEmptyClusterFails(t *testing.T) {
 func TestFailoverFail(t *testing.T) {
 	uri, _ := NewURIFromAddress("does-not-resolve.foo.bar")
 	cluster := NewClusterWithHost(uri, uri, uri, uri)
-	client, _ := NewClient(cluster)
+	client, _ := NewClient(cluster, OptClientRetries(0))
 	attrs := map[string]interface{}{"a": 1}
 	_, err := client.Query(index.SetColumnAttrs(0, attrs))
 	if err != ErrTriedMaxHosts {
@@ -564,7 +564,7 @@ func TestCoordinatorFailoverFail(t *testing.T) {
 	content := `{"state":"NORMAL","nodes":[{"id":"827c7196-8875-4467-bee2-3604a4346f2b","uri":{"scheme":"http","host":"nonexistent","port":15000},"isCoordinator":true}],"localID":"827c7196-8875-4467-bee2-3604a4346f2b"}`
 	server := getMockServer(200, []byte(content), -1)
 	defer server.Close()
-	client, _ := NewClient(server.URL)
+	client, _ := NewClient(server.URL, OptClientRetries(0))
 	_, err := client.Query(keysIndex.SetColumnAttrs("foo", map[string]interface{}{"foo": "bar"}))
 	if err != ErrTriedMaxHosts {
 		t.Fatalf("ErrTriedMaxHosts error should be returned")
@@ -573,7 +573,7 @@ func TestCoordinatorFailoverFail(t *testing.T) {
 
 func TestQueryFailsIfAddressNotResolved(t *testing.T) {
 	uri, _ := NewURIFromAddress("nonexisting.domain.pilosa.com:3456")
-	client, _ := NewClient(uri)
+	client, _ := NewClient(uri, OptClientRetries(0))
 	_, err := client.Query(index.RawQuery("bar"))
 	if err == nil {
 		t.Fatal()
@@ -603,7 +603,7 @@ func TestErrorResponseNotRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client, _ := NewClient(uri)
+	client, _ := NewClient(uri, OptClientRetries(0))
 	response, err := client.Query(testField.Row(1))
 	if err == nil {
 		t.Fatalf("Got response: %v", response)
@@ -617,7 +617,7 @@ func TestResponseNotRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client, _ := NewClient(uri)
+	client, _ := NewClient(uri, OptClientRetries(0))
 	response, err := client.Query(testField.Row(1))
 	if err == nil {
 		t.Fatalf("Got response: %v", response)
@@ -708,7 +708,7 @@ func TestSyncFailure(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	client, _ := NewClient(uri)
+	client, _ := NewClient(uri, OptClientRetries(0))
 	err = client.SyncSchema(NewSchema())
 	if err == nil {
 		t.Fatal("should have failed")
@@ -722,7 +722,7 @@ func TestErrorRetrievingSchema(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	client, _ := NewClient(uri)
+	client, _ := NewClient(uri, OptClientRetries(0))
 	_, err = client.Schema()
 	if err == nil {
 		t.Fatal("should have failed")
@@ -885,7 +885,7 @@ func TestExportReaderFailure(t *testing.T) {
 	shardURIs := map[uint64]*URI{
 		0: uri,
 	}
-	client, _ := NewClient(uri)
+	client, _ := NewClient(uri, OptClientRetries(0))
 	reader := newExportReader(client, shardURIs, field)
 	buf := make([]byte, 1000)
 	_, err = reader.Read(buf)
@@ -903,7 +903,7 @@ func TestExportReaderReadBodyFailure(t *testing.T) {
 	}
 	field := index.Field("exportfield")
 	shardURIs := map[uint64]*URI{0: uri}
-	client, _ := NewClient(uri)
+	client, _ := NewClient(uri, OptClientRetries(0))
 	reader := newExportReader(client, shardURIs, field)
 	buf := make([]byte, 1000)
 	_, err = reader.Read(buf)
@@ -1197,7 +1197,7 @@ func TestMultipleClientKeyQuery(t *testing.T) {
 func TestImportFailsOnImportColumnsError(t *testing.T) {
 	server := getMockServer(500, []byte{}, 0)
 	defer server.Close()
-	client, _ := NewClient(server.URL)
+	client, _ := NewClient(server.URL, OptClientRetries(0))
 	index := NewIndex("foo")
 	field := index.Field("bar")
 	nodes := fragmentNodesFromURL(server.URL)
@@ -1210,7 +1210,7 @@ func TestImportFailsOnImportColumnsError(t *testing.T) {
 func TestValueImportFailsOnImportValueError(t *testing.T) {
 	server := getMockServer(500, []byte{}, 0)
 	defer server.Close()
-	client, _ := NewClient(server.URL)
+	client, _ := NewClient(server.URL, OptClientRetries(0))
 	index := NewIndex("foo")
 	field := index.Field("bar")
 	nodes := fragmentNodesFromURL(server.URL)
@@ -1224,7 +1224,7 @@ func TestImportColumnsFailInvalidNodeAddress(t *testing.T) {
 	data := []byte(`[{"host":"10101:","internalHost":"doesn'tmatter"}]`)
 	server := getMockServer(200, data, len(data))
 	defer server.Close()
-	client, _ := NewClient(server.URL)
+	client, _ := NewClient(server.URL, OptClientRetries(0))
 	index := NewIndex("foo")
 	field := index.Field("bar")
 	nodes := fragmentNodesFromURL("zzz://doesntmatter:10101")
@@ -1238,7 +1238,7 @@ func TestImportValuesFailInvalidNodeAddress(t *testing.T) {
 	data := []byte(`[{"host":"10101:","internalHost":"doesn'tmatter"}]`)
 	server := getMockServer(200, data, len(data))
 	defer server.Close()
-	client, _ := NewClient(server.URL)
+	client, _ := NewClient(server.URL, OptClientRetries(0))
 	index := NewIndex("foo")
 	field := index.Field("bar")
 	nodes := fragmentNodesFromURL("zzz://doesntmatter:10101")
@@ -1251,7 +1251,7 @@ func TestImportValuesFailInvalidNodeAddress(t *testing.T) {
 func TestDecodingFragmentNodesFails(t *testing.T) {
 	server := getMockServer(200, []byte("notjson"), 7)
 	defer server.Close()
-	client, _ := NewClient(server.URL)
+	client, _ := NewClient(server.URL, OptClientRetries(0))
 	_, err := client.fetchFragmentNodes("foo", 0)
 	if err == nil {
 		t.Fatalf("fetchFragmentNodes should fail when response from /fragment/nodes cannot be decoded")
@@ -1262,7 +1262,7 @@ func TestImportNodeFails(t *testing.T) {
 	server := getMockServer(500, []byte{}, 0)
 	defer server.Close()
 	uri, _ := NewURIFromAddress(server.URL)
-	client, _ := NewClient(uri)
+	client, _ := NewClient(uri, OptClientRetries(0))
 	importRequest := &pbuf.ImportRequest{
 		ColumnIDs:  []uint64{},
 		RowIDs:     []uint64{},
@@ -1294,7 +1294,7 @@ func TestImportPathDataProtobufMarshalFails(t *testing.T) {
 func TestQueryUnmarshalFails(t *testing.T) {
 	server := getMockServer(200, []byte(`{}`), -1)
 	defer server.Close()
-	client, _ := NewClient(server.URL)
+	client, _ := NewClient(server.URL, OptClientRetries(0))
 	field := NewSchema().Index("foo").Field("bar")
 	_, err := client.Query(field.Row(1))
 	if err == nil {
@@ -1324,7 +1324,7 @@ func TestResponseWithInvalidType(t *testing.T) {
 	}
 	server := getMockServer(200, data, -1)
 	defer server.Close()
-	client, _ := NewClient(server.URL)
+	client, _ := NewClient(server.URL, OptClientRetries(0))
 	_, err = client.Query(testField.Row(1))
 	if err == nil {
 		t.Fatalf("Should have failed")
@@ -1334,7 +1334,7 @@ func TestResponseWithInvalidType(t *testing.T) {
 func TestStatusFails(t *testing.T) {
 	server := getMockServer(404, nil, 0)
 	defer server.Close()
-	client, _ := NewClient(server.URL)
+	client, _ := NewClient(server.URL, OptClientRetries(0))
 	_, err := client.Status()
 	if err == nil {
 		t.Fatalf("Should have failed")
@@ -1344,7 +1344,7 @@ func TestStatusFails(t *testing.T) {
 func TestStatusUnmarshalFails(t *testing.T) {
 	server := getMockServer(200, []byte("foo"), 3)
 	defer server.Close()
-	client, _ := NewClient(server.URL)
+	client, _ := NewClient(server.URL, OptClientRetries(0))
 	_, err := client.Status()
 	if err == nil {
 		t.Fatalf("Should have failed")
@@ -1390,7 +1390,7 @@ func TestHttpRequest(t *testing.T) {
 func TestSyncSchemaCantCreateIndex(t *testing.T) {
 	server := getMockServer(404, nil, 0)
 	defer server.Close()
-	client, _ := NewClient(server.URL)
+	client, _ := NewClient(server.URL, OptClientRetries(0))
 	schema = NewSchema()
 	schema.Index("foo")
 	err := client.syncSchema(schema, NewSchema())
@@ -1402,7 +1402,7 @@ func TestSyncSchemaCantCreateIndex(t *testing.T) {
 func TestSyncSchemaCantCreateField(t *testing.T) {
 	server := getMockServer(404, nil, 0)
 	defer server.Close()
-	client, _ := NewClient(server.URL)
+	client, _ := NewClient(server.URL, OptClientRetries(0))
 	schema = NewSchema()
 	index := schema.Index("foo")
 	index.Field("foofield")
@@ -1429,7 +1429,7 @@ func TestExportFieldFailure(t *testing.T) {
 	}
 	server := getMockPathServer(paths)
 	defer server.Close()
-	client, _ := NewClient(server.URL)
+	client, _ := NewClient(server.URL, OptClientRetries(0))
 	_, err := client.ExportField(testField)
 	if err == nil {
 		t.Fatal("should have failed")
@@ -1453,7 +1453,7 @@ func TestExportFieldFailure(t *testing.T) {
 func TestShardsMaxDecodeFailure(t *testing.T) {
 	server := getMockServer(200, []byte(`{`), 0)
 	defer server.Close()
-	client, _ := NewClient(server.URL)
+	client, _ := NewClient(server.URL, OptClientRetries(0))
 	_, err := client.shardsMax()
 	if err == nil {
 		t.Fatal("should have failed")
@@ -1463,7 +1463,7 @@ func TestShardsMaxDecodeFailure(t *testing.T) {
 func TestReadSchemaDecodeFailure(t *testing.T) {
 	server := getMockServer(200, []byte(`{`), 0)
 	defer server.Close()
-	client, _ := NewClient(server.URL)
+	client, _ := NewClient(server.URL, OptClientRetries(0))
 	_, err := client.readSchema()
 	if err == nil {
 		t.Fatal("should have failed")
@@ -1473,7 +1473,7 @@ func TestReadSchemaDecodeFailure(t *testing.T) {
 func TestStatusToNodeShardsForIndexFailure(t *testing.T) {
 	server := getMockServer(200, []byte(`[]`), -1)
 	defer server.Close()
-	client, _ := NewClient(server.URL)
+	client, _ := NewClient(server.URL, OptClientRetries(0))
 	// no shard
 	status := Status{
 		indexMaxShard: map[string]uint64{},
@@ -1508,7 +1508,7 @@ func TestUserAgent(t *testing.T) {
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
-	client, _ := NewClient(server.URL)
+	client, _ := NewClient(server.URL, OptClientRetries(0))
 	_, _, err := client.HttpRequest("GET", "/version", nil, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -1520,7 +1520,9 @@ func TestClientRace(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	client, err := NewClient(uri, OptClientTLSConfig(&tls.Config{InsecureSkipVerify: true}))
+	client, err := NewClient(uri,
+		OptClientTLSConfig(&tls.Config{InsecureSkipVerify: true}),
+		OptClientRetries(0))
 	if err != nil {
 		panic(err)
 	}
@@ -1535,7 +1537,7 @@ func TestClientRace(t *testing.T) {
 func TestFetchCoordinatorFails(t *testing.T) {
 	server := getMockServer(404, []byte(`[]`), -1)
 	defer server.Close()
-	client, _ := NewClient(server.URL)
+	client, _ := NewClient(server.URL, OptClientRetries(0))
 	_, err := client.fetchCoordinatorNode()
 	if err == nil {
 		t.Fatal("should have failed")
@@ -1545,7 +1547,7 @@ func TestFetchCoordinatorFails(t *testing.T) {
 func TestFetchCoordinatorCoordinatorNotFound(t *testing.T) {
 	server := getMockServer(200, []byte(`{"state":"NORMAL","nodes":[{"id":"0f5c2ffc-1244-47d0-a83d-f5a25abba9bc","uri":{"scheme":"http","host":"localhost","port":10101}}],"localID":"0f5c2ffc-1244-47d0-a83d-f5a25abba9bc"}`), -1)
 	defer server.Close()
-	client, _ := NewClient(server.URL)
+	client, _ := NewClient(server.URL, OptClientRetries(0))
 	_, err := client.fetchCoordinatorNode()
 	if err == nil {
 		t.Fatal("should have failed")
@@ -1564,7 +1566,7 @@ func TestServerWarning(t *testing.T) {
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
-	client, _ := NewClient(server.URL)
+	client, _ := NewClient(server.URL, OptClientRetries(0))
 	_, err := client.Query(testField.Row(1))
 	if err != nil {
 		t.Fatal(err)
@@ -1880,7 +1882,7 @@ func TestRowIDColumnIDTimestampImportRoaringNoStandardView(t *testing.T) {
 func TestRowIDColumnIDImportFails(t *testing.T) {
 	server := getMockServer(200, []byte(`{}`), -1)
 	defer server.Close()
-	client, _ := NewClient(server.URL)
+	client, _ := NewClient(server.URL, OptClientRetries(0))
 	iterator := NewArrayRecordIterator([]Record{
 		Column{RowID: 10, ColumnID: 7},
 		Column{RowID: 10, ColumnID: 5},
@@ -1912,7 +1914,7 @@ func TestRowIDColumnIDImportFailsRoaring(t *testing.T) {
 	}
 	server := getMockPathServer(paths)
 	defer server.Close()
-	client, _ := NewClient(server.URL)
+	client, _ := NewClient(server.URL, OptClientRetries(0))
 	iterator := NewArrayRecordIterator([]Record{
 		Column{RowID: 10, ColumnID: 7},
 		Column{RowID: 10, ColumnID: 5},
@@ -2012,7 +2014,7 @@ func TestCSVRowIDColumnKeyImportManualAddress(t *testing.T) {
 func TestRowIDColumnKeyImportFails(t *testing.T) {
 	server := getMockServer(200, []byte(`{}`), -1)
 	defer server.Close()
-	client, _ := NewClient(server.URL)
+	client, _ := NewClient(server.URL, OptClientRetries(0))
 	iterator := NewArrayRecordIterator([]Record{
 		Column{RowID: 10, ColumnKey: "five"},
 		Column{RowID: 2, ColumnKey: "three"},
@@ -2380,7 +2382,7 @@ func TestTranslateColKeys(t *testing.T) {
 func TestCSVExportFailure(t *testing.T) {
 	server := getMockServer(404, []byte("sorry, not found"), -1)
 	defer server.Close()
-	client, _ := NewClient(server.URL)
+	client, _ := NewClient(server.URL, OptClientRetries(0))
 	field := index.Field("exportfield")
 	_, err := client.ExportField(field)
 	if err == nil {
@@ -2487,7 +2489,10 @@ func getClient(options ...ClientOption) *Client {
 	if err != nil {
 		panic(err)
 	}
-	options = append([]ClientOption{OptClientTLSConfig(&tls.Config{InsecureSkipVerify: true})}, options...)
+	options = append([]ClientOption{
+		OptClientTLSConfig(&tls.Config{InsecureSkipVerify: true}),
+		OptClientRetries(0),
+	}, options...)
 	client, err = NewClient(uri, options...)
 	if err != nil {
 		panic(err)
@@ -2505,6 +2510,7 @@ func getClientManualAddress() *Client {
 	client, err = NewClient(uri,
 		OptClientTLSConfig(&tls.Config{InsecureSkipVerify: true}),
 		OptClientManualServerAddress(true),
+		OptClientRetries(0),
 	)
 	if err != nil {
 		panic(err)

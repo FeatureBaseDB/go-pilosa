@@ -994,7 +994,7 @@ func TestRowRangeQuery(t *testing.T) {
 
 func TestRangeField(t *testing.T) {
 	client := getClient()
-	field := index.Field("rangefield", OptFieldTypeInt(10, 20))
+	field := index.Field("rangefield", OptFieldTypeInt())
 	field2 := index.Field("rangefield-set")
 	err := client.EnsureField(field)
 	if err != nil {
@@ -1004,7 +1004,6 @@ func TestRangeField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	_, err = client.Query(index.BatchQuery(
 		field2.Set(1, 10),
 		field2.Set(1, 100),

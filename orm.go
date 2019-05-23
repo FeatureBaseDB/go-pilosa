@@ -770,9 +770,6 @@ func OptFieldTypeInt(limits ...int64) FieldOption {
 	if len(limits) > 1 {
 		max = limits[1]
 	}
-	if min > max {
-		panic("error: min cannot be greater than max")
-	}
 
 	return func(options *FieldOptions) {
 		options.fieldType = FieldTypeInt

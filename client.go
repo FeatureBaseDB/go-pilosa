@@ -405,7 +405,7 @@ func (c *Client) ImportField(field *Field, iterator RecordIterator, options ...I
 		} else {
 			// Check whether roaring imports is available
 			if importOptions.wantRoaring != nil && *importOptions.wantRoaring == true {
-				importOptions.hasRoaring = c.hasRoaringImportSupport(field)
+				importOptions.hasRoaring = c.HasRoaringImport(field)
 			}
 			importRecordsFunction(c.importColumns)(&importOptions)
 		}
@@ -588,12 +588,8 @@ func (c *Client) translateRecordsColumnKeys(columnKeyIDMap *lru.LRU, index *Inde
 	return nil
 }
 
-func (c *Client) hasRoaringImportSupport(field *Field) bool {
-	if field.options.fieldType != FieldTypeSet &&
-		field.options.fieldType != FieldTypeDefault &&
-		field.options.fieldType != FieldTypeBool &&
-		field.options.fieldType != FieldTypeTime {
-		// Roaring imports is available for only set, bool and time fields.
+func (c *Client) HasRoaringImport(field *Field) bool {
+	if !field.HasRoaringImport() {
 		return false
 	}
 	// Check whether the roaring import endpoint exists

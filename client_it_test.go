@@ -2425,6 +2425,60 @@ func TestImportColumnsNoNodesError(t *testing.T) {
 	}
 }
 
+func TestHasRoaringImportSupport(t *testing.T) {
+	client := getClient()
+	schema := NewSchema()
+	index1 := schema.Index("index-roaring", OptIndexTrackExistence(false))
+
+	yesRoaringFields := []*Field{}
+	// default field
+	yesRoaringFields = append(yesRoaringFields, index1.Field("default"))
+	// set field
+	yesRoaringFields = append(yesRoaringFields, index1.Field("set", OptFieldTypeSet(CacheTypeDefault, 100)))
+	// bool field
+	yesRoaringFields = append(yesRoaringFields, index1.Field("bool", OptFieldTypeBool()))
+	// time field
+	yesRoaringFields = append(yesRoaringFields, index1.Field("time", OptFieldTypeTime(TimeQuantumYearMonthDayHour)))
+
+	for _, f := range yesRoaringFields {
+		if !client.HasRoaringImport(f) {
+			t.Fatalf("%s should have roaring import support", f.Name())
+		}
+	}
+
+	noRoaringFields := []*Field{}
+	// int field
+	noRoaringFields = append(noRoaringFields, index1.Field("int", OptFieldTypeInt(-100, 100)))
+	// mutex field
+	noRoaringFields = append(noRoaringFields, index1.Field("mutex", OptFieldTypeMutex(CacheTypeDefault, 100)))
+
+	index2 := schema.Index("index-no-roaring")
+	// trackExistence is true by default
+	if index2.Opts().TrackExistence() != true {
+		t.Fatalf("trackExistence should be true by default")
+	}
+
+	// default field
+	noRoaringFields = append(noRoaringFields, index2.Field("default"))
+	// set field
+	noRoaringFields = append(noRoaringFields, index2.Field("set", OptFieldTypeSet(CacheTypeDefault, 100)))
+	// bool field
+	noRoaringFields = append(noRoaringFields, index2.Field("bool", OptFieldTypeBool()))
+	// time field
+	noRoaringFields = append(noRoaringFields, index2.Field("time", OptFieldTypeTime(TimeQuantumYearMonthDayHour)))
+	// int field
+	noRoaringFields = append(noRoaringFields, index2.Field("int", OptFieldTypeInt(-100, 100)))
+	// mutex field
+	noRoaringFields = append(noRoaringFields, index2.Field("mutex", OptFieldTypeMutex(CacheTypeDefault, 100)))
+
+	for _, f := range noRoaringFields {
+		if client.HasRoaringImport(f) {
+			t.Fatalf("%s should not have roaring import support", f.Name())
+		}
+	}
+
+}
+
 func getMockServer(statusCode int, response []byte, contentLength int) *httptest.Server {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-protobuf")

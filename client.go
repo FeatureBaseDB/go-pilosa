@@ -1122,6 +1122,13 @@ func (c *Client) ExperimentalReplayImport(r io.Reader, concurrency int) error {
 		})
 	}
 
+	// wait on importers asynchronously in case they return early with errors
+	waitErrCh := make(chan error)
+	go func() {
+		waitErrCh <- eg.Wait()
+		close(waitErrCh)
+	}()
+
 	// populate work channel
 	dec := newImportLogDecoder(r)
 	var err error
@@ -1129,18 +1136,25 @@ func (c *Client) ExperimentalReplayImport(r io.Reader, concurrency int) error {
 		log := importLog{}
 		err = dec.Decode(&log)
 		if err != nil {
+			err = errors.Wrap(err, "decoding")
 			break
 		}
-		work <- &log
+		select {
+		case work <- &log:
+			continue
+		case err = <-waitErrCh:
+			err = errors.Wrap(err, "waiting")
+		}
+		break
 	}
 
 	// close work channel (now workers can exit)
 	close(work)
-	waitErr := eg.Wait()
-	if err != io.EOF {
-		return errors.Wrap(err, "decoding")
+	<-waitErrCh // make sure workers are complete
+	if errors.Cause(err) == io.EOF {
+		return nil
 	}
-	return errors.Wrap(waitErr, "waiting")
+	return err
 }
 
 func defaultProtobufHeaders() map[string]string {

@@ -886,6 +886,14 @@ func TestIntFieldOptions(t *testing.T) {
 	}
 	compareFieldOptions(t, field.Options(), FieldTypeInt, TimeQuantumNone, CacheTypeDefault, 0, -10, 100)
 
+	field = sampleIndex.Field("int-field2", OptFieldTypeInt(-10))
+	jsonString = field.options.String()
+	targetString = fmt.Sprintf(`{"options":{"type":"int","min":-10,"max":%d}}`, math.MaxInt64)
+	if sortedString(targetString) != sortedString(jsonString) {
+		t.Fatalf("`%s` != `%s`", targetString, jsonString)
+	}
+
+	compareFieldOptions(t, field.Options(), FieldTypeInt, TimeQuantumNone, CacheTypeDefault, 0, -10, math.MaxInt64)
 	field = sampleIndex.Field("int-field3", OptFieldTypeInt())
 	jsonString = field.options.String()
 	targetString = fmt.Sprintf(`{"options":{"type":"int","min":%d,"max":%d}}`, math.MinInt64, math.MaxInt64)

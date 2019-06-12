@@ -35,6 +35,7 @@ package pilosa
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -753,7 +754,23 @@ func OptFieldTypeSet(cacheType CacheType, cacheSize int) FieldOption {
 }
 
 // OptFieldTypeInt adds an integer field.
-func OptFieldTypeInt(min int64, max int64) FieldOption {
+// No arguments: min = min_int, max = max_int
+// 1 argument: min = limit[0], max = max_int
+// 2 or more arguments: min = limit[0], max = limit[1]
+func OptFieldTypeInt(limits ...int64) FieldOption {
+	min := int64(math.MinInt64)
+	max := int64(math.MaxInt64)
+
+	if len(limits) > 2 {
+		panic("error: OptFieldTypInt accepts at most 2 arguments")
+	}
+	if len(limits) > 0 {
+		min = limits[0]
+	}
+	if len(limits) > 1 {
+		max = limits[1]
+	}
+
 	return func(options *FieldOptions) {
 		options.fieldType = FieldTypeInt
 		options.min = min

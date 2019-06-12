@@ -10,6 +10,7 @@ type importLog struct {
 	Path      string
 	Shard     uint64
 	IsRoaring bool
+	Timestamp int64 // Unix Nanoseconds
 	Data      []byte
 }
 

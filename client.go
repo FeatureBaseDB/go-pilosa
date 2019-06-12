@@ -1065,6 +1065,7 @@ func (c *Client) logImport(index, path string, shard uint64, isRoaring bool, dat
 			Path:      path,
 			Shard:     shard,
 			IsRoaring: isRoaring,
+			Timestamp: time.Now().UnixNano(),
 			Data:      data,
 		}
 		// Encode is actually threadsafe (with gob), but the lock above is

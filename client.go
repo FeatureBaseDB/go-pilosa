@@ -737,9 +737,17 @@ func (c *Client) importRoaringBitmap(uri *URI, field *Field, shard uint64, views
 }
 
 // ExportField exports columns for a field.
-func (c *Client) ExportField(field *Field) (io.Reader, error) {
+func (c *Client) ExportField(field *Field, opts ...ExportOption) (io.Reader, error) {
 	span := c.tracer.StartSpan("Client.ExportField")
 	defer span.Finish()
+
+	exportOpts := &exportOptions{}
+	for _, opt := range opts {
+		err := opt(exportOpts)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	var shardsMax map[string]uint64
 	var err error
@@ -758,7 +766,7 @@ func (c *Client) ExportField(field *Field) (io.Reader, error) {
 		return nil, err
 	}
 
-	return newExportReader(c, shardURIs, field), nil
+	return newExportReader(c, shardURIs, field, exportOpts.timestamps), nil
 }
 
 // Info returns the server's configuration/host information.
@@ -1690,6 +1698,21 @@ func importRecordsFunction(fun func(field *Field,
 	}
 }
 
+type exportOptions struct {
+	timestamps bool
+}
+
+// ExportOption is used when running exports.
+type ExportOption func(options *exportOptions) error
+
+// OptExportTimestamps enables exporting timestamps for time fields.
+func OptExportTimestamps(enable bool) ExportOption {
+	return func(options *exportOptions) error {
+		options.timestamps = enable
+		return nil
+	}
+}
+
 type fragmentNodeRoot struct {
 	URI fragmentNode `json:"uri"`
 }
@@ -1811,14 +1834,16 @@ type exportReader struct {
 	bodyIndex    int
 	currentShard uint64
 	shardCount   uint64
+	timestamps   bool
 }
 
-func newExportReader(client *Client, shardURIs map[uint64]*URI, field *Field) *exportReader {
+func newExportReader(client *Client, shardURIs map[uint64]*URI, field *Field, timestamps bool) *exportReader {
 	return &exportReader{
 		client:     client,
 		shardURIs:  shardURIs,
 		field:      field,
 		shardCount: uint64(len(shardURIs)),
+		timestamps: timestamps,
 	}
 }
 
@@ -1833,9 +1858,14 @@ func (r *exportReader) Read(p []byte) (n int, err error) {
 		headers := map[string]string{
 			"Accept": "text/csv",
 		}
-		path := fmt.Sprintf("/export?index=%s&field=%s&shard=%d",
-			r.field.index.Name(), r.field.Name(), r.currentShard)
-		resp, err := r.client.doRequest(uri, "GET", path, headers, nil)
+		u := url.URL{Path: "/export"}
+		u.RawQuery = url.Values{
+			"index":      {r.field.index.Name()},
+			"field":      {r.field.Name()},
+			"shard":      {strconv.FormatUint(r.currentShard, 10)},
+			"timestamps": {strconv.FormatBool(r.timestamps)},
+		}.Encode()
+		resp, err := r.client.doRequest(uri, "GET", u.String(), headers, nil)
 		if err = anyError(resp, err); err != nil {
 			return 0, errors.Wrap(err, "doing export request")
 		}

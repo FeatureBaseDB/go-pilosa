@@ -852,6 +852,85 @@ func TestImportWithBatchSizeExpectingZero(t *testing.T) {
 	}
 }
 
+func TestExportNoTimestamps(t *testing.T) {
+	client := getClient()
+	schema := NewSchema()
+	index := schema.Index("export-index")
+	field := index.Field("f1")
+	err := client.SyncSchema(schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.Query(index.BatchQuery(
+		field.Set(1, 100),
+		field.Set(2, 1000),
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := client.ExportField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := ioutil.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := []byte("1,100\n2,1000\n")
+	if !reflect.DeepEqual(target, b) {
+		t.Fatalf("%v != %v", target, b)
+	}
+}
+
+func TestExportTimestamps(t *testing.T) {
+	client := getClient()
+	schema := NewSchema()
+	index := schema.Index("export-index-timestamps")
+	field := index.Field("f1", OptFieldTypeTime(TimeQuantumYearMonthDayHour))
+	err := client.SyncSchema(schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t1 := time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
+	t2 := time.Date(2019, 2, 2, 0, 0, 0, 0, time.UTC)
+	_, err = client.Query(index.BatchQuery(
+		field.SetTimestamp(1, 100, t1),
+		field.SetTimestamp(2, 1000, t2),
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// without timestamps
+	r, err := client.ExportField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := ioutil.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := []byte("1,100\n2,1000\n")
+	if !reflect.DeepEqual(target, b) {
+		t.Fatalf("%v != %v", target, b)
+	}
+
+	// with timestamps
+	r, err = client.ExportField(field, OptExportTimestamps(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err = ioutil.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target = []byte("1,100,2019-01-01T00:00\n2,1000,2019-02-02T00:00\n")
+	if !reflect.DeepEqual(target, b) {
+		t.Fatalf("%v != %v", target, b)
+	}
+}
+
 func failingImportColumns(field *Field, shard uint64, records []Record, nodes []fragmentNode, options *ImportOptions, state *importState) error {
 	if len(records) > 0 {
 		return errors.New("some error")
@@ -886,7 +965,7 @@ func TestExportReaderFailure(t *testing.T) {
 		0: uri,
 	}
 	client, _ := NewClient(uri, OptClientRetries(0))
-	reader := newExportReader(client, shardURIs, field)
+	reader := newExportReader(client, shardURIs, field, false)
 	buf := make([]byte, 1000)
 	_, err = reader.Read(buf)
 	if err == nil {
@@ -904,7 +983,7 @@ func TestExportReaderReadBodyFailure(t *testing.T) {
 	field := index.Field("exportfield")
 	shardURIs := map[uint64]*URI{0: uri}
 	client, _ := NewClient(uri, OptClientRetries(0))
-	reader := newExportReader(client, shardURIs, field)
+	reader := newExportReader(client, shardURIs, field, false)
 	buf := make([]byte, 1000)
 	_, err = reader.Read(buf)
 	if err == nil {

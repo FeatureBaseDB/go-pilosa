@@ -977,6 +977,10 @@ func (c *Client) doRequest(host *URI, method, path string, headers map[string]st
 	return nil, errors.Wrap(err, "max retries exceeded")
 }
 
+func (c *Client) ExperimentalDoRequest(host *URI, method, path string, headers map[string]string, data []byte) (*http.Response, error) {
+	return c.doRequest(host, method, path, headers, data)
+}
+
 // statusToNodeShardsForIndex finds the hosts which contains shards for the given index
 func (c *Client) statusToNodeShardsForIndex(status Status, indexName string) (map[uint64]*URI, error) {
 	result := make(map[uint64]*URI)
@@ -1853,4 +1857,24 @@ func (r *exportReader) Read(p []byte) (n int, err error) {
 		r.currentShard++
 	}
 	return
+}
+
+// ExperimentalShardNodes asks Pilosa which nodes own each shard up to
+// a max for a given index. TODO refactor to use the more performant
+// shard distribution endpoint if/when it becomes available.
+func (c *Client) ExperimentalShardNodes(index string, max uint64) (map[uint64][]URI, error) {
+	shardNodes := make(map[uint64][]URI, max)
+	for i := uint64(0); i < max; i++ {
+		nodes, err := c.fetchFragmentNodes(index, i)
+		if err != nil {
+			return nil, errors.Wrap(err, "")
+		}
+
+		addrs := make([]URI, len(nodes))
+		for i, node := range nodes {
+			addrs[i] = *node.URI()
+		}
+		shardNodes[i] = addrs
+	}
+	return shardNodes, nil
 }

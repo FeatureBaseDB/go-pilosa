@@ -1859,7 +1859,10 @@ func (r *exportReader) Read(p []byte) (n int, err error) {
 	return
 }
 
-func (c *Client) ShardNodes(index string, max uint64) (map[uint64][]URI, error) {
+// ExperimentalShardNodes asks Pilosa which nodes own each shard up to
+// a max for a given index. TODO refactor to use the more performant
+// shard distribution endpoint if/when it becomes available.
+func (c *Client) ExperimentalShardNodes(index string, max uint64) (map[uint64][]URI, error) {
 	shardNodes := make(map[uint64][]URI, max)
 	for i := uint64(0); i < max; i++ {
 		nodes, err := c.fetchFragmentNodes(index, i)

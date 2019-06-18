@@ -193,16 +193,20 @@ close(statusChan)
 
 ## Exporting Data
 
-You can export a field from Pilosa using `client.ExportField` function which returns a `ColumnIterator`. Use the `NextRecord` function of this iterator to receive all columns for the specified field. When there are no more columns, `io.EOF` is returned.
+You can export a field from Pilosa using `client.ExportField` function which returns an `io.Reader`. Wrap that with `csv.NewColumnIterator` or `csv.NewValueIterator` (for int fields) to get a `csv.Iterator` which iterates over CSV lines. `csv.NewColumnIterator` requires specifying a format, like `csv.RowIDColumnID`, `csv.ColumnKey`, etc. See [Importing Data](#importing-data) for all valid formats.  Use the `NextRecord` function of this iterator to receive all columns for the specified field. When there are no more columns, `io.EOF` is returned.
 
 Here's sample code for exporting a field:
 
 ```go
-iterator, err := client.ExportField(field)
+import "gihub.com/pilosa/go-pilosa/csv"
+
+...
+
+reader, err := client.ExportField(field)
 if err != nil {
     log.Fatal(err)
 }
-
+iterator := csv.NewColumnIterator(csv.RowIDColumnID, reader)
 columns := []pilosa.Column{}
 for {
     record, err := iterator.NextRecord()

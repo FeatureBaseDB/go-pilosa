@@ -16,7 +16,7 @@ See: [CHANGELOG](CHANGELOG.md)
 
 ## Requirements
 
-* Go 1.12 and higher
+* Go 1.12 and higher.
 
 ## Install
 

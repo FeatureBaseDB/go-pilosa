@@ -693,7 +693,7 @@ func (c *Client) fetchCoordinatorNode() (fragmentNode, error) {
 func (c *Client) importData(uri *URI, path string, data []byte) error {
 	resp, err := c.doRequest(uri, "POST", path, defaultProtobufHeaders(), data)
 	if err = anyError(resp, err); err != nil {
-		return errors.Wrap(err, "doing import")
+		return errors.Wrapf(err, "import to %s", uri.HostPort())
 	}
 	defer resp.Body.Close()
 
@@ -729,7 +729,7 @@ func (c *Client) importRoaringBitmap(uri *URI, field *Field, shard uint64, views
 
 	resp, err := c.doRequest(uri, "POST", path, defaultProtobufHeaders(), data)
 	if err = anyError(resp, err); err != nil {
-		return errors.Wrap(err, "doing import")
+		return errors.Wrapf(err, "roaring import to %s", uri.HostPort())
 	}
 	defer resp.Body.Close()
 

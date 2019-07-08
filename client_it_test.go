@@ -327,12 +327,12 @@ func TestMinMaxRow(t *testing.T) {
 
 	response, err := client.Query(field.MinRow())
 	if err != nil {
-		t.Fatalf("error excecuting min: %v", err)
+		t.Fatalf("error executing min: %v", err)
 	}
 	min := response.Result().Value()
 	response, err = client.Query(field.MaxRow())
 	if err != nil {
-		t.Fatalf("error excecuting max: %v", err)
+		t.Fatalf("error executing max: %v", err)
 	}
 	max := response.Result().Value()
 

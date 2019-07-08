@@ -307,6 +307,43 @@ func TestTopNReturns(t *testing.T) {
 	}
 }
 
+func TestMinMaxRow(t *testing.T) {
+	client := getClient()
+	field := index.Field("test-field")
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	qry := index.BatchQuery(
+		field.Set(10, 5),
+		field.Set(10, 10),
+		field.Set(10, 15),
+		field.Set(20, 5),
+		field.Set(30, 5),
+	)
+	client.Query(qry)
+	// XXX: The following is required to make this test pass. See: https://github.com/pilosa/pilosa/issues/625
+	client.HttpRequest("POST", "/recalculate-caches", nil, nil)
+
+	response, err := client.Query(field.MinRow())
+	if err != nil {
+		t.Fatalf("error excecuting min: %v", err)
+	}
+	min := response.Result().Value()
+	response, err = client.Query(field.MaxRow())
+	if err != nil {
+		t.Fatalf("error excecuting max: %v", err)
+	}
+	max := response.Result().Value()
+
+	if min != 10 {
+		t.Fatalf("Min should be 10, got %v instead", min)
+	}
+	if max != 30 {
+		t.Fatalf("Max should be 30, got %v instead", max)
+	}
+}
+
 func TestSetMutexField(t *testing.T) {
 	client := getClient()
 	field := index.Field("mutex-test", OptFieldTypeMutex(CacheTypeDefault, 0))

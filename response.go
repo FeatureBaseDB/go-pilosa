@@ -51,6 +51,7 @@ const (
 	QueryResultTypeRowIDs // this is not used by the client
 	QueryResultTypeGroupCounts
 	QueryResultTypeRowIdentifiers
+	QueryResultTypePair
 )
 
 // QueryResponse represents the response from a Pilosa query.
@@ -130,6 +131,7 @@ type QueryResult interface {
 	Type() uint32
 	Row() RowResult
 	CountItems() []CountResultItem
+	CountItem() CountResultItem
 	Count() int64
 	Value() int64
 	Changed() bool
@@ -161,7 +163,8 @@ func newQueryResultFromInternal(result *pbuf.QueryResult) (QueryResult, error) {
 		}, nil
 	case QueryResultTypeGroupCounts:
 		return groupCountsFromInternal(result.GroupCounts), nil
-
+	case QueryResultTypePair:
+		return CountItem{CountResultItem: countItemsFromInternal(result.Pairs)[0]}, nil
 	}
 
 	return nil, ErrUnknownType
@@ -180,6 +183,37 @@ func (c *CountResultItem) String() string {
 	}
 	return fmt.Sprintf("%d:%d", c.ID, c.Count)
 }
+
+type CountItem struct {
+	CountResultItem
+}
+
+// Type is the type of this result.
+func (CountItem) Type() uint32 { return QueryResultTypePair }
+
+// Row returns a RowResult.
+func (CountItem) Row() RowResult { return RowResult{} }
+
+// CountItems returns a CountResultItem slice.
+func (t CountItem) CountItems() []CountResultItem { return []CountResultItem{t.CountResultItem} }
+
+// CountItem returns a CountResultItem
+func (t CountItem) CountItem() CountResultItem { return t.CountResultItem }
+
+// Count returns the result of a Count call.
+func (CountItem) Count() int64 { return 0 }
+
+// Value returns the result of a Min, Max or Sum call.
+func (CountItem) Value() int64 { return 0 }
+
+// Changed returns whether the corresponding Set or Clear call changed the value of a bit.
+func (CountItem) Changed() bool { return false }
+
+// GroupCounts returns the result of a GroupBy call.
+func (CountItem) GroupCounts() []GroupCount { return nil }
+
+// RowIdentifiers returns the result of a Rows call.
+func (CountItem) RowIdentifiers() RowIdentifiersResult { return RowIdentifiersResult{} }
 
 func countItemsFromInternal(items []*pbuf.Pair) TopNResult {
 	result := make([]CountResultItem, 0, len(items))
@@ -200,6 +234,14 @@ func (TopNResult) Row() RowResult { return RowResult{} }
 
 // CountItems returns a CountResultItem slice.
 func (t TopNResult) CountItems() []CountResultItem { return t }
+
+// CountItem returns a CountResultItem
+func (t TopNResult) CountItem() CountResultItem {
+	if len(t) >= 1 {
+		return t[0]
+	}
+	return CountResultItem{}
+}
 
 // Count returns the result of a Count call.
 func (TopNResult) Count() int64 { return 0 }
@@ -244,6 +286,9 @@ func (b RowResult) Row() RowResult { return b }
 
 // CountItems returns a CountResultItem slice.
 func (RowResult) CountItems() []CountResultItem { return nil }
+
+// CountItem returns a CountResultItem
+func (RowResult) CountItem() CountResultItem { return CountResultItem{} }
 
 // Count returns the result of a Count call.
 func (RowResult) Count() int64 { return 0 }
@@ -296,6 +341,9 @@ func (ValCountResult) Row() RowResult { return RowResult{} }
 // CountItems returns a CountResultItem slice.
 func (ValCountResult) CountItems() []CountResultItem { return nil }
 
+// CountItem returns a CountResultItem
+func (ValCountResult) CountItem() CountResultItem { return CountResultItem{} }
+
 // Count returns the result of a Count call.
 func (c ValCountResult) Count() int64 { return c.Cnt }
 
@@ -322,6 +370,9 @@ func (IntResult) Row() RowResult { return RowResult{} }
 
 // CountItems returns a CountResultItem slice.
 func (IntResult) CountItems() []CountResultItem { return nil }
+
+// CountItem returns a CountResultItem
+func (IntResult) CountItem() CountResultItem { return CountResultItem{} }
 
 // Count returns the result of a Count call.
 func (i IntResult) Count() int64 { return int64(i) }
@@ -350,6 +401,9 @@ func (BoolResult) Row() RowResult { return RowResult{} }
 // CountItems returns a CountResultItem slice.
 func (BoolResult) CountItems() []CountResultItem { return nil }
 
+// CountItem returns a CountResultItem
+func (BoolResult) CountItem() CountResultItem { return CountResultItem{} }
+
 // Count returns the result of a Count call.
 func (BoolResult) Count() int64 { return 0 }
 
@@ -376,6 +430,9 @@ func (NilResult) Row() RowResult { return RowResult{} }
 
 // CountItems returns a CountResultItem slice.
 func (NilResult) CountItems() []CountResultItem { return nil }
+
+// CountItem returns a CountResultItem
+func (NilResult) CountItem() CountResultItem { return CountResultItem{} }
 
 // Count returns the result of a Count call.
 func (NilResult) Count() int64 { return 0 }
@@ -417,6 +474,9 @@ func (GroupCountResult) Row() RowResult { return RowResult{} }
 // CountItems returns a CountResultItem slice.
 func (GroupCountResult) CountItems() []CountResultItem { return nil }
 
+// CountItem returns a CountResultItem
+func (GroupCountResult) CountItem() CountResultItem { return CountResultItem{} }
+
 // Count returns the result of a Count call.
 func (GroupCountResult) Count() int64 { return 0 }
 
@@ -446,6 +506,9 @@ func (RowIdentifiersResult) Row() RowResult { return RowResult{} }
 
 // CountItems returns a CountResultItem slice.
 func (RowIdentifiersResult) CountItems() []CountResultItem { return nil }
+
+// CountItem returns a CountResultItem
+func (RowIdentifiersResult) CountItem() CountResultItem { return CountResultItem{} }
 
 // Count returns the result of a Count call.
 func (RowIdentifiersResult) Count() int64 { return 0 }

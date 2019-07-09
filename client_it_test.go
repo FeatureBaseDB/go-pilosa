@@ -321,9 +321,10 @@ func TestMinMaxRow(t *testing.T) {
 		field.Set(20, 5),
 		field.Set(30, 5),
 	)
-	client.Query(qry)
-	// XXX: The following is required to make this test pass. See: https://github.com/pilosa/pilosa/issues/625
-	client.HttpRequest("POST", "/recalculate-caches", nil, nil)
+	_, err = client.Query(qry)
+	if err != nil {
+		t.Fatalf("error setting bits: %v", err)
+	}
 
 	response, err := client.Query(field.MinRow())
 	if err != nil {

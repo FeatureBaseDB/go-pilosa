@@ -309,7 +309,7 @@ func TestTopNReturns(t *testing.T) {
 
 func TestMinMaxRow(t *testing.T) {
 	client := getClient()
-	field := index.Field("test-field")
+	field := index.Field("test-minmaxrow-field")
 	err := client.EnsureField(field)
 	if err != nil {
 		t.Fatal(err)

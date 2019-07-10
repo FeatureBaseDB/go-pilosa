@@ -307,6 +307,44 @@ func TestTopNReturns(t *testing.T) {
 	}
 }
 
+func TestMinMaxRow(t *testing.T) {
+	client := getClient()
+	field := index.Field("test-minmaxrow-field")
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	qry := index.BatchQuery(
+		field.Set(10, 5),
+		field.Set(10, 10),
+		field.Set(10, 15),
+		field.Set(20, 5),
+		field.Set(30, 5),
+	)
+	_, err = client.Query(qry)
+	if err != nil {
+		t.Fatalf("error setting bits: %v", err)
+	}
+
+	response, err := client.Query(field.MinRow())
+	if err != nil {
+		t.Fatalf("error executing min: %v", err)
+	}
+	min := response.Result().CountItem().ID
+	response, err = client.Query(field.MaxRow())
+	if err != nil {
+		t.Fatalf("error executing max: %v", err)
+	}
+	max := response.Result().CountItem().ID
+
+	if min != 10 {
+		t.Fatalf("Min should be 10, got %v instead", min)
+	}
+	if max != 30 {
+		t.Fatalf("Max should be 30, got %v instead", max)
+	}
+}
+
 func TestSetMutexField(t *testing.T) {
 	client := getClient()
 	field := index.Field("mutex-test", OptFieldTypeMutex(CacheTypeDefault, 0))

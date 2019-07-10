@@ -1185,9 +1185,21 @@ func (f *Field) Min(row *PQLRowQuery) *PQLBaseQuery {
 	return f.valQuery("Min", row)
 }
 
-// Max creates a min query.
+// Max creates a max query.
 func (f *Field) Max(row *PQLRowQuery) *PQLBaseQuery {
 	return f.valQuery("Max", row)
+}
+
+// MinRow creates a min row query.
+func (f *Field) MinRow() *PQLBaseQuery {
+	q := fmt.Sprintf("MinRow(field='%s')", f.name)
+	return NewPQLBaseQuery(q, f.index, nil)
+}
+
+// MaxRow creates a max row query.
+func (f *Field) MaxRow() *PQLBaseQuery {
+	q := fmt.Sprintf("MaxRow(field='%s')", f.name)
+	return NewPQLBaseQuery(q, f.index, nil)
 }
 
 // SetIntValue creates a Set query.

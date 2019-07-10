@@ -469,6 +469,18 @@ func TestFieldSum(t *testing.T) {
 		collabField.Sum(nil))
 }
 
+func TestMinRow(t *testing.T) {
+	comparePQL(t,
+		"MinRow(field='sample-field')",
+		sampleField.MinRow())
+}
+
+func TestMaxRow(t *testing.T) {
+	comparePQL(t,
+		"MaxRow(field='sample-field')",
+		sampleField.MaxRow())
+}
+
 func TestSetValue(t *testing.T) {
 	comparePQL(t,
 		"Set(50, collaboration=15)",

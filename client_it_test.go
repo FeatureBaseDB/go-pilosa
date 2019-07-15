@@ -1672,6 +1672,80 @@ func TestRowIDColumnIDImport(t *testing.T) {
 	}
 }
 
+func TestRowIDColumnIDImportTimestamp(t *testing.T) {
+	client := getClient()
+	iterator := newTestIteratorWithTimestamp()
+	field := index.Field("importfield-csv-rowid-colid-time", OptFieldTypeTime(TimeQuantumYearMonthDayHour))
+	err := client.EnsureField(field)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.ImportField(field, iterator)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	target := []uint64{3, 1, 5}
+	bq := index.BatchQuery(
+		field.Row(2),
+		field.Row(7),
+		field.Row(10),
+	)
+	response, err := client.Query(bq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Results()) != 3 {
+		t.Fatalf("Result count should be 3")
+	}
+	for i, result := range response.Results() {
+		br := result.Row()
+		if len(br.Columns) < 1 {
+			t.Fatalf("1 or more columns should be returned")
+		}
+		if target[i] != br.Columns[0] {
+			t.Fatalf("%d != %d", target[i], br.Columns[0])
+		}
+	}
+
+	target = []uint64{5, 7}
+	start := time.Date(2016, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
+	response, err = client.Query(field.RowRange(10, start, end))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(target, response.Result().Row().Columns) {
+		t.Fatalf("%v != %v", target, response.Result().Row().Columns)
+	}
+
+	// test clear imports
+	iterator = newTestIterator()
+	err = client.ImportField(field, iterator, OptImportClear(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bq = index.BatchQuery(
+		field.Row(2),
+		field.Row(7),
+		field.Row(10),
+	)
+	response, err = client.Query(bq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Results()) != 3 {
+		t.Fatalf("Result count should be 3")
+	}
+	for _, result := range response.Results() {
+		br := result.Row()
+		if !reflect.DeepEqual([]uint64(nil), br.Columns) {
+			t.Fatalf("%#v != %#v", []uint64(nil), br.Columns)
+		}
+	}
+}
+
 func TestRowIDColumnIDImportManualAddress(t *testing.T) {
 	client := getClientManualAddress()
 	iterator := newTestIterator()

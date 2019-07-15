@@ -78,7 +78,7 @@ func ColumnUnmarshallerWithTimestamp(format Format, timestampFormat string) Reco
 				if err != nil {
 					return nil, err
 				}
-				timestamp = int(t.Unix())
+				timestamp = int(t.Unix() * int64(time.Second))
 			}
 		}
 		column.Timestamp = int64(timestamp)

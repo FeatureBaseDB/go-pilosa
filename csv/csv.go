@@ -66,22 +66,23 @@ func ColumnUnmarshallerWithTimestamp(format Format, timestampFormat string) Reco
 			}
 		}
 
-		timestamp := 0
+		timestamp := int64(0)
 		if len(parts) == 3 {
 			if timestampFormat == "" {
-				timestamp, err = strconv.Atoi(parts[2])
-				if err != nil {
+				if tsInt, err := strconv.Atoi(parts[2]); err != nil {
 					return nil, err
+				} else {
+					timestamp = int64(tsInt)
 				}
 			} else {
 				t, err := time.Parse(timestampFormat, parts[2])
 				if err != nil {
 					return nil, err
 				}
-				timestamp = int(t.Unix())
+				timestamp = t.Unix() * int64(time.Second) // Casting a duration to int64 gives the number of nanoseconds in that duration.
 			}
 		}
-		column.Timestamp = int64(timestamp)
+		column.Timestamp = timestamp
 
 		return column, nil
 	}

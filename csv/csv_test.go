@@ -60,9 +60,9 @@ func TestCSVColumnIteratorWithTimestampFormatRowIDColumnID(t *testing.T) {
 		records = append(records, record)
 	}
 	target := []pilosa.Column{
-		{RowID: 1, ColumnID: 10, Timestamp: 683803980},
-		{RowID: 5, ColumnID: 20, Timestamp: 683804100},
-		{RowID: 3, ColumnID: 41, Timestamp: 683804160},
+		{RowID: 1, ColumnID: 10, Timestamp: 683803980000000000},
+		{RowID: 5, ColumnID: 20, Timestamp: 683804100000000000},
+		{RowID: 3, ColumnID: 41, Timestamp: 683804160000000000},
 	}
 	if len(records) != len(target) {
 		t.Fatalf("There should be %d columns", len(target))
@@ -92,9 +92,9 @@ func TestCSVColumnIteratorWithTimestampFormatRowKeyColumnKey(t *testing.T) {
 		records = append(records, record)
 	}
 	target := []pilosa.Column{
-		{RowKey: "one", ColumnKey: "ten", Timestamp: 683803980},
-		{RowKey: "five", ColumnKey: "twenty", Timestamp: 683804100},
-		{RowKey: "three", ColumnKey: "forty-one", Timestamp: 683804160},
+		{RowKey: "one", ColumnKey: "ten", Timestamp: 683803980000000000},
+		{RowKey: "five", ColumnKey: "twenty", Timestamp: 683804100000000000},
+		{RowKey: "three", ColumnKey: "forty-one", Timestamp: 683804160000000000},
 	}
 	if len(records) != len(target) {
 		t.Fatalf("There should be %d columns", len(target))

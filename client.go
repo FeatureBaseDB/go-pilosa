@@ -540,7 +540,8 @@ func (c *Client) translateRecordsRowKeys(rowKeyIDMap *lru.LRU, field *Field, col
 			return err
 		}
 		for i, key := range keys {
-			rowKeyIDMap.Add(key, ids[i])
+			// we have to add without evicting here lest a key which was in cache prior to adding those not in cache is evicted.
+			rowKeyIDMap.AddNoEvict(key, ids[i])
 		}
 	}
 	// replace RowKeys with RowIDs
@@ -552,6 +553,9 @@ func (c *Client) translateRecordsRowKeys(rowKeyIDMap *lru.LRU, field *Field, col
 			return fmt.Errorf("Key '%s' does not exist in the rowKey to ID map", col.RowKey)
 		}
 	}
+
+	// since we called AddNoEvict, we clean up at the end
+	rowKeyIDMap.Cleanup()
 	return nil
 }
 

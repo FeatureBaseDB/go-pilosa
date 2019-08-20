@@ -215,8 +215,8 @@ func (q PQLRowQuery) Error() error {
 //
 // Usage:
 //
-// 	index, err := NewIndex("repository")
-// 	stargazer, err := index.Field("stargazer")
+// 	repo, err := NewIndex("repository")
+// 	stargazer, err := repo.Field("stargazer")
 // 	query := repo.BatchQuery(
 // 		stargazer.Row(5),
 //		stargazer.Row(15),

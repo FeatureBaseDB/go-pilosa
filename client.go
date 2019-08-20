@@ -89,6 +89,9 @@ type Client struct {
 
 	importLogEncoder encoder
 	logLock          sync.Mutex
+
+	translator *Translator
+	// TODO threadsafe key translation cache on client using embedded K/V store.
 }
 
 // DefaultClient creates a client with the default address and options.
@@ -138,6 +141,8 @@ func newClientWithOptions(options *ClientOptions) *Client {
 		client:          newHTTPClient(options.withDefaults()),
 		logger:          log.New(os.Stderr, "go-pilosa ", log.Flags()),
 		coordinatorLock: &sync.RWMutex{},
+
+		translator: NewTranslator(),
 	}
 	if options.importLogWriter != nil {
 		c.importLogEncoder = newImportLogEncoder(options.importLogWriter)

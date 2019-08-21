@@ -2,6 +2,7 @@ package pilosa
 
 import (
 	"reflect"
+	"strconv"
 	"testing"
 )
 
@@ -23,8 +24,8 @@ func TestBatches(t *testing.T) {
 			t.Logf("problem cleaning up from test: %v", err)
 		}
 	}()
-	b := NewBatch(client, 10, fields)
-
+	b := NewBatch(client, 10, idx, fields)
+	n
 	r := Row{Values: make([]interface{}, 3)}
 
 	for i := 0; i < 9; i++ {
@@ -250,4 +251,128 @@ func TestBatches(t *testing.T) {
 	}
 
 	// TODO test non-full batches, test behavior of doing import on empty batch
+}
+
+func TestBatchesStringIDs(t *testing.T) {
+	client := DefaultClient()
+	schema := NewSchema()
+	idx := schema.Index("gopilosatest-blah", OptIndexKeys(true))
+	fields := make([]*Field, 1)
+	fields[0] = idx.Field("zero", OptFieldKeys(true))
+	err := client.SyncSchema(schema)
+	if err != nil {
+		t.Fatalf("syncing schema: %v", err)
+	}
+	defer func() {
+		err := client.DeleteIndex(idx)
+		if err != nil {
+			t.Logf("problem cleaning up from test: %v", err)
+		}
+	}()
+
+	b := NewBatch(client, 3, idx, fields)
+
+	r := Row{Values: make([]interface{}, 1)}
+
+	for i := 0; i < 3; i++ {
+		r.ID = strconv.Itoa(i)
+		if i%2 == 0 {
+			r.Values[0] = "a"
+		} else {
+			r.Values[0] = "x"
+		}
+		err := b.Add(r)
+		if err != nil && err != ErrBatchNowFull {
+			t.Fatalf("unexpected err adding record: %v", err)
+		}
+	}
+
+	if len(b.toTranslateID) != 3 {
+		t.Fatalf("id translation table unexpected size: %v", b.toTranslateID)
+	}
+	for k, indexes := range b.toTranslateID {
+		if k == "0" {
+			if !reflect.DeepEqual(indexes, []int{0}) {
+				t.Fatalf("unexpected result k: %s, indexes: %v", k, indexes)
+			}
+		}
+		if k == "1" {
+			if !reflect.DeepEqual(indexes, []int{1}) {
+				t.Fatalf("unexpected result k: %s, indexes: %v", k, indexes)
+			}
+		}
+		if k == "2" {
+			if !reflect.DeepEqual(indexes, []int{2}) {
+				t.Fatalf("unexpected result k: %s, indexes: %v", k, indexes)
+			}
+		}
+	}
+
+	err = b.doTranslation()
+	if err != nil {
+		t.Fatalf("translating: %v", err)
+	}
+
+	if !reflect.DeepEqual(b.ids, []uint64{1, 2, 3}) {
+		t.Fatalf("unexpected ids: %v", b.ids)
+	}
+
+	err = b.Import()
+	if err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
+	resp, err := client.Query(idx.BatchQuery(fields[0].Row("a"), fields[0].Row("x")))
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+
+	results := resp.Results()
+	for i, res := range results {
+		cols := res.Row().Keys
+		if i == 0 && !reflect.DeepEqual(cols, []string{"0", "2"}) {
+			t.Fatalf("unexpected columns: %v", cols)
+		}
+		if i == 1 && !reflect.DeepEqual(cols, []string{"1"}) {
+			t.Fatalf("unexpected columns: %v", cols)
+		}
+	}
+
+	b.reset()
+
+	r.ID = "1"
+	r.Values[0] = "a"
+	err = b.Add(r)
+	if err != nil {
+		t.Fatalf("unexpected err adding record: %v", err)
+	}
+
+	r.ID = "3"
+	r.Values[0] = "z"
+	err = b.Add(r)
+	if err != nil {
+		t.Fatalf("unexpected err adding record: %v", err)
+	}
+
+	err = b.Import()
+	if err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
+	resp, err = client.Query(idx.BatchQuery(fields[0].Row("a"), fields[0].Row("z")))
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+
+	results = resp.Results()
+	for i, res := range results {
+		cols := res.Row().Keys
+		if i == 0 && !reflect.DeepEqual(cols, []string{"0", "1", "2"}) {
+			t.Fatalf("unexpected columns: %v", cols)
+		}
+		if i == 1 && !reflect.DeepEqual(cols, []string{"3"}) {
+			t.Fatalf("unexpected columns: %v", cols)
+		}
+	}
+
 }

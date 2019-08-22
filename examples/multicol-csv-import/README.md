@@ -19,5 +19,6 @@ Open a terminal in the `go-pilosa` directory and build the importer:
 ## Usage
 
 * Run `multicol-csv-import` with the Pilosa address (by default: `localhost:10101`) and name of the CSV file:
-
+    ```
     $ ./multicol-csv-import :10101 sample.csv
+    ```

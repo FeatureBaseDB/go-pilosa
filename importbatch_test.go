@@ -4,16 +4,19 @@ import (
 	"reflect"
 	"strconv"
 	"testing"
+
+	"github.com/pkg/errors"
 )
 
 func TestBatches(t *testing.T) {
 	client := DefaultClient()
 	schema := NewSchema()
 	idx := schema.Index("gopilosatest-blah")
-	fields := make([]*Field, 3)
+	fields := make([]*Field, 4)
 	fields[0] = idx.Field("zero", OptFieldKeys(true))
 	fields[1] = idx.Field("one", OptFieldKeys(true))
 	fields[2] = idx.Field("two", OptFieldKeys(true))
+	fields[3] = idx.Field("three", OptFieldTypeInt())
 	err := client.SyncSchema(schema)
 	if err != nil {
 		t.Fatalf("syncing schema: %v", err)
@@ -25,8 +28,7 @@ func TestBatches(t *testing.T) {
 		}
 	}()
 	b := NewBatch(client, 10, idx, fields)
-	n
-	r := Row{Values: make([]interface{}, 3)}
+	r := Row{Values: make([]interface{}, 4)}
 
 	for i := 0; i < 9; i++ {
 		r.ID = uint64(i)
@@ -34,10 +36,12 @@ func TestBatches(t *testing.T) {
 			r.Values[0] = "a"
 			r.Values[1] = "b"
 			r.Values[2] = "c"
+			r.Values[3] = int64(99)
 		} else {
 			r.Values[0] = "x"
 			r.Values[1] = "y"
 			r.Values[2] = "z"
+			r.Values[3] = int64(-10)
 		}
 		err := b.Add(r)
 		if err != nil {
@@ -46,10 +50,10 @@ func TestBatches(t *testing.T) {
 
 	}
 
-	if len(b.toTranslate[0]) != 2 {
+	if len(b.toTranslate["zero"]) != 2 {
 		t.Fatalf("wrong number of keys in toTranslate[0]")
 	}
-	for k, ints := range b.toTranslate[0] {
+	for k, ints := range b.toTranslate["zero"] {
 		if k == "a" {
 			if !reflect.DeepEqual(ints, []int{0, 2, 4, 6, 8}) {
 				t.Fatalf("wrong ints for key a in field zero: %v", ints)
@@ -64,10 +68,14 @@ func TestBatches(t *testing.T) {
 		}
 	}
 
-	if len(b.toTranslate[1]) != 2 {
-		t.Fatalf("wrong number of keys in toTranslate[1]")
+	if !reflect.DeepEqual(b.values["three"], []int64{99, -10, 99, -10, 99, -10, 99, -10, 99}) {
+		t.Fatalf("unexpected values: %v", b.values["three"])
 	}
-	for k, ints := range b.toTranslate[1] {
+
+	if len(b.toTranslate["one"]) != 2 {
+		t.Fatalf("wrong number of keys in toTranslate[\"one\"]")
+	}
+	for k, ints := range b.toTranslate["one"] {
 		if k == "b" {
 			if !reflect.DeepEqual(ints, []int{0, 2, 4, 6, 8}) {
 				t.Fatalf("wrong ints for key b in field one: %v", ints)
@@ -82,10 +90,10 @@ func TestBatches(t *testing.T) {
 		}
 	}
 
-	if len(b.toTranslate[2]) != 2 {
+	if len(b.toTranslate["two"]) != 2 {
 		t.Fatalf("wrong number of keys in toTranslate[2]")
 	}
-	for k, ints := range b.toTranslate[2] {
+	for k, ints := range b.toTranslate["two"] {
 		if k == "c" {
 			if !reflect.DeepEqual(ints, []int{0, 2, 4, 6, 8}) {
 				t.Fatalf("wrong ints for key c in field two: %v", ints)
@@ -110,15 +118,19 @@ func TestBatches(t *testing.T) {
 		t.Fatalf("should have gotten already full batch error, but got %v", err)
 	}
 
+	if !reflect.DeepEqual(b.values["three"], []int64{99, -10, 99, -10, 99, -10, 99, -10, 99, 99}) {
+		t.Fatalf("unexpected values: %v", b.values["three"])
+	}
+
 	err = b.doTranslation()
 	if err != nil {
 		t.Fatalf("doing translation: %v", err)
 	}
 
-	for i, rowIDs := range b.rowIDs {
+	for fname, rowIDs := range b.rowIDs {
 		// we don't know which key will get translated first, but we do know the pattern
 		if !reflect.DeepEqual(rowIDs, []uint64{1, 2, 1, 2, 1, 2, 1, 2, 1, 1}) && !reflect.DeepEqual(rowIDs, []uint64{2, 1, 2, 1, 2, 1, 2, 1, 2, 2}) {
-			t.Fatalf("unexpected row ids for field %d: %v", i, rowIDs)
+			t.Fatalf("unexpected row ids for field %s: %v", fname, rowIDs)
 		}
 	}
 
@@ -135,10 +147,12 @@ func TestBatches(t *testing.T) {
 			r.Values[0] = "a"
 			r.Values[1] = "b"
 			r.Values[2] = "c"
+			r.Values[3] = int64(99)
 		} else {
 			r.Values[0] = "x"
 			r.Values[1] = "y"
 			r.Values[2] = "z"
+			r.Values[3] = int64(-10)
 		}
 		err := b.Add(r)
 		if i != 18 && err != nil {
@@ -160,10 +174,10 @@ func TestBatches(t *testing.T) {
 		t.Fatalf("doing import: %v", err)
 	}
 
-	for i, rowIDs := range b.rowIDs {
+	for fname, rowIDs := range b.rowIDs {
 		// we don't know which key will get translated first, but we do know the pattern
 		if !reflect.DeepEqual(rowIDs, []uint64{1, 2, 1, 2, 1, 2, 1, 2, 1, 2}) && !reflect.DeepEqual(rowIDs, []uint64{2, 1, 2, 1, 2, 1, 2, 1, 2, 1}) {
-			t.Fatalf("unexpected row ids for field %d: %v", i, rowIDs)
+			t.Fatalf("unexpected row ids for field %s: %v", fname, rowIDs)
 		}
 	}
 
@@ -175,10 +189,12 @@ func TestBatches(t *testing.T) {
 			r.Values[0] = "d"
 			r.Values[1] = "e"
 			r.Values[2] = "f"
+			r.Values[3] = int64(100)
 		} else {
 			r.Values[0] = "u"
 			r.Values[1] = "v"
 			r.Values[2] = "w"
+			r.Values[3] = int64(0)
 		}
 		err := b.Add(r)
 		if i != 28 && err != nil {
@@ -199,10 +215,10 @@ func TestBatches(t *testing.T) {
 		t.Fatalf("doing import: %v", err)
 	}
 
-	for i, rowIDs := range b.rowIDs {
+	for fname, rowIDs := range b.rowIDs {
 		// we don't know which key will get translated first, but we do know the pattern
 		if !reflect.DeepEqual(rowIDs, []uint64{3, 4, 3, 4, 3, 4, 3, 4, 3, 4}) && !reflect.DeepEqual(rowIDs, []uint64{4, 3, 4, 3, 4, 3, 4, 3, 4, 3}) {
-			t.Fatalf("unexpected row ids for field %d: %v", i, rowIDs)
+			t.Fatalf("unexpected row ids for field %s: %v", fname, rowIDs)
 		}
 	}
 
@@ -219,19 +235,19 @@ func TestBatches(t *testing.T) {
 		t.Fatalf("there should be 3 views")
 	}
 
-	// TODO query Pilosa to confirm data is in place
 	resp, err := client.Query(idx.BatchQuery(fields[0].Row("a"),
 		fields[1].Row("b"),
-		fields[2].Row("c")))
+		fields[2].Row("c"),
+		fields[3].Equals(99)))
 	if err != nil {
 		t.Fatalf("querying: %v", err)
 	}
 
 	results := resp.Results()
-	for _, res := range results {
+	for i, res := range results {
 		cols := res.Row().Columns
 		if !reflect.DeepEqual(cols, []uint64{0, 2, 4, 6, 8, 10, 12, 14, 16, 18}) {
-			t.Fatalf("unexpected columns: %v", cols)
+			t.Fatalf("unexpected columns at %d: %v", i, cols)
 		}
 	}
 
@@ -250,7 +266,28 @@ func TestBatches(t *testing.T) {
 		}
 	}
 
+	resp, err = client.Query(idx.BatchQuery(fields[3].GT(-11),
+		fields[3].Equals(0),
+		fields[3].Equals(100)))
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+	results = resp.Results()
+	cols := results[0].Row().Columns
+	if !reflect.DeepEqual(cols, []uint64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28}) {
+		t.Fatalf("all columns should be greater than -11, but got: %v", cols)
+	}
+	cols = results[1].Row().Columns
+	if !reflect.DeepEqual(cols, []uint64{19, 21, 23, 25, 27}) {
+		t.Fatalf("wrong cols for ==0: %v", cols)
+	}
+	cols = results[2].Row().Columns
+	if !reflect.DeepEqual(cols, []uint64{20, 22, 24, 26, 28}) {
+		t.Fatalf("wrong cols for ==100: %v", cols)
+	}
+
 	// TODO test non-full batches, test behavior of doing import on empty batch
+	// TODO test importing across multiple shards
 }
 
 func TestBatchesStringIDs(t *testing.T) {
@@ -313,8 +350,8 @@ func TestBatchesStringIDs(t *testing.T) {
 		t.Fatalf("translating: %v", err)
 	}
 
-	if !reflect.DeepEqual(b.ids, []uint64{1, 2, 3}) {
-		t.Fatalf("unexpected ids: %v", b.ids)
+	if err := isPermutationOfInt(b.ids, []uint64{1, 2, 3}); err != nil {
+		t.Fatalf("wrong ids: %v", err)
 	}
 
 	err = b.Import()
@@ -330,7 +367,7 @@ func TestBatchesStringIDs(t *testing.T) {
 	results := resp.Results()
 	for i, res := range results {
 		cols := res.Row().Keys
-		if i == 0 && !reflect.DeepEqual(cols, []string{"0", "2"}) {
+		if i == 0 && !reflect.DeepEqual(cols, []string{"0", "2"}) && !reflect.DeepEqual(cols, []string{"2", "0"}) {
 			t.Fatalf("unexpected columns: %v", cols)
 		}
 		if i == 1 && !reflect.DeepEqual(cols, []string{"1"}) {
@@ -367,12 +404,52 @@ func TestBatchesStringIDs(t *testing.T) {
 	results = resp.Results()
 	for i, res := range results {
 		cols := res.Row().Keys
-		if i == 0 && !reflect.DeepEqual(cols, []string{"0", "1", "2"}) {
-			t.Fatalf("unexpected columns: %v", cols)
+		if err := isPermutationOf(cols, []string{"0", "1", "2"}); i == 0 && err != nil {
+			t.Fatalf("unexpected columns: %v: %v", cols, err)
 		}
 		if i == 1 && !reflect.DeepEqual(cols, []string{"3"}) {
 			t.Fatalf("unexpected columns: %v", cols)
 		}
 	}
 
+}
+
+func isPermutationOf(one, two []string) error {
+	if len(one) != len(two) {
+		return errors.Errorf("different lengths %d and %d", len(one), len(two))
+	}
+outer:
+	for _, vOne := range one {
+		for j, vTwo := range two {
+			if vOne == vTwo {
+				two = append(two[:j], two[j+1:]...)
+				continue outer
+			}
+		}
+		return errors.Errorf("%s in one but not two", vOne)
+	}
+	if len(two) != 0 {
+		return errors.Errorf("vals in two but not one: %v", two)
+	}
+	return nil
+}
+
+func isPermutationOfInt(one, two []uint64) error {
+	if len(one) != len(two) {
+		return errors.Errorf("different lengths %d and %d", len(one), len(two))
+	}
+outer:
+	for _, vOne := range one {
+		for j, vTwo := range two {
+			if vOne == vTwo {
+				two = append(two[:j], two[j+1:]...)
+				continue outer
+			}
+		}
+		return errors.Errorf("%d in one but not two", vOne)
+	}
+	if len(two) != 0 {
+		return errors.Errorf("vals in two but not one: %v", two)
+	}
+	return nil
 }

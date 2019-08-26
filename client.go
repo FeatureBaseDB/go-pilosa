@@ -90,8 +90,28 @@ type Client struct {
 	importLogEncoder encoder
 	logLock          sync.Mutex
 
+	// TODO make this threadsafe using key translation cache on client using embedded K/V store.
 	translator *Translator
-	// TODO threadsafe key translation cache on client using embedded K/V store.
+
+	// TODO shardNodes needs to be invalidated/updated when cluster topology changes.
+	shardNodes shardNodes
+}
+
+func (c *Client) GetURIsForShard(index string, shard uint64) ([]*URI, error) {
+	uris, ok := c.shardNodes.Get(index, shard)
+	if ok {
+		return uris, nil
+	}
+	fragmentNodes, err := c.fetchFragmentNodes(index, shard)
+	if err != nil {
+		return nil, errors.Wrap(err, "trying to look up nodes for shard")
+	}
+	uris = make([]*URI, 0, len(fragmentNodes))
+	for _, fn := range fragmentNodes {
+		uris = append(uris, fn.URI())
+	}
+	c.shardNodes.Put(index, shard, uris)
+	return uris, nil
 }
 
 // DefaultClient creates a client with the default address and options.
@@ -143,6 +163,7 @@ func newClientWithOptions(options *ClientOptions) *Client {
 		coordinatorLock: &sync.RWMutex{},
 
 		translator: NewTranslator(),
+		shardNodes: newShardNodes(),
 	}
 	if options.importLogWriter != nil {
 		c.importLogEncoder = newImportLogEncoder(options.importLogWriter)
@@ -644,6 +665,38 @@ func (c *Client) importValues(field *Field,
 	}
 	err = eg.Wait()
 	return errors.Wrap(err, "importing values to nodes")
+}
+
+// ImportValues takes the given integer values and column ids
+// (which must all be in the given shard) and imports them into the
+// given index,field,shard on all nodes which should hold that shard.
+func (c *Client) ImportValues(index, field string, shard uint64, vals []int64, ids []uint64) error {
+	msg := &pbuf.ImportValueRequest{
+		Index:     index,
+		Field:     field,
+		Shard:     shard,
+		ColumnIDs: ids,
+		Values:    vals,
+	}
+	data, err := proto.Marshal(msg)
+	if err != nil {
+		return errors.Wrap(err, "marshaling to protobuf")
+	}
+	path := fmt.Sprintf("/index/%s/field/%s/import", index, field)
+	c.logImport(index, path, shard, false, data)
+
+	uris, err := c.GetURIsForShard(index, shard)
+	if err != nil {
+		return errors.Wrap(err, "getting uris")
+	}
+
+	eg := errgroup.Group{}
+	for _, uri := range uris {
+		eg.Go(func() error {
+			return c.importData(uri, path, data)
+		})
+	}
+	return errors.Wrap(eg.Wait(), "importing values to nodes")
 }
 
 func importPathData(field *Field, shard uint64, msg proto.Message, options *ImportOptions) (path string, data []byte, err error) {

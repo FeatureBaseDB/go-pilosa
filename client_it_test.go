@@ -851,6 +851,32 @@ func TestImportWithBatchSize(t *testing.T) {
 	}
 }
 
+func TestImportValues(t *testing.T) {
+	client := getClient()
+	schema, err := client.Schema()
+	if err != nil {
+		t.Fatalf("getting schema: %v", err)
+	}
+	index := schema.Index("go-testindex")
+	intfield := index.Field("intfield", OptFieldTypeInt())
+	err = client.SyncSchema(schema)
+	if err != nil {
+		t.Fatalf("syncing schema: %v", err)
+	}
+
+	err = client.ImportValues("go-testindex", "intfield", 0, []int64{1, 2, 3}, []uint64{1, 2, 3})
+	if err != nil {
+		t.Fatalf("importing values: %v", err)
+	}
+
+	resp, err := client.Query(intfield.GT(0))
+	result := resp.Result()
+	if !reflect.DeepEqual(result.Row().Columns, []uint64{1, 2, 3}) {
+		t.Fatalf("unexpected result: %v", result.Row().Columns)
+	}
+
+}
+
 // Ensure that the client does not send batches of zero records to Pilosa.
 // In our case it should send:
 // batch 1: shard[0,1]

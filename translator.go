@@ -26,6 +26,15 @@ func (t *Translator) GetCol(index, key string) (uint64, bool) {
 	return 0, false
 }
 
+func (t *Translator) AddCol(index, key string, value uint64) {
+	idx, ok := t.indexes[index]
+	if !ok {
+		idx = make(map[string]uint64)
+	}
+	idx[key] = value
+	t.indexes[index] = idx
+}
+
 func (t *Translator) GetRow(index, field, key string) (uint64, bool) {
 	if fld, ok := t.fields[indexfield{index: index, field: field}]; ok {
 		if val, ok := fld[key]; ok {
@@ -43,5 +52,3 @@ func (t *Translator) AddRow(index, field, key string, value uint64) {
 	keys[key] = value
 	t.fields[indexfield{index: index, field: field}] = keys
 }
-
-// TODO AddCol

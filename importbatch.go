@@ -247,7 +247,7 @@ func (b *Batch) doTranslation() error {
 	// translate column keys if there are any
 	if len(b.toTranslateID) > 0 {
 		keys = make([]string, 0, len(b.toTranslateID))
-		for k, _ := range b.toTranslateID {
+		for k := range b.toTranslateID {
 			keys = append(keys, k)
 		}
 		ids, err := b.client.translateColumnKeys(b.index, keys)
@@ -270,7 +270,7 @@ func (b *Batch) doTranslation() error {
 		keys = keys[:0]
 
 		// make a slice of keys
-		for k, _ := range tt {
+		for k := range tt {
 			keys = append(keys, k)
 		}
 
@@ -343,7 +343,7 @@ func (b *Batch) makeFragments() fragments {
 	for fname, rowIDs := range b.rowIDs {
 		curShard := ^uint64(0) // impossible sentinel value for shard.
 		var curBM *roaring.Bitmap
-		for j, _ := range b.ids {
+		for j := range b.ids {
 			col, row := b.ids[j], rowIDs[j]
 			if row == nilSentinel {
 				continue
@@ -450,10 +450,10 @@ func (b *Batch) reset() {
 	for k := range b.toTranslateID {
 		delete(b.toTranslateID, k) // TODO pool these slices
 	}
-	for k, _ := range b.values {
+	for k := range b.values {
 		delete(b.values, k) // TODO pool these slices
 	}
-	for k, _ := range b.clearValues {
+	for k := range b.clearValues {
 		delete(b.clearValues, k) // TODO pool these slices
 	}
 }

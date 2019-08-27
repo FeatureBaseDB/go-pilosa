@@ -322,13 +322,17 @@ func (c *Client) EnsureField(field *Field) error {
 
 // DeleteIndex deletes an index on the server.
 func (c *Client) DeleteIndex(index *Index) error {
+	return c.DeleteIndexByName(index.Name())
+}
+
+// DeleteIndexByName deletes the named index on the server.
+func (c *Client) DeleteIndexByName(index string) error {
 	span := c.tracer.StartSpan("Client.DeleteIndex")
 	defer span.Finish()
 
-	path := fmt.Sprintf("/index/%s", index.name)
+	path := fmt.Sprintf("/index/%s", index)
 	_, _, err := c.httpRequest("DELETE", path, nil, nil, false)
 	return err
-
 }
 
 // DeleteField deletes a field on the server.

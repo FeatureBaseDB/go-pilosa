@@ -151,7 +151,7 @@ func (b *Batch) Add(rec Row) error {
 	case uint64:
 		b.ids = append(b.ids, rid)
 	case string:
-		if colID, ok := b.client.translator.GetCol(b.index.Name(), rid); ok {
+		if colID, ok := b.client.translateCol(b.index.Name(), rid); ok {
 			b.ids = append(b.ids, colID)
 		} else {
 			ints, ok := b.toTranslateID[rid]
@@ -172,7 +172,7 @@ func (b *Batch) Add(rec Row) error {
 		case string:
 			rowIDs := b.rowIDs[field.Name()]
 			// translate val and append to b.rowIDs[i]
-			if rowID, ok := b.client.translator.GetRow(b.index.Name(), field.Name(), val); ok {
+			if rowID, ok := b.client.translateRow(b.index.Name(), field.Name(), val); ok {
 				b.rowIDs[field.Name()] = append(rowIDs, rowID)
 			} else {
 				ints, ok := b.toTranslate[field.Name()][val]
@@ -254,6 +254,7 @@ func (b *Batch) doTranslation() error {
 		if err != nil {
 			return errors.Wrap(err, "translating col keys")
 		}
+		b.client.tlock.Lock()
 		for j, key := range keys {
 			id := ids[j]
 			for _, recordIdx := range b.toTranslateID[key] {
@@ -261,6 +262,7 @@ func (b *Batch) doTranslation() error {
 			}
 			b.client.translator.AddCol(b.index.Name(), key, id)
 		}
+		b.client.tlock.Unlock()
 	} else {
 		keys = make([]string, 0)
 	}
@@ -286,6 +288,7 @@ func (b *Batch) doTranslation() error {
 
 		// fill out missing IDs in local batch records with translated IDs
 		rows := b.rowIDs[fieldName]
+		b.client.tlock.Lock()
 		for j, key := range keys {
 			id := ids[j]
 			for _, recordIdx := range tt[key] {
@@ -293,6 +296,7 @@ func (b *Batch) doTranslation() error {
 			}
 			b.client.translator.AddRow(b.index.Name(), fieldName, key, id)
 		}
+		b.client.tlock.Unlock()
 	}
 
 	for _, idIndexes := range b.clearValues {
@@ -308,7 +312,7 @@ func (b *Batch) doImport() error {
 
 	frags := b.makeFragments()
 	for shard, viewMap := range frags {
-		uris, err := b.client.GetURIsForShard(b.index.Name(), shard)
+		uris, err := b.client.getURIsForShard(b.index.Name(), shard)
 		uri := uris[0]
 		if err != nil {
 			return errors.Wrap(err, "getting uris for shard")

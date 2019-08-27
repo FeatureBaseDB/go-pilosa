@@ -171,3 +171,12 @@ func TestImportWithReplayErrors(t *testing.T) {
 		t.Fatal("import replay hanging when no schema created")
 	}
 }
+
+func TestDetectClusterChanges(t *testing.T) {
+	c := getClient()
+
+	c.shardNodes.data["blah"] = make(map[uint64][]*URI)
+	c.shardNodes.data["blah"][1] = []*URI{&URI{scheme: "zzz"}}
+
+	c.detectClusterChanges()
+}

@@ -37,3 +37,11 @@ func (s shardNodes) Put(index string, shard uint64, uris []*URI) {
 	idx[shard] = uris
 	s.data[index] = idx
 }
+
+func (s shardNodes) Invalidate() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for k := range s.data {
+		delete(s.data, k)
+	}
+}

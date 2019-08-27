@@ -90,14 +90,45 @@ type Client struct {
 	importLogEncoder encoder
 	logLock          sync.Mutex
 
-	// TODO make this threadsafe using key translation cache on client using embedded K/V store.
+	// TODO replace this with something like BoltDB. Need better
+	// concurrent performance, less lock contention. Persistence might
+	// be a nice bonus too.
+	tlock      sync.RWMutex
 	translator *Translator
 
 	// TODO shardNodes needs to be invalidated/updated when cluster topology changes.
 	shardNodes shardNodes
+	tick       *time.Ticker
 }
 
-func (c *Client) GetURIsForShard(index string, shard uint64) ([]*URI, error) {
+func (c *Client) translateCol(index, key string) (uint64, bool) {
+	c.tlock.RLock()
+	v, b := c.translator.GetCol(index, key)
+	c.tlock.RUnlock()
+	return v, b
+}
+
+func (c *Client) translateRow(index, field, key string) (uint64, bool) {
+	c.tlock.RLock()
+	v, b := c.translator.GetRow(index, field, key)
+	c.tlock.RUnlock()
+	return v, b
+}
+
+func (c *Client) addTranslateCol(index, key string, value uint64) {
+	c.tlock.Lock()
+	c.translator.AddCol(index, key, value)
+	c.tlock.Unlock()
+}
+
+func (c *Client) addTranslateRow(index, field, key string, value uint64) {
+	c.tlock.Lock()
+	c.translator.AddRow(index, field, key, value)
+	c.tlock.Unlock()
+}
+
+// TODO unexport this, consider unexporting ImportValues, look for other candidates, put a note on translator about it being only used by batch, do something about shardNodes.
+func (c *Client) getURIsForShard(index string, shard uint64) ([]*URI, error) {
 	uris, ok := c.shardNodes.Get(index, shard)
 	if ok {
 		return uris, nil
@@ -112,6 +143,51 @@ func (c *Client) GetURIsForShard(index string, shard uint64) ([]*URI, error) {
 	}
 	c.shardNodes.Put(index, shard, uris)
 	return uris, nil
+}
+
+func (c *Client) runChangeDetection() {
+	c.tick = time.NewTicker(time.Minute)
+
+	for _ = range c.tick.C {
+		c.detectClusterChanges()
+	}
+}
+
+// detectClusterChanges chooses a random index and shard from the
+// shardNodes cache and deletes it. It then looks it up from Pilosa to
+// see if it still matches, and if not it drops the whole cache.
+func (c *Client) detectClusterChanges() {
+	c.shardNodes.mu.Lock()
+	// we rely on Go's random map iteration order to get a random
+	// element. If it doesn't end up being random, it shouldn't
+	// actually matter.
+	for index, shardMap := range c.shardNodes.data {
+		for shard, uris := range shardMap {
+			delete(shardMap, shard)
+			c.shardNodes.data[index] = shardMap
+			c.shardNodes.mu.Unlock()
+			newURIs, err := c.getURIsForShard(index, shard) // refetch URIs from server.
+			if err != nil {
+				c.logger.Printf("problem invalidating shard node cache: %v", err)
+				return
+			}
+			if len(uris) != len(newURIs) {
+				c.logger.Printf("invalidating shard node cache old: %s, new: %s", URIs(uris), URIs(newURIs))
+				c.shardNodes.Invalidate()
+				return
+			}
+			for i := range uris {
+				u1, u2 := uris[i], newURIs[i]
+				if *u1 != *u2 {
+					c.logger.Printf("invalidating shard node cache, uri mismatch at %d old: %s, new: %s", i, URIs(uris), URIs(newURIs))
+					c.shardNodes.Invalidate()
+					return
+				}
+			}
+			break
+		}
+		break
+	}
 }
 
 // DefaultClient creates a client with the default address and options.
@@ -692,7 +768,7 @@ func (c *Client) ImportValues(index, field string, shard uint64, vals []int64, i
 	path := fmt.Sprintf("/index/%s/field/%s/import?clear=%s&ignoreKeyCheck=true", index, field, strconv.FormatBool(clear))
 	c.logImport(index, path, shard, false, data)
 
-	uris, err := c.GetURIsForShard(index, shard)
+	uris, err := c.getURIsForShard(index, shard)
 	if err != nil {
 		return errors.Wrap(err, "getting uris")
 	}

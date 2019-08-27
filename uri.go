@@ -65,6 +65,20 @@ type URI struct {
 	error  error
 }
 
+type URIs []*URI
+
+func (uris URIs) String() string {
+	b := strings.Builder{}
+	b.WriteRune('[')
+	for _, u := range uris[:len(uris)-1] {
+		b.WriteString(u.Normalize())
+		b.WriteRune(' ')
+	}
+	b.WriteString(uris[len(uris)-1].Normalize())
+	b.WriteRune(']')
+	return b.String()
+}
+
 // DefaultURI creates and returns the default URI.
 func DefaultURI() *URI {
 	return &URI{

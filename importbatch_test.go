@@ -8,6 +8,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+// TODO test against cluster
+
 func TestBatches(t *testing.T) {
 	client := DefaultClient()
 	schema := NewSchema()
@@ -43,6 +45,10 @@ func TestBatches(t *testing.T) {
 			r.Values[2] = "z"
 			r.Values[3] = int64(-10)
 		}
+		if i == 8 {
+			r.Values[0] = nil
+			r.Values[3] = nil
+		}
 		err := b.Add(r)
 		if err != nil {
 			t.Fatalf("unexpected err adding record: %v", err)
@@ -55,7 +61,7 @@ func TestBatches(t *testing.T) {
 	}
 	for k, ints := range b.toTranslate["zero"] {
 		if k == "a" {
-			if !reflect.DeepEqual(ints, []int{0, 2, 4, 6, 8}) {
+			if !reflect.DeepEqual(ints, []int{0, 2, 4, 6}) {
 				t.Fatalf("wrong ints for key a in field zero: %v", ints)
 			}
 		} else if k == "x" {
@@ -68,8 +74,11 @@ func TestBatches(t *testing.T) {
 		}
 	}
 
-	if !reflect.DeepEqual(b.values["three"], []int64{99, -10, 99, -10, 99, -10, 99, -10, 99}) {
+	if !reflect.DeepEqual(b.values["three"], []int64{99, -10, 99, -10, 99, -10, 99, -10, 0}) {
 		t.Fatalf("unexpected values: %v", b.values["three"])
+	}
+	if !reflect.DeepEqual(b.clearValues["three"], []uint64{8}) {
+		t.Fatalf("unexpected clearValues: %v", b.clearValues["three"])
 	}
 
 	if len(b.toTranslate["one"]) != 2 {
@@ -118,7 +127,7 @@ func TestBatches(t *testing.T) {
 		t.Fatalf("should have gotten already full batch error, but got %v", err)
 	}
 
-	if !reflect.DeepEqual(b.values["three"], []int64{99, -10, 99, -10, 99, -10, 99, -10, 99, 99}) {
+	if !reflect.DeepEqual(b.values["three"], []int64{99, -10, 99, -10, 99, -10, 99, -10, 0, 0}) {
 		t.Fatalf("unexpected values: %v", b.values["three"])
 	}
 
@@ -129,8 +138,16 @@ func TestBatches(t *testing.T) {
 
 	for fname, rowIDs := range b.rowIDs {
 		// we don't know which key will get translated first, but we do know the pattern
-		if !reflect.DeepEqual(rowIDs, []uint64{1, 2, 1, 2, 1, 2, 1, 2, 1, 1}) && !reflect.DeepEqual(rowIDs, []uint64{2, 1, 2, 1, 2, 1, 2, 1, 2, 2}) {
-			t.Fatalf("unexpected row ids for field %s: %v", fname, rowIDs)
+		if fname == "zero" {
+			if !reflect.DeepEqual(rowIDs, []uint64{1, 2, 1, 2, 1, 2, 1, 2, nilSentinel, nilSentinel}) &&
+				!reflect.DeepEqual(rowIDs, []uint64{2, 1, 2, 1, 2, 1, 2, 1, nilSentinel, nilSentinel}) {
+				t.Fatalf("unexpected row ids for field %s: %v", fname, rowIDs)
+			}
+
+		} else {
+			if !reflect.DeepEqual(rowIDs, []uint64{1, 2, 1, 2, 1, 2, 1, 2, 1, 1}) && !reflect.DeepEqual(rowIDs, []uint64{2, 1, 2, 1, 2, 1, 2, 1, 2, 2}) {
+				t.Fatalf("unexpected row ids for field %s: %v", fname, rowIDs)
+			}
 		}
 	}
 
@@ -244,7 +261,13 @@ func TestBatches(t *testing.T) {
 	}
 
 	results := resp.Results()
-	for i, res := range results {
+	for _, j := range []int{0, 3} {
+		cols := results[j].Row().Columns
+		if !reflect.DeepEqual(cols, []uint64{0, 2, 4, 6, 10, 12, 14, 16, 18}) {
+			t.Fatalf("unexpected columns for a: %v", cols)
+		}
+	}
+	for i, res := range results[1:3] {
 		cols := res.Row().Columns
 		if !reflect.DeepEqual(cols, []uint64{0, 2, 4, 6, 8, 10, 12, 14, 16, 18}) {
 			t.Fatalf("unexpected columns at %d: %v", i, cols)
@@ -274,8 +297,8 @@ func TestBatches(t *testing.T) {
 	}
 	results = resp.Results()
 	cols := results[0].Row().Columns
-	if !reflect.DeepEqual(cols, []uint64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28}) {
-		t.Fatalf("all columns should be greater than -11, but got: %v", cols)
+	if !reflect.DeepEqual(cols, []uint64{0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28}) {
+		t.Fatalf("all columns (but 8) should be greater than -11, but got: %v", cols)
 	}
 	cols = results[1].Row().Columns
 	if !reflect.DeepEqual(cols, []uint64{19, 21, 23, 25, 27}) {

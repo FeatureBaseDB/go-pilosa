@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -50,7 +51,8 @@ func (m *Main) Run() error {
 			return errors.Wrap(err, "decoding config file")
 		}
 	}
-	log.Printf("Config: %+v\n", *m)
+	log.Printf("Flags: %+v\n", *m)
+	log.Printf("Config: %+v\n", *m.Config)
 
 	f, err := os.Open(m.File)
 	if err != nil {
@@ -78,7 +80,10 @@ func (m *Main) Run() error {
 		return errors.Wrap(err, "reading CSV header")
 	}
 	log.Println("Got Header: ", headerRow)
-	fields, header, getIDFn := processHeader(m.Config, index, headerRow)
+	fields, header, getIDFn, err := processHeader(m.Config, index, headerRow)
+	if err != nil {
+		return errors.Wrap(err, "processing header")
+	}
 
 	// this has a non-obvious dependence on the previous line... the fields are set up in the index which comes from the schema
 	client.SyncSchema(schema)
@@ -132,7 +137,7 @@ type valueMeta struct {
 
 type idGetter func(row []string, numRecords uint64) interface{}
 
-func processHeader(config *Config, index *pilosa.Index, headerRow []string) ([]*pilosa.Field, map[string]valueMeta, idGetter) {
+func processHeader(config *Config, index *pilosa.Index, headerRow []string) ([]*pilosa.Field, map[string]valueMeta, idGetter, error) {
 	fields := make([]*pilosa.Field, 0, len(headerRow))
 	header := make(map[string]valueMeta)
 	getIDFn := func(row []string, numRecords uint64) interface{} {
@@ -141,8 +146,21 @@ func processHeader(config *Config, index *pilosa.Index, headerRow []string) ([]*
 	for i, fieldName := range headerRow {
 		if fieldName == config.IDField {
 			idIndex := i
-			getIDFn = func(row []string, numRecords uint64) interface{} {
-				return row[idIndex]
+			switch config.IDType {
+			case "uint64":
+				getIDFn = func(row []string, numRecords uint64) interface{} {
+					uintVal, err := strconv.ParseUint(row[idIndex], 0, 64)
+					if err != nil {
+						return nil
+					}
+					return uintVal
+				}
+			case "string":
+				getIDFn = func(row []string, numRecords uint64) interface{} {
+					return row[idIndex]
+				}
+			default:
+				return nil, nil, nil, errors.Errorf("unknown IDType: %s", config.IDType)
 			}
 			continue
 		}
@@ -159,29 +177,27 @@ func processHeader(config *Config, index *pilosa.Index, headerRow []string) ([]*
 		pilosaField, ok := config.PilosaFields[srcField.TargetField]
 		if !ok {
 			pilosaField = Field{
-				Type:      "string",
+				Type:      "set",
 				CacheType: pilosa.CacheTypeRanked,
 				CacheSize: 100000,
 				Keys:      true,
 			}
 			config.PilosaFields[fieldName] = pilosaField
 		}
+
+		fieldName = srcField.TargetField
 		switch srcField.Type {
 		case "ignore":
 			continue
 		case "int":
 			valGetter = func(val string) interface{} {
-				intVal, err := strconv.Atoi(val)
+				intVal, err := strconv.ParseInt(val, 10, 64)
 				if err != nil {
 					return nil
 				}
 				return intVal
 			}
-			opts := []pilosa.FieldOption{pilosa.OptFieldTypeInt()}
-			if pilosaField.Max != 0 || pilosaField.Min != 0 {
-				opts[0] = pilosa.OptFieldTypeInt(pilosaField.Min, pilosaField.Max)
-			}
-			fields = append(fields, index.Field(fieldName, opts...))
+			fields = append(fields, index.Field(fieldName, pilosaField.MakeOptions()...))
 		case "float":
 			if srcField.Multiplier != 0 {
 				valGetter = func(val string) interface{} {
@@ -200,16 +216,15 @@ func processHeader(config *Config, index *pilosa.Index, headerRow []string) ([]*
 					return int64(floatVal)
 				}
 			}
-			opts := []pilosa.FieldOption{pilosa.OptFieldTypeInt()}
-			if pilosaField.Max != 0 || pilosaField.Min != 0 {
-				opts[0] = pilosa.OptFieldTypeInt(pilosaField.Min, pilosaField.Max)
-			}
-			fields = append(fields, index.Field(fieldName, opts...))
+			fields = append(fields, index.Field(fieldName, pilosaField.MakeOptions()...))
 		case "string":
 			valGetter = func(val string) interface{} {
+				if val == "" {
+					return nil // ignore empty strings
+				}
 				return val
 			}
-			fields = append(fields, index.Field(fieldName, pilosa.OptFieldKeys(pilosaField.Keys), pilosa.OptFieldTypeSet(pilosaField.CacheType, pilosaField.CacheSize)))
+			fields = append(fields, index.Field(fieldName, pilosaField.MakeOptions()...))
 		case "uint64":
 			valGetter = func(val string) interface{} {
 				uintVal, err := strconv.ParseUint(val, 0, 64)
@@ -218,7 +233,7 @@ func processHeader(config *Config, index *pilosa.Index, headerRow []string) ([]*
 				}
 				return uintVal
 			}
-			fields = append(fields, index.Field(fieldName, pilosa.OptFieldKeys(pilosaField.Keys), pilosa.OptFieldTypeSet(pilosaField.CacheType, pilosaField.CacheSize)))
+			fields = append(fields, index.Field(fieldName, pilosaField.MakeOptions()...))
 		}
 		header[fieldName] = valueMeta{
 			valGetter:   valGetter,
@@ -227,7 +242,7 @@ func processHeader(config *Config, index *pilosa.Index, headerRow []string) ([]*
 		}
 	}
 
-	return fields, header, getIDFn
+	return fields, header, getIDFn, nil
 }
 
 func main() {
@@ -240,6 +255,7 @@ func NewConfig() *Config {
 	return &Config{
 		PilosaFields: make(map[string]Field),
 		SourceFields: make(map[string]SourceField),
+		IDType:       "string",
 	}
 }
 
@@ -264,6 +280,22 @@ type Field struct {
 	// TODO time stuff
 }
 
+func (f Field) MakeOptions() (opts []pilosa.FieldOption) {
+	switch f.Type {
+	case "set":
+		opts = append(opts, pilosa.OptFieldKeys(f.Keys), pilosa.OptFieldTypeSet(f.CacheType, f.CacheSize))
+	case "int":
+		if f.Max != 0 || f.Min != 0 {
+			opts = append(opts, pilosa.OptFieldTypeInt(f.Min, f.Max))
+		} else {
+			opts = append(opts, pilosa.OptFieldTypeInt())
+		}
+	default:
+		panic(fmt.Sprintf("unknown pilosa field type: %s", f.Type))
+	}
+	return opts
+}
+
 type SourceField struct {
 	// TargetField is the Pilosa field that this source field should map to.
 	TargetField string `json:"target-field"`
@@ -282,3 +314,6 @@ type SourceField struct {
 	// factor to preserve some amount of precision. If 0 this field won't be used.
 	Multiplier float64 `json:"multiplier"`
 }
+
+// TODO we should validate the Config once it is constructed.
+// What are valid mappings from source fields to pilosa fields?

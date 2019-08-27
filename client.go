@@ -671,10 +671,13 @@ func (c *Client) importValues(field *Field,
 	return errors.Wrap(err, "importing values to nodes")
 }
 
-// ImportValues takes the given integer values and column ids
-// (which must all be in the given shard) and imports them into the
-// given index,field,shard on all nodes which should hold that shard.
-func (c *Client) ImportValues(index, field string, shard uint64, vals []int64, ids []uint64) error {
+// ImportValues takes the given integer values and column ids (which
+// must all be in the given shard) and imports them into the given
+// index,field,shard on all nodes which should hold that shard. It
+// assumes that the ids have been translated from keys if necessary
+// and so tells Pilosa to ignore checking if the index uses column
+// keys.
+func (c *Client) ImportValues(index, field string, shard uint64, vals []int64, ids []uint64, clear bool) error {
 	msg := &pbuf.ImportValueRequest{
 		Index:     index,
 		Field:     field,
@@ -686,7 +689,7 @@ func (c *Client) ImportValues(index, field string, shard uint64, vals []int64, i
 	if err != nil {
 		return errors.Wrap(err, "marshaling to protobuf")
 	}
-	path := fmt.Sprintf("/index/%s/field/%s/import", index, field)
+	path := fmt.Sprintf("/index/%s/field/%s/import?clear=%s&ignoreKeyCheck=true", index, field, strconv.FormatBool(clear))
 	c.logImport(index, path, shard, false, data)
 
 	uris, err := c.GetURIsForShard(index, shard)

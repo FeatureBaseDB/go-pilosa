@@ -864,7 +864,7 @@ func TestImportValues(t *testing.T) {
 		t.Fatalf("syncing schema: %v", err)
 	}
 
-	err = client.ImportValues("go-testindex", "intfield", 0, []int64{1, 2, 3}, []uint64{1, 2, 3})
+	err = client.ImportValues("go-testindex", "intfield", 0, []int64{1, 2, 3}, []uint64{1, 2, 3}, false)
 	if err != nil {
 		t.Fatalf("importing values: %v", err)
 	}

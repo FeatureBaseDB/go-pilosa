@@ -9,6 +9,7 @@ import (
 
 	"github.com/pilosa/go-pilosa"
 	picsv "github.com/pilosa/go-pilosa/cmd/picsv"
+	"github.com/pkg/errors"
 )
 
 func BenchmarkImportCSV(b *testing.B) {
@@ -70,11 +71,12 @@ func getRawData(t testing.TB, file string) {
 
 func TestImportCSV(t *testing.T) {
 	m := picsv.NewMain()
-	m.BatchSize = 1 << 20
+	m.BatchSize = 100000
 	m.Index = "testpicsv"
 	m.File = "marketing-200k.csv"
 	m.Config.SourceFields["age"] = picsv.SourceField{TargetField: "age", Type: "float"}
 	m.Config.PilosaFields["age"] = picsv.Field{Type: "int"}
+	m.Config.IDField = "id"
 	getRawData(t, m.File)
 	client, err := pilosa.NewClient(m.Pilosa)
 	if err != nil {
@@ -136,4 +138,194 @@ func TestImportCSV(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSmallImport(t *testing.T) {
+	m := picsv.NewMain()
+	m.BatchSize = 1 << 20
+	m.Index = "testsample"
+	m.File = "testdata/sample.csv"
+	m.ConfigFile = "config.json"
+	client, err := pilosa.NewClient(m.Pilosa)
+	if err != nil {
+		t.Fatalf("getting client: %v", err)
+	}
+	defer func() {
+		err = client.DeleteIndexByName(m.Index)
+		if err != nil {
+			t.Logf("deleting index: %v", err)
+		}
+	}()
+	config := `{
+"pilosa-fields": {"size": {"type": "set", "keys": true, "cache-type": "ranked", "cache-size": 100000},
+                  "age": {"type": "int"},
+                  "color": {"type": "set", "keys": true},
+                  "result": {"type": "int"},
+                  "dayofweek": {"type": "set", "keys": false, "cache-type": "ranked", "cache-size": 7}
+    },
+"id-field": "ID",
+"id-type": "string",
+"source-fields": {
+        "Size": {"target-field": "size", "type": "string"},
+        "Color": {"target-field": "color", "type": "string"},
+        "Age": {"target-field": "age", "type": "int"},
+        "Result": {"target-field": "result", "type": "float", "multiplier": 100000000},
+        "dayofweek": {"target-field": "dayofweek", "type": "uint64"}
+    }
+}
+`
+	data := `
+ID,Size,Color,Age,Result,dayofweek
+ABDJ,small,green,42,1.13106317,1
+HFZP,large,red,99,30.23959735,2
+HFZP,small,green,99,NA,3
+EJSK,medium,purple,22,20.23959735,1
+EJSK,large,green,35,25.13106317,
+FEFF,,,,,6
+`
+	writeFile(t, m.ConfigFile, config)
+	writeFile(t, m.File, data)
+
+	err = m.Run()
+	if err != nil {
+		t.Fatalf("running ingest: %v", err)
+	}
+
+	schema, err := client.Schema()
+	if err != nil {
+		t.Fatalf("getting schema: %v", err)
+	}
+
+	index := schema.Index(m.Index)
+	size := index.Field("size")
+	color := index.Field("color")
+	age := index.Field("age")
+	result := index.Field("result")
+	day := index.Field("dayofweek")
+
+	tests := []struct {
+		query   pilosa.PQLQuery
+		resType string
+		exp     interface{}
+	}{
+		{
+			query:   index.Count(size.Row("small")),
+			resType: "count",
+			exp:     int64(2),
+		},
+		{
+			query:   size.Row("small"),
+			resType: "rowKeys",
+			exp:     []string{"ABDJ", "HFZP"},
+		},
+		{
+			query:   color.Row("green"),
+			resType: "rowKeys",
+			exp:     []string{"ABDJ", "HFZP", "EJSK"},
+		},
+		{
+			query:   age.Equals(99),
+			resType: "rowKeys",
+			exp:     []string{"HFZP"},
+		},
+		{
+			query:   age.GT(0),
+			resType: "rowKeys",
+			exp:     []string{"ABDJ", "HFZP", "EJSK"},
+		},
+		{
+			query:   result.GT(0),
+			resType: "rowKeys",
+			exp:     []string{"ABDJ", "EJSK"},
+		},
+		{
+			query:   result.GT(100000),
+			resType: "rowKeys",
+			exp:     []string{"ABDJ", "EJSK"},
+		},
+		{
+			query:   day.Row(1),
+			resType: "rowKeys",
+			exp:     []string{"ABDJ", "EJSK"},
+		},
+		{
+			query:   day.Row(6),
+			resType: "rowKeys",
+			exp:     []string{"FEFF"},
+		},
+		{
+			query:   index.Count(day.Row(3)),
+			resType: "count",
+			exp:     int64(1),
+		},
+		{
+			query:   index.Count(day.Row(2)),
+			resType: "count",
+			exp:     int64(1), // not mutually exclusive!
+		},
+		{
+			query:   size.Row(`""`), // TODO... go-pilosa should probably serialize keys into PQL using quotes.
+			resType: "rowKeys",
+			exp:     []string{}, // empty strings are ignored rather than ingested
+		},
+		{
+			query:   color.Row(`""`),
+			resType: "rowKeys",
+			exp:     []string{}, // empty strings are ignored rather than ingested
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			resp, err := client.Query(test.query)
+			if err != nil {
+				t.Fatalf("running query: %v", err)
+			}
+			res := resp.Result()
+			switch test.resType {
+			case "count":
+				if res.Count() != test.exp.(int64) {
+					t.Fatalf("unexpected count %d is not %d", res.Count(), test.exp.(int64))
+				}
+			case "rowKeys":
+				got := res.Row().Keys
+				exp := test.exp.([]string)
+				if err := isPermutationOf(got, exp); err != nil {
+					t.Fatalf("unequal rows %v expected/got:\n%v\n%v", err, exp, got)
+				}
+			}
+		})
+	}
+
+}
+
+func writeFile(t testing.TB, name, contents string) {
+	cf, err := os.Create(name)
+	if err != nil {
+		t.Fatalf("creating config file: %v", err)
+	}
+	_, err = cf.Write([]byte(contents))
+	if err != nil {
+		t.Fatalf("writing config file: %v", err)
+	}
+}
+
+func isPermutationOf(one, two []string) error {
+	if len(one) != len(two) {
+		return errors.Errorf("different lengths %d and %d", len(one), len(two))
+	}
+outer:
+	for _, vOne := range one {
+		for j, vTwo := range two {
+			if vOne == vTwo {
+				two = append(two[:j], two[j+1:]...)
+				continue outer
+			}
+		}
+		return errors.Errorf("%s in one but not two", vOne)
+	}
+	if len(two) != 0 {
+		return errors.Errorf("vals in two but not one: %v", two)
+	}
+	return nil
 }

@@ -6,6 +6,16 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// TODO if using column translation, column ids might get way out of
+// order. Could be worth sorting everything after translation (as an
+// option?). Instead of sorting all simultaneously, it might be faster
+// (more cache friendly) to sort ids and save the swap ops to apply to
+// everything else that needs to be sorted.
+
+// TODO support clearing values? nil values in records are ignored,
+// but perhaps we could have a special type indicating that a bit or
+// value should explicitly be cleared?
+
 type Batch struct {
 	client    *Client
 	index     *Index
@@ -21,8 +31,13 @@ type Batch struct {
 	// values holds the values for each record of an int field
 	values map[string][]int64
 
-	// TODO, support set fields without translation, timestamps, set fields with more than one value per record, mutex, and bool.
-	// also null values
+	// clearValues holds a slice of indexes into b.ids for each
+	// integer field which has nil values. After translation, these
+	// slices will be filled out with the actual column IDs those
+	// indexes pertain to so that they can be cleared.
+	clearValues map[string][]uint64
+
+	// TODO, support timestamps, set fields with more than one value per record, mutex, and bool.
 
 	// for each field, keep a map of key to which record indexes that key mapped to
 	toTranslate map[string]map[string][]int
@@ -66,6 +81,7 @@ func NewBatch(client *Client, size int, index *Index, fields []*Field) *Batch {
 		ids:           make([]uint64, 0, size),
 		rowIDs:        rowIDs,
 		values:        values,
+		clearValues:   make(map[string][]uint64),
 		toTranslate:   tt,
 		toTranslateID: make(map[string][]int),
 	}
@@ -128,6 +144,19 @@ func (b *Batch) Add(rec Row) error {
 			b.rowIDs[field.Name()] = append(b.rowIDs[field.Name()], val)
 		case int64:
 			b.values[field.Name()] = append(b.values[field.Name()], val)
+		case nil:
+			if field.Opts().Type() == FieldTypeInt {
+				b.values[field.Name()] = append(b.values[field.Name()], 0)
+				clearIndexes, ok := b.clearValues[field.Name()]
+				if !ok {
+					clearIndexes = make([]uint64, 0)
+				}
+				clearIndexes = append(clearIndexes, uint64(len(b.ids)-1))
+				b.clearValues[field.Name()] = clearIndexes
+
+			} else {
+				b.rowIDs[field.Name()] = append(b.rowIDs[field.Name()], nilSentinel)
+			}
 		default:
 			return errors.Errorf("Val %v Type %[1]T is not currently supported. Use string, uint64 (row id), or int64 (integer value)", val)
 		}
@@ -212,6 +241,13 @@ func (b *Batch) doTranslation() error {
 			b.client.translator.AddRow(b.index.Name(), fieldName, key, id)
 		}
 	}
+
+	for field, idIndexes := range b.clearValues {
+		for i, index := range idIndexes {
+			idIndexes[i] = b.ids[index]
+		}
+		b.clearValues[field] = idIndexes // TODO this line should be unnecessary?? If it is necessary, is it OK to modify b.clearValues while iterating over it?
+	}
 	return nil
 }
 
@@ -240,6 +276,12 @@ func (b *Batch) doImport() error {
 	return eg.Wait()
 }
 
+// this is kind of bad as it means we can never import column id
+// ^uint64(0) which is a valid column ID. I think it's unlikely to
+// matter much in practice (we could maybe special case it somewhere
+// if needed though).
+var nilSentinel = ^uint64(0)
+
 func (b *Batch) makeFragments() fragments {
 	shardWidth := b.index.shardWidth
 	if shardWidth == 0 {
@@ -247,10 +289,13 @@ func (b *Batch) makeFragments() fragments {
 	}
 	frags := make(fragments)
 	for fname, rowIDs := range b.rowIDs {
-		curShard := ^uint64(0) // impossible sentinel value.
+		curShard := ^uint64(0) // impossible sentinel value for shard.
 		var curBM *roaring.Bitmap
 		for j, _ := range b.ids {
 			col, row := b.ids[j], rowIDs[j]
+			if row == nilSentinel {
+				continue
+			}
 			if col/shardWidth != curShard {
 				curShard = col / shardWidth
 				curBM = frags.GetOrCreate(curShard, fname, "")
@@ -273,7 +318,7 @@ func (b *Batch) importValueData() error {
 	for i := 1; i <= len(b.ids); i++ {
 		// when i==len(b.ids) we ensure that the import logic gets run
 		// by making a fake shard once we're past the last ID
-		recordID := ^uint64(0)
+		recordID := (curShard + 2) * shardWidth
 		if i < len(b.ids) {
 			recordID = b.ids[i]
 		}
@@ -281,9 +326,11 @@ func (b *Batch) importValueData() error {
 			endIdx := i
 			ids := b.ids[startIdx:endIdx]
 			for field, values := range b.values {
+				field := field
+				shard := curShard
 				vslice := values[startIdx:endIdx]
 				eg.Go(func() error {
-					err := b.client.ImportValues(b.index.Name(), field, curShard, vslice, ids)
+					err := b.client.ImportValues(b.index.Name(), field, shard, vslice, ids, false)
 					return errors.Wrapf(err, "importing values for %s", field)
 				})
 			}
@@ -292,7 +339,49 @@ func (b *Batch) importValueData() error {
 		}
 	}
 
-	return errors.Wrap(eg.Wait(), "importing value data")
+	err := eg.Wait()
+	if err != nil {
+		return errors.Wrap(err, "importing value data")
+	}
+
+	// Now we clear any values for which we got a nil.
+	//
+	// TODO we need an endpoint which lets us set and clear
+	// transactionally... this is kind of a hack.
+	maxLen := 0
+	for _, ids := range b.clearValues {
+		if len(ids) > maxLen {
+			maxLen = len(ids)
+		}
+	}
+	eg = errgroup.Group{}
+	values := make([]int64, 0, maxLen)
+	for field, ids := range b.clearValues {
+		// TODO maybe sort ids here
+		curShard := b.ids[0] / shardWidth
+		startIdx := 0
+		for i := 1; i <= len(ids); i++ {
+			recordID := (curShard + 2) * shardWidth
+			if i < len(ids) {
+				recordID = b.ids[i]
+			}
+			if recordID/shardWidth != curShard {
+				endIdx := i
+				idSlice := ids[startIdx:endIdx]
+				values := values[:len(idSlice)]
+				field := field
+				shard := curShard
+				eg.Go(func() error {
+					err := b.client.ImportValues(b.index.Name(), field, shard, values, idSlice, true)
+					return errors.Wrap(err, "clearing values")
+				})
+				startIdx = i
+				curShard = recordID / shardWidth
+			}
+		}
+	}
+
+	return errors.Wrap(eg.Wait(), "importing clear value data")
 }
 
 // reset is called at the end of importing to ready the batch for the
@@ -303,18 +392,21 @@ func (b *Batch) reset() {
 		b.rowIDs[fieldName] = rowIDs[:0]
 		m := b.toTranslate[fieldName]
 		for k := range m {
-			delete(m, k)
+			delete(m, k) // TODO pool these slices
 		}
 	}
 	for k := range b.toTranslateID {
-		delete(b.toTranslateID, k)
+		delete(b.toTranslateID, k) // TODO pool these slices
 	}
 	for k, _ := range b.values {
-		delete(b.values, k)
+		delete(b.values, k) // TODO pool these slices
+	}
+	for k, _ := range b.clearValues {
+		delete(b.clearValues, k) // TODO pool these slices
 	}
 }
 
-type fieldView struct { // TODO rename to fieldview
+type fieldView struct {
 	field string
 	view  string
 }

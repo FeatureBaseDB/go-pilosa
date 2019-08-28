@@ -90,44 +90,37 @@ type Client struct {
 	importLogEncoder encoder
 	logLock          sync.Mutex
 
-	// TODO replace this with something like BoltDB. Need better
-	// concurrent performance, less lock contention. Persistence might
-	// be a nice bonus too.
-	tlock      sync.RWMutex
-	translator *Translator
-
 	// TODO shardNodes needs to be invalidated/updated when cluster topology changes.
 	shardNodes shardNodes
 	tick       *time.Ticker
 }
 
-func (c *Client) translateCol(index, key string) (uint64, bool) {
-	c.tlock.RLock()
-	v, b := c.translator.GetCol(index, key)
-	c.tlock.RUnlock()
-	return v, b
-}
+// func (c *Client) translateCol(index, key string) (uint64, bool) {
+// 	c.tlock.RLock()
+// 	v, b := c.translator.GetCol(index, key)
+// 	c.tlock.RUnlock()
+// 	return v, b
+// }
 
-func (c *Client) translateRow(index, field, key string) (uint64, bool) {
-	c.tlock.RLock()
-	v, b := c.translator.GetRow(index, field, key)
-	c.tlock.RUnlock()
-	return v, b
-}
+// func (c *Client) translateRow(index, field, key string) (uint64, bool) {
+// 	c.tlock.RLock()
+// 	v, b := c.translator.GetRow(index, field, key)
+// 	c.tlock.RUnlock()
+// 	return v, b
+// }
 
-func (c *Client) addTranslateCol(index, key string, value uint64) {
-	c.tlock.Lock()
-	c.translator.AddCol(index, key, value)
-	c.tlock.Unlock()
-}
+// func (c *Client) addTranslateCol(index, key string, value uint64) {
+// 	c.tlock.Lock()
+// 	c.translator.AddCol(index, key, value)
+// 	c.tlock.Unlock()
+// }
 
-func (c *Client) addTranslateRow(index, field, key string, value uint64) {
-	c.tlock.Lock()
-	c.translator.AddRow(index, field, key, value)
-	c.tlock.Unlock()
-}
+// func (c *Client) addTranslateRow(index, field, key string, value uint64) {
+// 	c.tlock.Lock()
+// 	c.translator.AddRow(index, field, key, value)
+// 	c.tlock.Unlock()
+// }
 
-// TODO unexport this, consider unexporting ImportValues, look for other candidates, put a note on translator about it being only used by batch, do something about shardNodes.
 func (c *Client) getURIsForShard(index string, shard uint64) ([]*URI, error) {
 	uris, ok := c.shardNodes.Get(index, shard)
 	if ok {
@@ -238,7 +231,6 @@ func newClientWithOptions(options *ClientOptions) *Client {
 		logger:          log.New(os.Stderr, "go-pilosa ", log.Flags()),
 		coordinatorLock: &sync.RWMutex{},
 
-		translator: NewTranslator(),
 		shardNodes: newShardNodes(),
 	}
 	if options.importLogWriter != nil {

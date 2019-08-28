@@ -83,6 +83,8 @@ type Batch struct {
 	// each record has a different string ID. In that case, a simple
 	// slice of strings would probably work better.
 	toTranslateID map[string][]int
+
+	transCache *Translator
 }
 
 // NewBatch initializes a new Batch object which will use the given
@@ -122,14 +124,15 @@ func NewBatch(client *Client, size int, index *Index, fields []*Field) *Batch {
 		clearValues:   make(map[string][]uint64),
 		toTranslate:   tt,
 		toTranslateID: make(map[string][]int),
+		transCache:    NewTranslator(),
 	}
 }
 
 // Row represents a single record which can be added to a RecordBatch.
 //
 // Note: it is not named "Record" because there is a conflict with
-//another type in this package. This may be rectified by deprecating
-//something or splitting packages in the future.
+// another type in this package. This may be rectified by deprecating
+// something or splitting packages in the future.
 type Row struct {
 	ID     interface{}
 	Values []interface{}
@@ -151,7 +154,7 @@ func (b *Batch) Add(rec Row) error {
 	case uint64:
 		b.ids = append(b.ids, rid)
 	case string:
-		if colID, ok := b.client.translateCol(b.index.Name(), rid); ok {
+		if colID, ok := b.transCache.GetCol(b.index.Name(), rid); ok {
 			b.ids = append(b.ids, colID)
 		} else {
 			ints, ok := b.toTranslateID[rid]
@@ -172,7 +175,7 @@ func (b *Batch) Add(rec Row) error {
 		case string:
 			rowIDs := b.rowIDs[field.Name()]
 			// translate val and append to b.rowIDs[i]
-			if rowID, ok := b.client.translateRow(b.index.Name(), field.Name(), val); ok {
+			if rowID, ok := b.transCache.GetRow(b.index.Name(), field.Name(), val); ok {
 				b.rowIDs[field.Name()] = append(rowIDs, rowID)
 			} else {
 				ints, ok := b.toTranslate[field.Name()][val]
@@ -254,15 +257,13 @@ func (b *Batch) doTranslation() error {
 		if err != nil {
 			return errors.Wrap(err, "translating col keys")
 		}
-		b.client.tlock.Lock()
 		for j, key := range keys {
 			id := ids[j]
 			for _, recordIdx := range b.toTranslateID[key] {
 				b.ids[recordIdx] = id
 			}
-			b.client.translator.AddCol(b.index.Name(), key, id)
+			b.transCache.AddCol(b.index.Name(), key, id)
 		}
-		b.client.tlock.Unlock()
 	} else {
 		keys = make([]string, 0)
 	}
@@ -288,15 +289,13 @@ func (b *Batch) doTranslation() error {
 
 		// fill out missing IDs in local batch records with translated IDs
 		rows := b.rowIDs[fieldName]
-		b.client.tlock.Lock()
 		for j, key := range keys {
 			id := ids[j]
 			for _, recordIdx := range tt[key] {
 				rows[recordIdx] = id
 			}
-			b.client.translator.AddRow(b.index.Name(), fieldName, key, id)
+			b.transCache.AddRow(b.index.Name(), fieldName, key, id)
 		}
-		b.client.tlock.Unlock()
 	}
 
 	for _, idIndexes := range b.clearValues {

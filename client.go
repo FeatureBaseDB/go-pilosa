@@ -148,7 +148,7 @@ func (c *Client) getURIsForShard(index string, shard uint64) ([]*URI, error) {
 func (c *Client) runChangeDetection() {
 	c.tick = time.NewTicker(time.Minute)
 
-	for _ = range c.tick.C {
+	for range c.tick.C {
 		c.detectClusterChanges()
 	}
 }

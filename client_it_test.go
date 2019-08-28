@@ -2485,7 +2485,7 @@ func TestTranslateRowKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rowIDs, err := client.translateRowKeys(field, []string{"key1", "key2"})
+	rowIDs, err := client.TranslateRowKeys(field, []string{"key1", "key2"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2506,7 +2506,7 @@ func TestTranslateColKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	colIDs, err := client.translateColumnKeys(keysIndex, []string{"ten", "one-thousand"})
+	colIDs, err := client.TranslateColumnKeys(keysIndex, []string{"ten", "one-thousand"})
 	if err != nil {
 		t.Fatal(err)
 	}

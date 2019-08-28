@@ -633,7 +633,7 @@ func (c *Client) translateRecordsRowKeys(rowKeyIDMap *lru.LRU, field *Field, col
 	}
 	if len(keys) > 0 {
 		// translate missing keys
-		ids, err := c.translateRowKeys(field, keys)
+		ids, err := c.TranslateRowKeys(field, keys)
 		if err != nil {
 			return err
 		}
@@ -670,7 +670,7 @@ func (c *Client) translateRecordsColumnKeys(columnKeyIDMap *lru.LRU, index *Inde
 	}
 	if len(keys) > 0 {
 		// translate missing keys
-		ids, err := c.translateColumnKeys(index, keys)
+		ids, err := c.TranslateColumnKeys(index, keys)
 		if err != nil {
 			return err
 		}
@@ -835,6 +835,18 @@ func (c *Client) importData(uri *URI, path string, data []byte) error {
 	defer resp.Body.Close()
 
 	return nil
+}
+
+// ImportRoaringBitmap can import pre-made bitmaps for a number of
+// different views into the given field/shard. If the view name in the
+// map is an empty string, the standard view will be used.
+func (c *Client) ImportRoaringBitmap(field *Field, shard uint64, views map[string]*roaring.Bitmap, clear bool) error {
+	uris, err := c.getURIsForShard(field.index.Name(), shard)
+	if err != nil {
+		return errors.Wrap(err, "getting URIs for import")
+	}
+	err = c.importRoaringBitmap(uris[0], field, shard, views, &ImportOptions{clear: clear})
+	return errors.Wrap(err, "importing bitmap")
 }
 
 func (c *Client) importRoaringBitmap(uri *URI, field *Field, shard uint64, views viewImports, options *ImportOptions) error {
@@ -1156,7 +1168,7 @@ func (c *Client) augmentHeaders(headers map[string]string) map[string]string {
 	return headers
 }
 
-func (c *Client) translateRowKeys(field *Field, keys []string) ([]uint64, error) {
+func (c *Client) TranslateRowKeys(field *Field, keys []string) ([]uint64, error) {
 	req := &pbuf.TranslateKeysRequest{
 		Index: field.index.name,
 		Field: field.name,
@@ -1165,7 +1177,7 @@ func (c *Client) translateRowKeys(field *Field, keys []string) ([]uint64, error)
 	return c.translateKeys(req, keys)
 }
 
-func (c *Client) translateColumnKeys(index *Index, keys []string) ([]uint64, error) {
+func (c *Client) TranslateColumnKeys(index *Index, keys []string) ([]uint64, error) {
 	req := &pbuf.TranslateKeysRequest{
 		Index: index.name,
 		Keys:  keys,

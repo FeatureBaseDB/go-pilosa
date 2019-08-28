@@ -273,7 +273,7 @@ func (b *Batch) doTranslation() error {
 		for k := range b.toTranslateID {
 			keys = append(keys, k)
 		}
-		ids, err := b.client.translateColumnKeys(b.index, keys)
+		ids, err := b.client.TranslateColumnKeys(b.index, keys)
 		if err != nil {
 			return errors.Wrap(err, "translating col keys")
 		}
@@ -304,7 +304,7 @@ func (b *Batch) doTranslation() error {
 		}
 
 		// translate keys from Pilosa
-		ids, err := b.client.translateRowKeys(b.headerMap[fieldName], keys)
+		ids, err := b.client.TranslateRowKeys(b.headerMap[fieldName], keys)
 		if err != nil {
 			return errors.Wrap(err, "translating row keys")
 		}
@@ -335,16 +335,11 @@ func (b *Batch) doImport() error {
 
 	frags := b.makeFragments()
 	for shard, viewMap := range frags {
-		uris, err := b.client.getURIsForShard(b.index.Name(), shard)
-		uri := uris[0]
-		if err != nil {
-			return errors.Wrap(err, "getting uris for shard")
-		}
 		for fieldView, bitmap := range viewMap {
 			fieldView := fieldView
 			bitmap := bitmap
 			eg.Go(func() error {
-				err := b.client.importRoaringBitmap(uri, b.index.Field(fieldView.field), shard, map[string]*roaring.Bitmap{"": bitmap}, &ImportOptions{})
+				err := b.client.ImportRoaringBitmap(b.index.Field(fieldView.field), shard, map[string]*roaring.Bitmap{"": bitmap}, false)
 				return errors.Wrapf(err, "importing data for %s", fieldView.field)
 			})
 		}

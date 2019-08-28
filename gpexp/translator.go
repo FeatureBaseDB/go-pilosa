@@ -1,4 +1,4 @@
-package pilosa
+package gpexp
 
 type Translator interface {
 	GetCol(index, key string) (uint64, bool, error)

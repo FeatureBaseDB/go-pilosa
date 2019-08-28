@@ -1,24 +1,25 @@
-package pilosa
+package gpexp
 
 import (
 	"reflect"
 	"strconv"
 	"testing"
 
+	"github.com/pilosa/go-pilosa"
 	"github.com/pkg/errors"
 )
 
 // TODO test against cluster
 
 func TestBatches(t *testing.T) {
-	client := DefaultClient()
-	schema := NewSchema()
+	client := pilosa.DefaultClient()
+	schema := pilosa.NewSchema()
 	idx := schema.Index("gopilosatest-blah")
-	fields := make([]*Field, 4)
-	fields[0] = idx.Field("zero", OptFieldKeys(true))
-	fields[1] = idx.Field("one", OptFieldKeys(true))
-	fields[2] = idx.Field("two", OptFieldKeys(true))
-	fields[3] = idx.Field("three", OptFieldTypeInt())
+	fields := make([]*pilosa.Field, 4)
+	fields[0] = idx.Field("zero", pilosa.OptFieldKeys(true))
+	fields[1] = idx.Field("one", pilosa.OptFieldKeys(true))
+	fields[2] = idx.Field("two", pilosa.OptFieldKeys(true))
+	fields[3] = idx.Field("three", pilosa.OptFieldTypeInt())
 	err := client.SyncSchema(schema)
 	if err != nil {
 		t.Fatalf("syncing schema: %v", err)
@@ -317,11 +318,11 @@ func TestBatches(t *testing.T) {
 }
 
 func TestBatchesStringIDs(t *testing.T) {
-	client := DefaultClient()
-	schema := NewSchema()
-	idx := schema.Index("gopilosatest-blah", OptIndexKeys(true))
-	fields := make([]*Field, 1)
-	fields[0] = idx.Field("zero", OptFieldKeys(true))
+	client := pilosa.DefaultClient()
+	schema := pilosa.NewSchema()
+	idx := schema.Index("gopilosatest-blah", pilosa.OptIndexKeys(true))
+	fields := make([]*pilosa.Field, 1)
+	fields[0] = idx.Field("zero", pilosa.OptFieldKeys(true))
 	err := client.SyncSchema(schema)
 	if err != nil {
 		t.Fatalf("syncing schema: %v", err)

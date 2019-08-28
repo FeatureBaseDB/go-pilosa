@@ -412,6 +412,10 @@ func NewIndex(name string) *Index {
 	}
 }
 
+func (idx *Index) ShardWidth() uint64 {
+	return idx.shardWidth
+}
+
 // Fields return a copy of the fields in this index
 func (idx *Index) Fields() map[string]*Field {
 	result := make(map[string]*Field)

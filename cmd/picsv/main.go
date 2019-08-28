@@ -12,6 +12,7 @@ import (
 
 	"github.com/jaffee/commandeer"
 	"github.com/pilosa/go-pilosa"
+	"github.com/pilosa/go-pilosa/gpexp"
 	"github.com/pkg/errors"
 )
 
@@ -87,11 +88,11 @@ func (m *Main) Run() error {
 
 	// this has a non-obvious dependence on the previous line... the fields are set up in the index which comes from the schema
 	client.SyncSchema(schema)
-	batch, err := pilosa.NewBatch(client, m.BatchSize, index, fields)
+	batch, err := gpexp.NewBatch(client, m.BatchSize, index, fields)
 	if err != nil {
 		return errors.Wrap(err, "getting new batch")
 	}
-	record := pilosa.Row{
+	record := gpexp.Row{
 		Values: make([]interface{}, len(header)),
 	}
 
@@ -107,7 +108,7 @@ func (m *Main) Run() error {
 			}
 		}
 		err := batch.Add(record)
-		if err == pilosa.ErrBatchNowFull {
+		if err == gpexp.ErrBatchNowFull {
 			err := batch.Import()
 			if err != nil {
 				return errors.Wrap(err, "importing")

@@ -1,6 +1,7 @@
-package pilosa
+package gpexp
 
 import (
+	"github.com/pilosa/go-pilosa"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -50,10 +51,10 @@ type RecordBatch interface {
 //
 // nil values are ignored.
 type Batch struct {
-	client    *Client
-	index     *Index
-	header    []*Field
-	headerMap map[string]*Field
+	client    *pilosa.Client
+	index     *pilosa.Index
+	header    []*pilosa.Field
+	headerMap map[string]*pilosa.Field
 
 	// ids is a slice of length batchSize of record IDs
 	ids []uint64
@@ -101,11 +102,11 @@ func OptTranslator(t Translator) BatchOption {
 // before returning ErrBatchNowFull. The positions of the Fields in
 // 'fields' correspond to the positions of values in the Row's Values
 // passed to Batch.Add().
-func NewBatch(client *Client, size int, index *Index, fields []*Field, opts ...BatchOption) (*Batch, error) {
+func NewBatch(client *pilosa.Client, size int, index *pilosa.Index, fields []*pilosa.Field, opts ...BatchOption) (*Batch, error) {
 	if len(fields) == 0 || size == 0 {
 		return nil, errors.New("can't batch with no fields or batch size")
 	}
-	headerMap := make(map[string]*Field, len(fields))
+	headerMap := make(map[string]*pilosa.Field, len(fields))
 	rowIDs := make(map[string][]uint64)
 	values := make(map[string][]int64)
 	tt := make(map[string]map[string][]int)
@@ -113,12 +114,12 @@ func NewBatch(client *Client, size int, index *Index, fields []*Field, opts ...B
 		headerMap[field.Name()] = field
 		opts := field.Opts()
 		switch opts.Type() {
-		case FieldTypeDefault, FieldTypeSet:
+		case pilosa.FieldTypeDefault, pilosa.FieldTypeSet:
 			if opts.Keys() {
 				tt[field.Name()] = make(map[string][]int)
 			}
 			rowIDs[field.Name()] = make([]uint64, 0, size)
-		case FieldTypeInt:
+		case pilosa.FieldTypeInt:
 			values[field.Name()] = make([]int64, 0, size)
 		}
 	}
@@ -211,7 +212,7 @@ func (b *Batch) Add(rec Row) error {
 		case int64:
 			b.values[field.Name()] = append(b.values[field.Name()], val)
 		case nil:
-			if field.Opts().Type() == FieldTypeInt {
+			if field.Opts().Type() == pilosa.FieldTypeInt {
 				b.values[field.Name()] = append(b.values[field.Name()], 0)
 				clearIndexes, ok := b.clearValues[field.Name()]
 				if !ok {
@@ -357,9 +358,9 @@ func (b *Batch) doImport() error {
 var nilSentinel = ^uint64(0)
 
 func (b *Batch) makeFragments() fragments {
-	shardWidth := b.index.shardWidth
+	shardWidth := b.index.ShardWidth()
 	if shardWidth == 0 {
-		shardWidth = DefaultShardWidth
+		shardWidth = pilosa.DefaultShardWidth
 	}
 	frags := make(fragments)
 	for fname, rowIDs := range b.rowIDs {
@@ -381,9 +382,9 @@ func (b *Batch) makeFragments() fragments {
 }
 
 func (b *Batch) importValueData() error {
-	shardWidth := b.index.shardWidth
+	shardWidth := b.index.ShardWidth()
 	if shardWidth == 0 {
-		shardWidth = DefaultShardWidth
+		shardWidth = pilosa.DefaultShardWidth
 	}
 
 	eg := errgroup.Group{}

@@ -29,7 +29,10 @@ func TestBatches(t *testing.T) {
 			t.Logf("problem cleaning up from test: %v", err)
 		}
 	}()
-	b := NewBatch(client, 10, idx, fields)
+	b, err := NewBatch(client, 10, idx, fields)
+	if err != nil {
+		t.Fatalf("getting new batch: %v", err)
+	}
 	r := Row{Values: make([]interface{}, 4)}
 
 	for i := 0; i < 9; i++ {
@@ -330,7 +333,10 @@ func TestBatchesStringIDs(t *testing.T) {
 		}
 	}()
 
-	b := NewBatch(client, 3, idx, fields)
+	b, err := NewBatch(client, 3, idx, fields)
+	if err != nil {
+		t.Fatalf("getting new batch: %v", err)
+	}
 
 	r := Row{Values: make([]interface{}, 1)}
 

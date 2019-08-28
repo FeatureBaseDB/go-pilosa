@@ -87,7 +87,10 @@ func (m *Main) Run() error {
 
 	// this has a non-obvious dependence on the previous line... the fields are set up in the index which comes from the schema
 	client.SyncSchema(schema)
-	batch := pilosa.NewBatch(client, m.BatchSize, index, fields)
+	batch, err := pilosa.NewBatch(client, m.BatchSize, index, fields)
+	if err != nil {
+		return errors.Wrap(err, "getting new batch")
+	}
 	record := pilosa.Row{
 		Values: make([]interface{}, len(header)),
 	}

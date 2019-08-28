@@ -84,7 +84,16 @@ type Batch struct {
 	// slice of strings would probably work better.
 	toTranslateID map[string][]int
 
-	transCache *Translator
+	transCache Translator
+}
+
+type BatchOption func(b *Batch) error
+
+func OptTranslator(t Translator) BatchOption {
+	return func(b *Batch) error {
+		b.transCache = t
+		return nil
+	}
 }
 
 // NewBatch initializes a new Batch object which will use the given
@@ -92,9 +101,9 @@ type Batch struct {
 // before returning ErrBatchNowFull. The positions of the Fields in
 // 'fields' correspond to the positions of values in the Row's Values
 // passed to Batch.Add().
-func NewBatch(client *Client, size int, index *Index, fields []*Field) *Batch {
+func NewBatch(client *Client, size int, index *Index, fields []*Field, opts ...BatchOption) (*Batch, error) {
 	if len(fields) == 0 || size == 0 {
-		panic("can't batch with no fields or batch size")
+		return nil, errors.New("can't batch with no fields or batch size")
 	}
 	headerMap := make(map[string]*Field, len(fields))
 	rowIDs := make(map[string][]uint64)
@@ -113,7 +122,7 @@ func NewBatch(client *Client, size int, index *Index, fields []*Field) *Batch {
 			values[field.Name()] = make([]int64, 0, size)
 		}
 	}
-	return &Batch{
+	b := &Batch{
 		client:        client,
 		header:        fields,
 		headerMap:     headerMap,
@@ -124,8 +133,15 @@ func NewBatch(client *Client, size int, index *Index, fields []*Field) *Batch {
 		clearValues:   make(map[string][]uint64),
 		toTranslate:   tt,
 		toTranslateID: make(map[string][]int),
-		transCache:    NewTranslator(),
+		transCache:    NewMapTranslator(),
 	}
+	for _, opt := range opts {
+		err := opt(b)
+		if err != nil {
+			return nil, errors.Wrap(err, "applying options")
+		}
+	}
+	return b, nil
 }
 
 // Row represents a single record which can be added to a RecordBatch.
@@ -154,7 +170,9 @@ func (b *Batch) Add(rec Row) error {
 	case uint64:
 		b.ids = append(b.ids, rid)
 	case string:
-		if colID, ok := b.transCache.GetCol(b.index.Name(), rid); ok {
+		if colID, ok, err := b.transCache.GetCol(b.index.Name(), rid); err != nil {
+			return errors.Wrap(err, "translating column")
+		} else if ok {
 			b.ids = append(b.ids, colID)
 		} else {
 			ints, ok := b.toTranslateID[rid]
@@ -175,7 +193,9 @@ func (b *Batch) Add(rec Row) error {
 		case string:
 			rowIDs := b.rowIDs[field.Name()]
 			// translate val and append to b.rowIDs[i]
-			if rowID, ok := b.transCache.GetRow(b.index.Name(), field.Name(), val); ok {
+			if rowID, ok, err := b.transCache.GetRow(b.index.Name(), field.Name(), val); err != nil {
+				return errors.Wrap(err, "translating row")
+			} else if ok {
 				b.rowIDs[field.Name()] = append(rowIDs, rowID)
 			} else {
 				ints, ok := b.toTranslate[field.Name()][val]
@@ -257,12 +277,14 @@ func (b *Batch) doTranslation() error {
 		if err != nil {
 			return errors.Wrap(err, "translating col keys")
 		}
+		if err := b.transCache.AddCols(b.index.Name(), keys, ids); err != nil {
+			return errors.Wrap(err, "adding cols to cache")
+		}
 		for j, key := range keys {
 			id := ids[j]
 			for _, recordIdx := range b.toTranslateID[key] {
 				b.ids[recordIdx] = id
 			}
-			b.transCache.AddCol(b.index.Name(), key, id)
 		}
 	} else {
 		keys = make([]string, 0)
@@ -286,6 +308,9 @@ func (b *Batch) doTranslation() error {
 		if err != nil {
 			return errors.Wrap(err, "translating row keys")
 		}
+		if err := b.transCache.AddRows(b.index.Name(), fieldName, keys, ids); err != nil {
+			return errors.Wrap(err, "adding rows to cache")
+		}
 
 		// fill out missing IDs in local batch records with translated IDs
 		rows := b.rowIDs[fieldName]
@@ -294,7 +319,6 @@ func (b *Batch) doTranslation() error {
 			for _, recordIdx := range tt[key] {
 				rows[recordIdx] = id
 			}
-			b.transCache.AddRow(b.index.Name(), fieldName, key, id)
 		}
 	}
 

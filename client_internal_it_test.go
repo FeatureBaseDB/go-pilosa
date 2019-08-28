@@ -174,7 +174,7 @@ func TestImportWithReplayErrors(t *testing.T) {
 
 func TestDetectClusterChanges(t *testing.T) {
 	c := getClient()
-
+	defer c.Close()
 	c.shardNodes.data["blah"] = make(map[uint64][]*URI)
 	c.shardNodes.data["blah"][1] = []*URI{{scheme: "zzz"}}
 

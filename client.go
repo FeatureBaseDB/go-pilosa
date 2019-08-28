@@ -90,36 +90,10 @@ type Client struct {
 	importLogEncoder encoder
 	logLock          sync.Mutex
 
-	// TODO shardNodes needs to be invalidated/updated when cluster topology changes.
 	shardNodes shardNodes
 	tick       *time.Ticker
+	done       chan struct{}
 }
-
-// func (c *Client) translateCol(index, key string) (uint64, bool) {
-// 	c.tlock.RLock()
-// 	v, b := c.translator.GetCol(index, key)
-// 	c.tlock.RUnlock()
-// 	return v, b
-// }
-
-// func (c *Client) translateRow(index, field, key string) (uint64, bool) {
-// 	c.tlock.RLock()
-// 	v, b := c.translator.GetRow(index, field, key)
-// 	c.tlock.RUnlock()
-// 	return v, b
-// }
-
-// func (c *Client) addTranslateCol(index, key string, value uint64) {
-// 	c.tlock.Lock()
-// 	c.translator.AddCol(index, key, value)
-// 	c.tlock.Unlock()
-// }
-
-// func (c *Client) addTranslateRow(index, field, key string, value uint64) {
-// 	c.tlock.Lock()
-// 	c.translator.AddRow(index, field, key, value)
-// 	c.tlock.Unlock()
-// }
 
 func (c *Client) getURIsForShard(index string, shard uint64) ([]*URI, error) {
 	uris, ok := c.shardNodes.Get(index, shard)
@@ -139,11 +113,20 @@ func (c *Client) getURIsForShard(index string, shard uint64) ([]*URI, error) {
 }
 
 func (c *Client) runChangeDetection() {
-	c.tick = time.NewTicker(time.Minute)
-
-	for range c.tick.C {
-		c.detectClusterChanges()
+	for {
+		select {
+		case <-c.tick.C:
+			c.detectClusterChanges()
+		case <-c.done:
+			return
+		}
 	}
+}
+
+func (c *Client) Close() error {
+	c.tick.Stop()
+	close(c.done)
+	return nil
 }
 
 // detectClusterChanges chooses a random index and shard from the
@@ -232,6 +215,8 @@ func newClientWithOptions(options *ClientOptions) *Client {
 		coordinatorLock: &sync.RWMutex{},
 
 		shardNodes: newShardNodes(),
+		tick:       time.NewTicker(time.Minute),
+		done:       make(chan struct{}, 0),
 	}
 	if options.importLogWriter != nil {
 		c.importLogEncoder = newImportLogEncoder(options.importLogWriter)
@@ -245,6 +230,7 @@ func newClientWithOptions(options *ClientOptions) *Client {
 	c.minRetrySleepTime = 1 * time.Second
 	c.maxRetrySleepTime = 2 * time.Minute
 	c.importManager = newRecordImportManager(c)
+	go c.runChangeDetection()
 	return c
 
 }

@@ -184,7 +184,7 @@ func (b *Batch) Add(rec Row) error {
 			b.toTranslateID[rid] = ints
 			b.ids = append(b.ids, 0)
 		}
-	default:
+	default: // TODO support nil ID as being auto-allocated.
 		return errors.Errorf("unsupported id type %T value %v", rid, rid)
 	}
 

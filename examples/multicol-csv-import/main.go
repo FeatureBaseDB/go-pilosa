@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"math"
 	"os"
@@ -19,22 +20,69 @@ import (
 
 // Adapt these to match the CSV file
 const HasHeader = true
-const IndexName = "my-index"
+const IndexName = "ai"
 const IndexKeys = true
 const FieldDef = `[
-	{"name": "size", "opts": {"keys": true}},
-	{"name": "color", "opts": {"keys": true}},
+	{"name": "reporting_country", "opts": {"keys": true}},
+	{"name": "reporting_region", "opts": {"keys": true}},
+	{"name": "eligible_for_30d_trial", "opts": {"category": "bool"}},
+	{"name": "product", "opts": {"keys": true}},
+	{"name": "product_category", "opts": {"keys": true}},
+	{"name": "product_subcategory", "opts": {"keys": true}},
+	{"name": "registration_funnel", "opts": {"keys": true}},
+	{"name": "locale", "opts": {"keys": true}},
+	{"name": "gender", "opts": {"keys": true}},
 	{"name": "age", "opts": {
 		"int_min": 0,
 		"int_max": 150
 	}},
-	{"name": "result", "opts": {
-		"float_min": 1.13106317,
-		"float_max": 30.23959735,
-		"float_frac": 8
-	}}
+	{"name": "is_dau", "opts": {"category": "bool"}},
+	{"name": "is_wau", "opts": {"category": "bool"}},
+	{"name": "is_mau", "opts": {"category": "bool"}},
+	{"name": "days_active", "opts": {
+		"int_min": 0,
+		"int_max": 50
+	}},
+	{"name": "total_streams", "opts": {
+		"int_min": 0,
+		"int_max": 1000000
+	}},
+	{"name": "total_min_played", "opts": {
+		"int_min": 0,
+		"int_max": 10000000
+	}},
+	{"name": "is_fraud", "opts": {"category": "bool"}},
+	{"name": "days_since_account_creation", "opts": {
+		"int_min": 0,
+		"int_max": 5000
+	}},
+	{"name": "top_metagenre", "opts": {"keys": true}},
+	{"name": "unique_platform_types", "opts": {
+		"int_min": 0,
+		"int_max": 100
+	}},
+	{"name": "unique_platform_type_and_os", "opts": {"keys": true}}
 ]
 `
+
+// const FieldDef = `[
+// 	{"name": "reporting_country", "opts": {"keys": true}},
+// 	{"name": "reporting_region", "opts": {"keys": true}},
+// 	{"name": "eligible_for_30d_trial", "opts": {"category": "bool"}},
+// 	{"name": "product", "opts": {"keys": true}},
+// 	{"name": "locale", "opts": {"keys": true}},
+// 	{"name": "gender", "opts": {"keys": true}},
+// 	{"name": "age", "opts": {
+// 		"int_min": 0,
+// 		"int_max": 150
+// 	}},
+// 	{"name": "is_dau", "opts": {"category": "bool"}},
+// 	{"name": "days_active", "opts": {
+// 		"int_min": 0,
+// 		"int_max": 5000
+// 	}}
+// ]
+// `
 
 const ThreadCount = 0 // 0 == Available CPU count
 const BatchSize = 100000
@@ -43,15 +91,27 @@ const ImportThreadCount = 2
 // Not queries cannot be used when roaring imports is enabled
 const EnableRoaringImport = true
 
-func defineFields(index *pilosa.Index) ([]*FieldInfo, error) {
+func defineFields(index *pilosa.Index, confPath string) ([]*FieldInfo, error) {
 	fieldInfos := []*FieldInfo{}
-	err := json.Unmarshal([]byte(FieldDef), &fieldInfos)
+	confData := []byte(FieldDef)
+	var err error
+	if len(confPath) > 1{
+		confData, err = ioutil.ReadFile(confPath)
+		if err != nil {
+			return nil, err
+		}
+	}
+	err = json.Unmarshal(confData, &fieldInfos)
 	if err != nil {
 		return nil, err
 	}
 
 	for i, fi := range fieldInfos {
-		if fi.Opts.FloatFrac > 0 {
+		if fi.Opts.Category == "bool" {
+			// this is a bool field
+			fi.field = index.Field(fi.Name, pilosa.OptFieldTypeBool())
+			fi.csvFieldType = BoolField
+		} else if fi.Opts.FloatFrac > 0 {
 			// this is a float field
 			pow := math.Pow10(fi.Opts.FloatFrac)
 			intMin := int64(fi.Opts.FloatMin * pow)
@@ -78,7 +138,7 @@ func defineFields(index *pilosa.Index) ([]*FieldInfo, error) {
 	return fieldInfos, nil
 }
 
-func importCSV(addr string, path string, threadCount int) error {
+func importCSV(addr string, confPath string, dataPath string, threadCount int) error {
 	client, err := pilosa.NewClient(addr)
 	if err != nil {
 		return err
@@ -90,7 +150,7 @@ func importCSV(addr string, path string, threadCount int) error {
 		return err
 	}
 	index := schema.Index(IndexName, pilosa.OptIndexKeys(IndexKeys))
-	fieldInfos, err := defineFields(index)
+	fieldInfos, err := defineFields(index, confPath)
 	if err != nil {
 		return err
 	}
@@ -107,15 +167,19 @@ func importCSV(addr string, path string, threadCount int) error {
 	for i := 0; i < threadCount; i++ {
 		go func(ch <-chan *FieldInfo) {
 			for fi := range ch {
-				iter, err := NewIterator(path, fi, HasHeader, IndexKeys)
+				iter, err := NewIterator(dataPath, fi, HasHeader, IndexKeys)
 				if err != nil {
 					log.Fatal(err)
 				}
 				log.Printf("Importing field: %s\n", fi.field.Name())
+				var enabled = EnableRoaringImport
+				if fi.Opts.Category == "bool" {
+					enabled = false
+				}
 				err = client.ImportField(fi.field, iter,
 					pilosa.OptImportBatchSize(BatchSize),
 					pilosa.OptImportThreadCount(ThreadCount),
-					pilosa.OptImportRoaring(EnableRoaringImport),
+					pilosa.OptImportRoaring(enabled),
 					pilosa.OptImportStatusChannel(statusChan),
 				)
 				wg.Done()
@@ -162,11 +226,12 @@ func importCSV(addr string, path string, threadCount int) error {
 
 func main() {
 	if len(os.Args) != 3 {
-		fmt.Printf("Usage: %s pilosa_address csv_file\n", os.Args[0])
+		fmt.Printf("Usage: %s pilosa_address conf csv_file\n", os.Args[0])
 		os.Exit(1)
 	}
 	addr := os.Args[1]
-	path := os.Args[2]
+	confPath := os.Args[2]
+	dataPath := os.Args[3]
 
 	threadCount := ThreadCount
 	if threadCount == 0 {
@@ -175,10 +240,11 @@ func main() {
 
 	fmt.Printf("Pilosa Address: %s\n", addr)
 	fmt.Printf("Thread Count: %d\n", threadCount)
-	fmt.Printf("CSV Path: %s\n", path)
+	fmt.Printf("conf Path: %s\n", confPath)
+	fmt.Printf("CSV Path: %s\n", dataPath)
 	fmt.Println()
 
-	err := importCSV(addr, path, threadCount)
+	err := importCSV(addr, confPath, dataPath, threadCount)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -190,9 +256,11 @@ const (
 	SetField CSVFieldType = iota
 	IntField
 	FloatField
+	BoolField
 )
 
 type FieldOptsInfo struct {
+	Category  string  `json:"category"`
 	Keys      bool    `json:"keys"`
 	IntMin    int     `json:"int_min"`
 	IntMax    int     `json:"int_max"`
@@ -259,6 +327,35 @@ func (c *MultiColCSVRecordIterator) NextRecord() (pilosa.Record, error) {
 					}
 				}
 				switch c.fieldInfo.csvFieldType {
+				case BoolField:
+					col := pilosa.Column{}
+					if c.indexKeys {
+						col.ColumnKey = cols[0]
+					} else {
+						col.ColumnID = colID
+					}
+					if c.fieldInfo.Opts.Keys {
+						value, err := strconv.ParseBool(valueCol)
+						if err != nil {
+							continue
+						}
+						var bitSetVar = "0"
+						if value {
+							bitSetVar = "1"
+						}
+						col.RowKey = bitSetVar
+					} else {
+						value, err := strconv.ParseBool(valueCol)
+						if err != nil {
+							return nil, err
+						}
+						var bitSetVar uint64
+						if value {
+							bitSetVar = 1
+						}
+						col.RowID = bitSetVar
+					}
+					return col, nil
 				case SetField:
 					col := pilosa.Column{}
 					if c.indexKeys {

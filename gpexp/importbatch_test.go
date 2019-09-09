@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/pilosa/go-pilosa"
 	"github.com/pkg/errors"
@@ -482,4 +483,113 @@ outer:
 		return errors.Errorf("vals in two but not one: %v", two)
 	}
 	return nil
+}
+
+func TestQuantizedTime(t *testing.T) {
+	cases := []struct {
+		name    string
+		time    time.Time
+		year    string
+		month   string
+		day     string
+		hour    string
+		quantum pilosa.TimeQuantum
+		exp     []string
+		expErr  string
+	}{
+		{
+			name:   "no time quantum",
+			exp:    []string{},
+			expErr: "",
+		},
+		{
+			name:    "no data",
+			quantum: pilosa.TimeQuantumYear,
+			expErr:  "no data set for year",
+		},
+		{
+			name:    "timestamp",
+			time:    time.Date(2013, time.October, 16, 17, 34, 43, 0, time.FixedZone("UTC-5", -5*60*60)),
+			quantum: "YMDH",
+			exp:     []string{"2013", "201310", "20131016", "2013101617"},
+		},
+		{
+			name:    "timestamp-less-granular",
+			time:    time.Date(2013, time.October, 16, 17, 34, 43, 0, time.FixedZone("UTC-5", -5*60*60)),
+			quantum: "YM",
+			exp:     []string{"2013", "201310"},
+		},
+		{
+			name:    "timestamp-mid-granular",
+			time:    time.Date(2013, time.October, 16, 17, 34, 43, 0, time.FixedZone("UTC-5", -5*60*60)),
+			quantum: "MD",
+			exp:     []string{"201310", "20131016"},
+		},
+		{
+			name:    "justyear",
+			year:    "2013",
+			quantum: "Y",
+			exp:     []string{"2013"},
+		},
+		{
+			name:    "justyear-wantmonth",
+			year:    "2013",
+			quantum: "YM",
+			expErr:  "no data set for month",
+		},
+		{
+			name:    "timestamp-changeyear",
+			time:    time.Date(2013, time.October, 16, 17, 34, 43, 0, time.FixedZone("UTC-5", -5*60*60)),
+			year:    "2019",
+			quantum: "YMDH",
+			exp:     []string{"2019", "201910", "20191016", "2019101617"},
+		},
+		{
+			name:    "yearmonthdayhour",
+			year:    "2013",
+			month:   "10",
+			day:     "16",
+			hour:    "17",
+			quantum: "YMDH",
+			exp:     []string{"2013", "201310", "20131016", "2013101617"},
+		},
+		{
+			name:    "timestamp-changehour",
+			time:    time.Date(2013, time.October, 16, 17, 34, 43, 0, time.FixedZone("UTC-5", -5*60*60)),
+			hour:    "05",
+			quantum: "MDH",
+			exp:     []string{"201310", "20131016", "2013101605"},
+		},
+	}
+
+	for i, test := range cases {
+		t.Run(test.name+strconv.Itoa(i), func(t *testing.T) {
+			tq := &QuantizedTime{}
+			var zt time.Time
+			if zt != test.time {
+				tq.Set(test.time)
+			}
+			if test.year != "" {
+				tq.SetYear(test.year)
+			}
+			if test.month != "" {
+				tq.SetMonth(test.month)
+			}
+			if test.day != "" {
+				tq.SetDay(test.day)
+			}
+			if test.hour != "" {
+				tq.SetHour(test.hour)
+			}
+
+			views, err := tq.views(test.quantum)
+			if !reflect.DeepEqual(views, test.exp) {
+				t.Errorf("unexpected views, got/want:\n%v\n%v\n", views, test.exp)
+			}
+			if (err != nil && err.Error() != test.expErr) || (err == nil && test.expErr != "") {
+				t.Errorf("unexpected error, got/want:\n%v\n%s\n", err, test.expErr)
+			}
+		})
+	}
+
 }

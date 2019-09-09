@@ -1,6 +1,8 @@
 package gpexp
 
 import (
+	"time"
+
 	"github.com/pilosa/go-pilosa"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
@@ -153,6 +155,72 @@ func NewBatch(client *pilosa.Client, size int, index *pilosa.Index, fields []*pi
 type Row struct {
 	ID     interface{}
 	Values []interface{}
+	Time   *QuantizedTime
+}
+
+// QuantizedTime represents a moment in time down to some granularity
+// (year, month, day, or hour).
+type QuantizedTime struct {
+	ymdh [10]byte
+}
+
+// Set sets the Quantized time to the given timestamp (down to hour
+// granularity).
+func (qt *QuantizedTime) Set(t time.Time) {
+	copy(qt.ymdh[:], t.Format("2006010215"))
+}
+
+// SetYear sets the quantized time's year, but leaves month, day, and
+// hour untouched.
+func (qt *QuantizedTime) SetYear(year string) {
+	copy(qt.ymdh[:4], year)
+}
+
+// SetMonth sets the QuantizedTime's month, but leaves year, day, and
+// hour untouched.
+func (qt *QuantizedTime) SetMonth(month string) {
+	copy(qt.ymdh[4:6], month)
+}
+
+// SetDay sets the QuantizedTime's day, but leaves year, month, and
+// hour untouched.
+func (qt *QuantizedTime) SetDay(day string) {
+	copy(qt.ymdh[6:8], day)
+}
+
+// SetHour sets the QuantizedTime's hour, but leaves year, month, and
+// day untouched.
+func (qt *QuantizedTime) SetHour(hour string) {
+	copy(qt.ymdh[8:10], hour)
+}
+
+func (qt *QuantizedTime) views(q pilosa.TimeQuantum) ([]string, error) {
+	views := make([]string, 0, len(q))
+	for _, unit := range q {
+		switch unit {
+		case 'Y':
+			if qt.ymdh[0] == 0 {
+				return nil, errors.New("no data set for year")
+			}
+			views = append(views, string(qt.ymdh[:4]))
+		case 'M':
+			if qt.ymdh[4] == 0 {
+				return nil, errors.New("no data set for month")
+			}
+			views = append(views, string(qt.ymdh[:6]))
+		case 'D':
+			if qt.ymdh[6] == 0 {
+				return nil, errors.New("no data set for day")
+			}
+			views = append(views, string(qt.ymdh[:8]))
+		case 'H':
+			if qt.ymdh[8] == 0 {
+				return nil, errors.New("no data set for hour")
+			}
+			views = append(views, string(qt.ymdh[:10]))
+		}
+	}
+	return views, nil
 }
 
 // Add adds a record to the batch. Performance will be best if record

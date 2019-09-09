@@ -16,11 +16,13 @@ func TestBatches(t *testing.T) {
 	client := pilosa.DefaultClient()
 	schema := pilosa.NewSchema()
 	idx := schema.Index("gopilosatest-blah")
-	fields := make([]*pilosa.Field, 4)
+	numFields := 5
+	fields := make([]*pilosa.Field, numFields)
 	fields[0] = idx.Field("zero", pilosa.OptFieldKeys(true))
 	fields[1] = idx.Field("one", pilosa.OptFieldKeys(true))
 	fields[2] = idx.Field("two", pilosa.OptFieldKeys(true))
 	fields[3] = idx.Field("three", pilosa.OptFieldTypeInt())
+	fields[4] = idx.Field("four", pilosa.OptFieldTypeTime(pilosa.TimeQuantumYearMonthDay))
 	err := client.SyncSchema(schema)
 	if err != nil {
 		t.Fatalf("syncing schema: %v", err)
@@ -35,7 +37,8 @@ func TestBatches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getting new batch: %v", err)
 	}
-	r := Row{Values: make([]interface{}, 4)}
+	r := Row{Values: make([]interface{}, numFields)}
+	r.Time.Set(time.Date(2019, time.January, 2, 15, 45, 0, 0, time.UTC))
 
 	for i := 0; i < 9; i++ {
 		r.ID = uint64(i)
@@ -44,15 +47,20 @@ func TestBatches(t *testing.T) {
 			r.Values[1] = "b"
 			r.Values[2] = "c"
 			r.Values[3] = int64(99)
+			r.Values[4] = uint64(1)
+			r.Time.SetMonth("01")
 		} else {
 			r.Values[0] = "x"
 			r.Values[1] = "y"
 			r.Values[2] = "z"
 			r.Values[3] = int64(-10)
+			r.Values[4] = uint64(1)
+			r.Time.SetMonth("02")
 		}
 		if i == 8 {
 			r.Values[0] = nil
 			r.Values[3] = nil
+			r.Values[4] = nil
 		}
 		err := b.Add(r)
 		if err != nil {
@@ -149,6 +157,10 @@ func TestBatches(t *testing.T) {
 				t.Fatalf("unexpected row ids for field %s: %v", fname, rowIDs)
 			}
 
+		} else if fname == "four" {
+			if !reflect.DeepEqual(rowIDs, []uint64{1, 1, 1, 1, 1, 1, 1, 1, nilSentinel, nilSentinel}) {
+				t.Fatalf("unexpected rowids for time field")
+			}
 		} else {
 			if !reflect.DeepEqual(rowIDs, []uint64{1, 2, 1, 2, 1, 2, 1, 2, 1, 1}) && !reflect.DeepEqual(rowIDs, []uint64{2, 1, 2, 1, 2, 1, 2, 1, 2, 2}) {
 				t.Fatalf("unexpected row ids for field %s: %v", fname, rowIDs)
@@ -170,11 +182,13 @@ func TestBatches(t *testing.T) {
 			r.Values[1] = "b"
 			r.Values[2] = "c"
 			r.Values[3] = int64(99)
+			r.Values[4] = uint64(1)
 		} else {
 			r.Values[0] = "x"
 			r.Values[1] = "y"
 			r.Values[2] = "z"
 			r.Values[3] = int64(-10)
+			r.Values[4] = uint64(2)
 		}
 		err := b.Add(r)
 		if i != 18 && err != nil {
@@ -212,11 +226,13 @@ func TestBatches(t *testing.T) {
 			r.Values[1] = "e"
 			r.Values[2] = "f"
 			r.Values[3] = int64(100)
+			r.Values[4] = uint64(3)
 		} else {
 			r.Values[0] = "u"
 			r.Values[1] = "v"
 			r.Values[2] = "w"
 			r.Values[3] = int64(0)
+			r.Values[4] = uint64(4)
 		}
 		err := b.Add(r)
 		if i != 28 && err != nil {
@@ -244,7 +260,10 @@ func TestBatches(t *testing.T) {
 		}
 	}
 
-	frags := b.makeFragments()
+	frags, err := b.makeFragments()
+	if err != nil {
+		t.Fatalf("making fragments: %v", err)
+	}
 
 	if len(frags) != 1 {
 		t.Fatalf("unexpected # of shards in fragments: %d", len(frags))
@@ -253,8 +272,8 @@ func TestBatches(t *testing.T) {
 	if !ok {
 		t.Fatalf("shard 0 should be in frags")
 	}
-	if len(viewMap) != 3 {
-		t.Fatalf("there should be 3 views")
+	if len(viewMap) != 4 {
+		t.Fatalf("there should be 4 views")
 	}
 
 	resp, err := client.Query(idx.BatchQuery(fields[0].Row("a"),
@@ -296,7 +315,9 @@ func TestBatches(t *testing.T) {
 
 	resp, err = client.Query(idx.BatchQuery(fields[3].GT(-11),
 		fields[3].Equals(0),
-		fields[3].Equals(100)))
+		fields[3].Equals(100),
+		fields[4].Range(1, time.Date(2019, time.January, 1, 0, 0, 0, 0, time.UTC), time.Date(2019, time.January, 29, 0, 0, 0, 0, time.UTC)),
+		fields[4].Range(1, time.Date(2019, time.February, 1, 0, 0, 0, 0, time.UTC), time.Date(2019, time.February, 29, 0, 0, 0, 0, time.UTC))))
 	if err != nil {
 		t.Fatalf("querying: %v", err)
 	}
@@ -312,6 +333,16 @@ func TestBatches(t *testing.T) {
 	cols = results[2].Row().Columns
 	if !reflect.DeepEqual(cols, []uint64{20, 22, 24, 26, 28}) {
 		t.Fatalf("wrong cols for ==100: %v", cols)
+	}
+	cols = results[3].Row().Columns
+	exp := []uint64{0, 2, 4, 6, 10, 12, 14, 16, 18}
+	if !reflect.DeepEqual(cols, exp) {
+		t.Fatalf("wrong cols for January: got/want\n%v\n%v", cols, exp)
+	}
+	cols = results[4].Row().Columns
+	exp = []uint64{1, 3, 5, 7}
+	if !reflect.DeepEqual(cols, exp) {
+		t.Fatalf("wrong cols for January: got/want\n%v\n%v", cols, exp)
 	}
 
 	// TODO test non-full batches, test behavior of doing import on empty batch
@@ -494,18 +525,25 @@ func TestQuantizedTime(t *testing.T) {
 		day     string
 		hour    string
 		quantum pilosa.TimeQuantum
+		reset   bool
 		exp     []string
 		expErr  string
 	}{
 		{
 			name:   "no time quantum",
+			expErr: "",
+		},
+		{
+			name:   "no time quantum with data",
+			year:   "2017",
 			exp:    []string{},
 			expErr: "",
 		},
 		{
 			name:    "no data",
 			quantum: pilosa.TimeQuantumYear,
-			expErr:  "no data set for year",
+			exp:     nil,
+			expErr:  "",
 		},
 		{
 			name:    "timestamp",
@@ -560,11 +598,18 @@ func TestQuantizedTime(t *testing.T) {
 			quantum: "MDH",
 			exp:     []string{"201310", "20131016", "2013101605"},
 		},
+		{
+			name:    "timestamp",
+			time:    time.Date(2013, time.October, 16, 17, 34, 43, 0, time.FixedZone("UTC-5", -5*60*60)),
+			quantum: "YMDH",
+			reset:   true,
+			exp:     nil,
+		},
 	}
 
 	for i, test := range cases {
 		t.Run(test.name+strconv.Itoa(i), func(t *testing.T) {
-			tq := &QuantizedTime{}
+			tq := QuantizedTime{}
 			var zt time.Time
 			if zt != test.time {
 				tq.Set(test.time)
@@ -580,6 +625,9 @@ func TestQuantizedTime(t *testing.T) {
 			}
 			if test.hour != "" {
 				tq.SetHour(test.hour)
+			}
+			if test.reset {
+				tq.Reset()
 			}
 
 			views, err := tq.views(test.quantum)

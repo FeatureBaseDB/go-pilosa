@@ -61,7 +61,8 @@ type Batch struct {
 	// ids is a slice of length batchSize of record IDs
 	ids []uint64
 
-	// rowIDs is a slice of length len(Batch.header) which contains slices of length batchSize
+	// rowIDs is a map of field names to slices of length batchSize
+	// which contain row IDs.
 	rowIDs map[string][]uint64
 
 	// values holds the values for each record of an int field
@@ -70,19 +71,11 @@ type Batch struct {
 	// times holds a time for each record. (if any of the fields are time fields)
 	times []QuantizedTime
 
-	// clearValues holds a slice of indices into b.ids for each
-	// integer field which has nil values. After translation, these
-	// slices will be filled out with the actual column IDs those
-	// indices pertain to so that they can be cleared.
-	//
-	// TODO: This is actually a problem — a nil value doesn't mean
-	// "clear this value", it should mean "don't touch this value", so
-	// there is no way currently to update a record with int values
-	// without knowing all the int values, clearing them, or setting
-	// them to something else in the process.
-	clearValues map[string][]uint64
+	// nullIndices holds a slice of indices into b.ids for each
+	// integer field which has nil values.
+	nullIndices map[string][]uint64
 
-	// TODO, support timestamps, set fields with more than one value per record, mutex, and bool.
+	// TODO support mutex and bool fields.
 
 	// for each field, keep a map of key to which record indexes that key mapped to
 	toTranslate map[string]map[string][]int
@@ -147,7 +140,7 @@ func NewBatch(client *pilosa.Client, size int, index *pilosa.Index, fields []*pi
 		ids:           make([]uint64, 0, size),
 		rowIDs:        rowIDs,
 		values:        values,
-		clearValues:   make(map[string][]uint64),
+		nullIndices:   make(map[string][]uint64),
 		toTranslate:   tt,
 		toTranslateID: make(map[string][]int),
 		transCache:    NewMapTranslator(),
@@ -164,11 +157,7 @@ func NewBatch(client *pilosa.Client, size int, index *pilosa.Index, fields []*pi
 	return b, nil
 }
 
-// Row represents a single record which can be added to a RecordBatch.
-//
-// Note: it is not named "Record" because there is a conflict with
-// another type in this package. This may be rectified by deprecating
-// something or splitting packages in the future.
+// Row represents a single record which can be added to a Batch.
 type Row struct {
 	ID     interface{}
 	Values []interface{}
@@ -316,12 +305,12 @@ func (b *Batch) Add(rec Row) error {
 		case nil:
 			if field.Opts().Type() == pilosa.FieldTypeInt {
 				b.values[field.Name()] = append(b.values[field.Name()], 0)
-				clearIndexes, ok := b.clearValues[field.Name()]
+				nullIndices, ok := b.nullIndices[field.Name()]
 				if !ok {
-					clearIndexes = make([]uint64, 0)
+					nullIndices = make([]uint64, 0)
 				}
-				clearIndexes = append(clearIndexes, uint64(len(b.ids)-1))
-				b.clearValues[field.Name()] = clearIndexes
+				nullIndices = append(nullIndices, uint64(len(b.ids)-1))
+				b.nullIndices[field.Name()] = nullIndices
 
 			} else {
 				b.rowIDs[field.Name()] = append(b.rowIDs[field.Name()], nilSentinel)
@@ -425,11 +414,6 @@ func (b *Batch) doTranslation() error {
 		}
 	}
 
-	for _, idIndexes := range b.clearValues {
-		for i, index := range idIndexes {
-			idIndexes[i] = b.ids[index]
-		}
-	}
 	return nil
 }
 
@@ -511,77 +495,53 @@ func (b *Batch) importValueData() error {
 	if shardWidth == 0 {
 		shardWidth = pilosa.DefaultShardWidth
 	}
-
 	eg := errgroup.Group{}
-	curShard := b.ids[0] / shardWidth
-	startIdx := 0
-	for i := 1; i <= len(b.ids); i++ {
-		// when i==len(b.ids) we ensure that the import logic gets run
-		// by making a fake shard once we're past the last ID
-		recordID := (curShard + 2) * shardWidth
-		if i < len(b.ids) {
-			recordID = b.ids[i]
-		}
-		if recordID/shardWidth != curShard {
-			endIdx := i
-			ids := b.ids[startIdx:endIdx]
-			for field, values := range b.values {
-				field := field
-				shard := curShard
-				vslice := values[startIdx:endIdx]
-				eg.Go(func() error {
-					err := b.client.ImportValues(b.index.Name(), field, shard, vslice, ids, false)
-					return errors.Wrapf(err, "importing values for %s", field)
-				})
-			}
-			startIdx = i
-			curShard = recordID / shardWidth
-		}
-	}
 
-	err := eg.Wait()
-	if err != nil {
-		return errors.Wrap(err, "importing value data")
-	}
+	ids := make([]uint64, len(b.ids))
+	for field, values := range b.values {
+		// grow our temp ids slice to full length
+		ids = ids[:len(b.ids)]
+		// copy orig ids back in
+		copy(ids, b.ids)
 
-	// Now we clear any values for which we got a nil.
-	//
-	// TODO we need an endpoint which lets us set and clear
-	// transactionally... this is kind of a hack.
-	maxLen := 0
-	for _, ids := range b.clearValues {
-		if len(ids) > maxLen {
-			maxLen = len(ids)
+		// trim out null values from ids and values.
+		nullIndices := b.nullIndices[field]
+		for i, nullIndex := range nullIndices {
+			nullIndex -= uint64(i) // offset the index by the number of items removed so far
+			ids = append(ids[:nullIndex], ids[nullIndex+1:]...)
+			values = append(values[:nullIndex], values[nullIndex+1:]...)
 		}
-	}
-	eg = errgroup.Group{}
-	values := make([]int64, 0, maxLen)
-	for field, ids := range b.clearValues {
-		// TODO maybe sort ids here
-		curShard := b.ids[0] / shardWidth
+
+		// now do imports by shard
+		curShard := ids[0] / shardWidth
 		startIdx := 0
 		for i := 1; i <= len(ids); i++ {
-			recordID := (curShard + 2) * shardWidth
+			var recordID uint64
 			if i < len(ids) {
-				recordID = b.ids[i]
+				recordID = ids[i]
+			} else {
+				recordID = (curShard + 2) * shardWidth
 			}
+
 			if recordID/shardWidth != curShard {
 				endIdx := i
-				idSlice := ids[startIdx:endIdx]
-				values := values[:len(idSlice)]
-				field := field
 				shard := curShard
+				field := field
+				path, data, err := b.client.EncodeImportValues(b.index.Name(), field, shard, values[startIdx:endIdx], ids[startIdx:endIdx], false)
+				if err != nil {
+					return errors.Wrap(err, "encoding import values")
+				}
 				eg.Go(func() error {
-					err := b.client.ImportValues(b.index.Name(), field, shard, values, idSlice, true)
-					return errors.Wrap(err, "clearing values")
+					err := b.client.DoImportValues(b.index.Name(), shard, path, data)
+					return errors.Wrapf(err, "importing values for %s", field)
 				})
 				startIdx = i
 				curShard = recordID / shardWidth
 			}
 		}
 	}
-
-	return errors.Wrap(eg.Wait(), "importing clear value data")
+	err := eg.Wait()
+	return errors.Wrap(err, "importing value data")
 }
 
 // reset is called at the end of importing to ready the batch for the
@@ -602,8 +562,8 @@ func (b *Batch) reset() {
 	for k := range b.values {
 		delete(b.values, k) // TODO pool these slices
 	}
-	for k := range b.clearValues {
-		delete(b.clearValues, k) // TODO pool these slices
+	for k := range b.nullIndices {
+		delete(b.nullIndices, k) // TODO pool these slices
 	}
 }
 

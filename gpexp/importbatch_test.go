@@ -12,6 +12,66 @@ import (
 
 // TODO test against cluster
 
+func TestImportBatchInts(t *testing.T) {
+	client := pilosa.DefaultClient()
+	schema := pilosa.NewSchema()
+	idx := schema.Index("gopilosatest-blah")
+	field := idx.Field("anint", pilosa.OptFieldTypeInt())
+	err := client.SyncSchema(schema)
+	if err != nil {
+		t.Fatalf("syncing schema: %v", err)
+	}
+
+	b, err := NewBatch(client, 3, idx, []*pilosa.Field{field})
+	if err != nil {
+		t.Fatalf("getting batch: %v", err)
+	}
+
+	r := Row{Values: make([]interface{}, 1)}
+
+	for i := uint64(0); i < 3; i++ {
+		r.ID = i
+		r.Values[0] = int64(i)
+		err := b.Add(r)
+		if err != nil && err != ErrBatchNowFull {
+			t.Fatalf("adding to batch: %v", err)
+		}
+	}
+	err = b.Import()
+	if err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
+	r.ID = uint64(0)
+	r.Values[0] = nil
+	err = b.Add(r)
+	if err != nil {
+		t.Fatalf("adding after import: %v", err)
+	}
+	r.ID = uint64(1)
+	r.Values[0] = int64(7)
+	err = b.Add(r)
+	if err != nil {
+		t.Fatalf("adding second after import: %v", err)
+	}
+
+	err = b.Import()
+	if err != nil {
+		t.Fatalf("second import: %v", err)
+	}
+
+	resp, err := client.Query(idx.BatchQuery(field.Equals(0), field.Equals(7), field.Equals(2)))
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+
+	for i, result := range resp.Results() {
+		if !reflect.DeepEqual(result.Row().Columns, []uint64{uint64(i)}) {
+			t.Errorf("expected %v for %d, but got %v", []uint64{uint64(i)}, i, result.Row().Columns)
+		}
+	}
+}
+
 func TestBatches(t *testing.T) {
 	client := pilosa.DefaultClient()
 	schema := pilosa.NewSchema()
@@ -90,8 +150,8 @@ func TestBatches(t *testing.T) {
 	if !reflect.DeepEqual(b.values["three"], []int64{99, -10, 99, -10, 99, -10, 99, -10, 0}) {
 		t.Fatalf("unexpected values: %v", b.values["three"])
 	}
-	if !reflect.DeepEqual(b.clearValues["three"], []uint64{8}) {
-		t.Fatalf("unexpected clearValues: %v", b.clearValues["three"])
+	if !reflect.DeepEqual(b.nullIndices["three"], []uint64{8}) {
+		t.Fatalf("unexpected nullIndices: %v", b.nullIndices["three"])
 	}
 
 	if len(b.toTranslate["one"]) != 2 {

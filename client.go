@@ -730,8 +730,23 @@ func (c *Client) importValues(field *Field,
 // index,field,shard on all nodes which should hold that shard. It
 // assumes that the ids have been translated from keys if necessary
 // and so tells Pilosa to ignore checking if the index uses column
-// keys.
+// keys. ImportValues wraps EncodeImportValues and DoImportValues —
+// these are broken out and exported so that performance conscious
+// users can re-use the same vals and ids byte buffers for local
+// encoding, while performing the imports concurrently.
 func (c *Client) ImportValues(index, field string, shard uint64, vals []int64, ids []uint64, clear bool) error {
+	path, data, err := c.EncodeImportValues(index, field, shard, vals, ids, clear)
+	if err != nil {
+		return errors.Wrap(err, "encoding import-values request")
+	}
+	err = c.DoImportValues(index, shard, path, data)
+	return errors.Wrap(err, "doing import values")
+}
+
+// EncodeImportValues computes the HTTP path and payload for an
+// import-values request. It is typically followed by a call to
+// DoImportValues.
+func (c *Client) EncodeImportValues(index, field string, shard uint64, vals []int64, ids []uint64, clear bool) (path string, data []byte, err error) {
 	msg := &pbuf.ImportValueRequest{
 		Index:     index,
 		Field:     field,
@@ -739,11 +754,18 @@ func (c *Client) ImportValues(index, field string, shard uint64, vals []int64, i
 		ColumnIDs: ids,
 		Values:    vals,
 	}
-	data, err := proto.Marshal(msg)
+	data, err = proto.Marshal(msg)
 	if err != nil {
-		return errors.Wrap(err, "marshaling to protobuf")
+		return "", nil, errors.Wrap(err, "marshaling to protobuf")
 	}
-	path := fmt.Sprintf("/index/%s/field/%s/import?clear=%s&ignoreKeyCheck=true", index, field, strconv.FormatBool(clear))
+	path = fmt.Sprintf("/index/%s/field/%s/import?clear=%s&ignoreKeyCheck=true", index, field, strconv.FormatBool(clear))
+	return path, data, nil
+}
+
+// DoImportValues takes a path and data payload (normally from
+// EncodeImportValues), logs the import, finds all nodes which own
+// this shard, and concurrently imports to those nodes.
+func (c *Client) DoImportValues(index string, shard uint64, path string, data []byte) error {
 	c.logImport(index, path, shard, false, data)
 
 	uris, err := c.getURIsForShard(index, shard)

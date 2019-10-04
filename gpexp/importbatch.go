@@ -522,6 +522,20 @@ func (b *Batch) importValueData() error {
 
 		// trim out null values from ids and values.
 		nullIndices := b.nullIndices[field]
+		// TODO(jaffee) I think this may be very inefficient. It looks
+		// like we're copying the `ids` and `values` slices over
+		// themselves (an O(n) operation) for each nullIndex so this
+		// is effectively O(n^2). What we could do is iterate through
+		// ids and values each once, while simultaneously iterating
+		// through nullindices and keeping track of how many
+		// nullIndices we've passed, and so how far back we need to
+		// copy each item.
+		//
+		// It was a couple weeks ago that I wrote this code, and I
+		// vaguely remember thinking about this, so I may just be
+		// missing something now. We should benchmark on what should
+		// be a bad case (an int field which is mostly null), and see
+		// if the improved implementation helps a lot.
 		for i, nullIndex := range nullIndices {
 			nullIndex -= uint64(i) // offset the index by the number of items removed so far
 			ids = append(ids[:nullIndex], ids[nullIndex+1:]...)
@@ -529,6 +543,9 @@ func (b *Batch) importValueData() error {
 		}
 
 		// now do imports by shard
+		if len(ids) == 0 {
+			continue // TODO test this "all nil" case
+		}
 		curShard := ids[0] / shardWidth
 		startIdx := 0
 		for i := 1; i <= len(ids); i++ {

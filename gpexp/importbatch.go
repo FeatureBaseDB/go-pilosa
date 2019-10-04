@@ -130,6 +130,8 @@ func NewBatch(client *pilosa.Client, size int, index *pilosa.Index, fields []*pi
 			hasTime = typ == pilosa.FieldTypeTime || hasTime
 		case pilosa.FieldTypeInt:
 			values[field.Name()] = make([]int64, 0, size)
+		default:
+			return nil, errors.Errorf("field type %s is not currently supported through Batch", typ)
 		}
 	}
 	b := &Batch{
@@ -254,10 +256,7 @@ func (b *Batch) Add(rec Row) error {
 		return errors.Errorf("record needs to match up with batch fields, got %d fields and %d record", len(b.header), len(rec.Values))
 	}
 
-	switch rid := rec.ID.(type) {
-	case uint64:
-		b.ids = append(b.ids, rid)
-	case string:
+	handleStringID := func(rid string) error {
 		if colID, ok, err := b.transCache.GetCol(b.index.Name(), rid); err != nil {
 			return errors.Wrap(err, "translating column")
 		} else if ok {
@@ -270,6 +269,23 @@ func (b *Batch) Add(rec Row) error {
 			ints = append(ints, len(b.ids))
 			b.toTranslateID[rid] = ints
 			b.ids = append(b.ids, 0)
+		}
+		return nil
+	}
+	var err error
+
+	switch rid := rec.ID.(type) {
+	case uint64:
+		b.ids = append(b.ids, rid)
+	case string:
+		err := handleStringID(rid)
+		if err != nil {
+			return err
+		}
+	case []byte:
+		err = handleStringID(string(rid))
+		if err != nil {
+			return err
 		}
 	default: // TODO support nil ID as being auto-allocated.
 		return errors.Errorf("unsupported id type %T value %v", rid, rid)

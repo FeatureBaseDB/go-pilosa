@@ -227,7 +227,7 @@ func newClientWithOptions(options *ClientOptions) *Client {
 		c.tracer = options.tracer
 	}
 	c.retries = *options.retries
-	c.minRetrySleepTime = 1 * time.Second
+	c.minRetrySleepTime = 100 * time.Millisecond
 	c.maxRetrySleepTime = 2 * time.Minute
 	c.importManager = newRecordImportManager(c)
 	go c.runChangeDetection()
@@ -1124,7 +1124,10 @@ func (c *Client) doRequest(host *URI, method, path string, headers map[string]st
 			}
 			err = errors.New(strings.TrimSpace(string(content)))
 		}
-		c.logger.Printf("request failed with: %s, retrying (%d)", err.Error(), tries)
+		if tries == 0 {
+			break
+		}
+		c.logger.Printf("request failed with: %s status: %d, retrying after %d more time(s) after %v ", err.Error(), resp.StatusCode, tries, sleepTime)
 		time.Sleep(sleepTime)
 		sleepTime *= 2
 		if sleepTime > c.maxRetrySleepTime {

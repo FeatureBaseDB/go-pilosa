@@ -72,6 +72,114 @@ func TestImportBatchInts(t *testing.T) {
 	}
 }
 
+func TestStringSlice(t *testing.T) {
+	client := pilosa.DefaultClient()
+	schema := pilosa.NewSchema()
+	idx := schema.Index("test-string-slice")
+	fields := make([]*pilosa.Field, 1)
+	fields[0] = idx.Field("strslice", pilosa.OptFieldKeys(true), pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 100))
+	err := client.SyncSchema(schema)
+	if err != nil {
+		t.Fatalf("syncing schema: %v", err)
+	}
+	defer func() {
+		err := client.DeleteIndex(idx)
+		if err != nil {
+			t.Logf("problem cleaning up from test: %v", err)
+		}
+	}()
+
+	trans := NewMapTranslator()
+	err = trans.AddRows("test-string-slice", "strslice", []string{"c", "d", "f"}, []uint64{9, 10, 13})
+	if err != nil {
+		t.Fatalf("adding to translator: %v", err)
+	}
+
+	b, err := NewBatch(client, 3, idx, fields, OptTranslator(trans))
+	if err != nil {
+		t.Fatalf("creating new batch: %v", err)
+	}
+
+	r := Row{Values: make([]interface{}, len(fields))}
+	r.ID = uint64(0)
+	r.Values[0] = []string{"a"}
+	err = b.Add(r)
+	if err != nil {
+		t.Fatalf("adding to batch: %v", err)
+	}
+	if got := b.toTranslateSets["strslice"]["a"]; !reflect.DeepEqual(got, []int{0}) {
+		t.Fatalf("expected []int{0}, got: %v", got)
+	}
+
+	r.ID = uint64(1)
+	r.Values[0] = []string{"a", "b", "c"}
+	err = b.Add(r)
+	if err != nil {
+		t.Fatalf("adding to batch: %v", err)
+	}
+	if got := b.toTranslateSets["strslice"]["a"]; !reflect.DeepEqual(got, []int{0, 1}) {
+		t.Fatalf("expected []int{0,1}, got: %v", got)
+	}
+	if got := b.toTranslateSets["strslice"]["b"]; !reflect.DeepEqual(got, []int{1}) {
+		t.Fatalf("expected []int{1}, got: %v", got)
+	}
+	if got, ok := b.toTranslateSets["strslice"]["c"]; ok {
+		t.Fatalf("should be nothing at c, got: %v", got)
+	}
+	if got := b.rowIDSets["strslice"][1]; !reflect.DeepEqual(got, []uint64{9}) {
+		t.Fatalf("expected c to map to rowID 9 but got %v", got)
+	}
+
+	r.ID = uint64(2)
+	r.Values[0] = []string{"d", "e", "f"}
+	err = b.Add(r)
+	if err != ErrBatchNowFull {
+		t.Fatalf("adding to batch: %v", err)
+	}
+	if got, ok := b.toTranslateSets["strslice"]["d"]; ok {
+		t.Fatalf("should be nothing at d, got: %v", got)
+	}
+	if got, ok := b.toTranslateSets["strslice"]["f"]; ok {
+		t.Fatalf("should be nothing at f, got: %v", got)
+	}
+	if got := b.toTranslateSets["strslice"]["e"]; !reflect.DeepEqual(got, []int{2}) {
+		t.Fatalf("expected []int{2}, got: %v", got)
+	}
+	if got := b.rowIDSets["strslice"][2]; !reflect.DeepEqual(got, []uint64{10, 13}) {
+		t.Fatalf("expected c to map to rowID 9 but got %v", got)
+	}
+
+	err = b.doTranslation()
+	if err != nil {
+		t.Fatalf("translating: %v", err)
+	}
+
+	if got := b.rowIDSets["strslice"][0]; !reflect.DeepEqual(got, []uint64{1}) {
+		t.Fatalf("after translation, rec 0: %v", got)
+	}
+	if got := b.rowIDSets["strslice"][1]; !reflect.DeepEqual(got, []uint64{9, 1, 2}) {
+		t.Fatalf("after translation, rec 1: %v", got)
+	}
+	if got := b.rowIDSets["strslice"][2]; !reflect.DeepEqual(got, []uint64{10, 13, 3}) {
+		t.Fatalf("after translation, rec 2: %v", got)
+	}
+
+	err = b.doImport()
+	if err != nil {
+		t.Fatalf("doing import: %v", err)
+	}
+
+	resp, err := client.Query(idx.BatchQuery(fields[0].Row("a")))
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+	result := resp.Result()
+	if !reflect.DeepEqual(result.Row().Columns, []uint64{0, 1}) {
+		t.Fatalf("expected a to be [0,1], got %v", result.Row().Columns)
+	}
+
+}
+
 func TestBatches(t *testing.T) {
 	client := pilosa.DefaultClient()
 	schema := pilosa.NewSchema()

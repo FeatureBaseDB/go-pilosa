@@ -362,7 +362,7 @@ func (c *Client) EnsureIndex(index *Index) error {
 	if err == ErrIndexExists {
 		return nil
 	}
-	return err
+	return errors.Wrap(err, "creating index")
 }
 
 // EnsureField creates a field on the server if it doesn't exists.
@@ -424,7 +424,7 @@ func (c *Client) syncSchema(schema *Schema, serverSchema *Schema) error {
 		if _, ok := serverSchema.indexes[indexName]; !ok {
 			err = c.EnsureIndex(index)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "ensuring index")
 			}
 		}
 		for _, field := range index.fields {

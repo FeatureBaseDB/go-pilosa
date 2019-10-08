@@ -575,6 +575,9 @@ func (b *Batch) makeFragments() (fragments, error) {
 	}
 
 	for fname, rowIDSets := range b.rowIDSets {
+		if len(rowIDSets) == 0 {
+			continue
+		}
 		field := b.headerMap[fname]
 		opts := field.Opts()
 		curShard := ^uint64(0) // impossible sentinel value for shard.

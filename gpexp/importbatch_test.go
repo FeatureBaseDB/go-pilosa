@@ -237,10 +237,10 @@ func TestBatches(t *testing.T) {
 
 	}
 
-	if len(b.toTranslate["zero"]) != 2 {
+	if len(b.toTranslate[0]) != 2 {
 		t.Fatalf("wrong number of keys in toTranslate[0]")
 	}
-	for k, ints := range b.toTranslate["zero"] {
+	for k, ints := range b.toTranslate[0] {
 		if k == "a" {
 			if !reflect.DeepEqual(ints, []int{0, 2, 4, 6}) {
 				t.Fatalf("wrong ints for key a in field zero: %v", ints)
@@ -262,10 +262,10 @@ func TestBatches(t *testing.T) {
 		t.Fatalf("unexpected nullIndices: %v", b.nullIndices["three"])
 	}
 
-	if len(b.toTranslate["one"]) != 2 {
-		t.Fatalf("wrong number of keys in toTranslate[\"one\"]")
+	if len(b.toTranslate[1]) != 2 {
+		t.Fatalf("wrong number of keys in toTranslate[1]")
 	}
-	for k, ints := range b.toTranslate["one"] {
+	for k, ints := range b.toTranslate[1] {
 		if k == "b" {
 			if !reflect.DeepEqual(ints, []int{0, 2, 4, 6, 8}) {
 				t.Fatalf("wrong ints for key b in field one: %v", ints)
@@ -280,10 +280,10 @@ func TestBatches(t *testing.T) {
 		}
 	}
 
-	if len(b.toTranslate["two"]) != 2 {
+	if len(b.toTranslate[2]) != 2 {
 		t.Fatalf("wrong number of keys in toTranslate[2]")
 	}
-	for k, ints := range b.toTranslate["two"] {
+	for k, ints := range b.toTranslate[2] {
 		if k == "c" {
 			if !reflect.DeepEqual(ints, []int{0, 2, 4, 6, 8}) {
 				t.Fatalf("wrong ints for key c in field two: %v", ints)
@@ -317,21 +317,25 @@ func TestBatches(t *testing.T) {
 		t.Fatalf("doing translation: %v", err)
 	}
 
-	for fname, rowIDs := range b.rowIDs {
+	for fidx, rowIDs := range b.rowIDs {
 		// we don't know which key will get translated first, but we do know the pattern
-		if fname == "zero" {
+		if fidx == 0 {
 			if !reflect.DeepEqual(rowIDs, []uint64{1, 2, 1, 2, 1, 2, 1, 2, nilSentinel, nilSentinel}) &&
 				!reflect.DeepEqual(rowIDs, []uint64{2, 1, 2, 1, 2, 1, 2, 1, nilSentinel, nilSentinel}) {
-				t.Fatalf("unexpected row ids for field %s: %v", fname, rowIDs)
+				t.Fatalf("unexpected row ids for field %d: %v", fidx, rowIDs)
 			}
 
-		} else if fname == "four" {
+		} else if fidx == 4 {
 			if !reflect.DeepEqual(rowIDs, []uint64{1, 1, 1, 1, 1, 1, 1, 1, nilSentinel, nilSentinel}) {
 				t.Fatalf("unexpected rowids for time field")
 			}
+		} else if fidx == 3 {
+			if len(rowIDs) != 0 {
+				t.Fatalf("expected no rowIDs for int field, but got: %v", rowIDs)
+			}
 		} else {
 			if !reflect.DeepEqual(rowIDs, []uint64{1, 2, 1, 2, 1, 2, 1, 2, 1, 1}) && !reflect.DeepEqual(rowIDs, []uint64{2, 1, 2, 1, 2, 1, 2, 1, 2, 2}) {
-				t.Fatalf("unexpected row ids for field %s: %v", fname, rowIDs)
+				t.Fatalf("unexpected row ids for field %d: %v", fidx, rowIDs)
 			}
 		}
 	}
@@ -378,10 +382,16 @@ func TestBatches(t *testing.T) {
 		t.Fatalf("doing import: %v", err)
 	}
 
-	for fname, rowIDs := range b.rowIDs {
+	for fidx, rowIDs := range b.rowIDs {
+		if fidx == 3 {
+			if len(rowIDs) != 0 {
+				t.Fatalf("expected no rowIDs for int field, but got: %v", rowIDs)
+			}
+			continue
+		}
 		// we don't know which key will get translated first, but we do know the pattern
 		if !reflect.DeepEqual(rowIDs, []uint64{1, 2, 1, 2, 1, 2, 1, 2, 1, 2}) && !reflect.DeepEqual(rowIDs, []uint64{2, 1, 2, 1, 2, 1, 2, 1, 2, 1}) {
-			t.Fatalf("unexpected row ids for field %s: %v", fname, rowIDs)
+			t.Fatalf("unexpected row ids for field %d: %v", fidx, rowIDs)
 		}
 	}
 
@@ -421,10 +431,16 @@ func TestBatches(t *testing.T) {
 		t.Fatalf("doing import: %v", err)
 	}
 
-	for fname, rowIDs := range b.rowIDs {
+	for fidx, rowIDs := range b.rowIDs {
 		// we don't know which key will get translated first, but we do know the pattern
+		if fidx == 3 {
+			if len(rowIDs) != 0 {
+				t.Fatalf("expected no rowIDs for int field, but got: %v", rowIDs)
+			}
+			continue
+		}
 		if !reflect.DeepEqual(rowIDs, []uint64{3, 4, 3, 4, 3, 4, 3, 4, 3, 4}) && !reflect.DeepEqual(rowIDs, []uint64{4, 3, 4, 3, 4, 3, 4, 3, 4, 3}) {
-			t.Fatalf("unexpected row ids for field %s: %v", fname, rowIDs)
+			t.Fatalf("unexpected row ids for field %d: %v", fidx, rowIDs)
 		}
 	}
 

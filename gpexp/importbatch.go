@@ -63,7 +63,7 @@ type Batch struct {
 
 	// rowIDs is a map of field index (in the header) to slices of
 	// length batchSize which contain row IDs.
-	rowIDs [][]uint64
+	rowIDs map[int][]uint64
 
 	// rowIDSets is a map from field name to a batchSize slice of
 	// slices of row IDs. When a given record can have more than one
@@ -83,7 +83,7 @@ type Batch struct {
 	// TODO support mutex and bool fields.
 
 	// for each field, keep a map of key to which record indexes that key mapped to
-	toTranslate []map[string][]int
+	toTranslate map[int]map[string][]int
 
 	// toTranslateSets is a map from field name to a map of string
 	// keys that need to be translated to sets of record indexes which
@@ -124,9 +124,9 @@ func NewBatch(client *pilosa.Client, size int, index *pilosa.Index, fields []*pi
 		return nil, errors.New("can't batch with no fields or batch size")
 	}
 	headerMap := make(map[string]*pilosa.Field, len(fields))
-	rowIDs := make([][]uint64, len(fields))
+	rowIDs := make(map[int][]uint64, len(fields))
 	values := make(map[string][]int64)
-	tt := make([]map[string][]int, len(fields))
+	tt := make(map[int]map[string][]int, len(fields))
 	ttSets := make(map[string]map[string][]int)
 	hasTime := false
 	for i, field := range fields {

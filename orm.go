@@ -215,8 +215,8 @@ func (q PQLRowQuery) Error() error {
 //
 // Usage:
 //
-// 	index, err := NewIndex("repository")
-// 	stargazer, err := index.Field("stargazer")
+// 	repo, err := NewIndex("repository")
+// 	stargazer, err := repo.Field("stargazer")
 // 	query := repo.BatchQuery(
 // 		stargazer.Row(5),
 //		stargazer.Row(15),
@@ -410,6 +410,10 @@ func NewIndex(name string) *Index {
 		options: options.withDefaults(),
 		fields:  map[string]*Field{},
 	}
+}
+
+func (idx *Index) ShardWidth() uint64 {
+	return idx.shardWidth
 }
 
 // Fields return a copy of the fields in this index

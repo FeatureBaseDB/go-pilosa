@@ -154,14 +154,12 @@ func TestStringSlice(t *testing.T) {
 		t.Fatalf("translating: %v", err)
 	}
 
-	if got := b.rowIDSets["strslice"][0]; !reflect.DeepEqual(got, []uint64{1}) {
-		t.Fatalf("after translation, rec 0: %v", got)
-	}
-	if got := b.rowIDSets["strslice"][1]; !reflect.DeepEqual(got, []uint64{9, 1, 2}) {
-		t.Fatalf("after translation, rec 1: %v", got)
-	}
-	if got := b.rowIDSets["strslice"][2]; !reflect.DeepEqual(got, []uint64{10, 13, 3}) {
-		t.Fatalf("after translation, rec 2: %v", got)
+	if got0 := b.rowIDSets["strslice"][0]; len(got0) != 1 {
+		t.Errorf("after translation, rec 0, wrong len: %v", got0)
+	} else if got1 := b.rowIDSets["strslice"][1]; len(got1) != 3 || got1[0] != 9 || (got1[1] != got0[0] && got1[2] != got0[0]) {
+		t.Errorf("after translation, rec 1: %v, rec 0: %v", got1, got0)
+	} else if got2 := b.rowIDSets["strslice"][2]; len(got2) != 3 || got2[0] != 10 || got2[1] != 13 || got2[2] == got1[2] || got2[2] == got0[0] {
+		t.Errorf("after translation, rec 2: %v", got2)
 	}
 
 	err = b.doImport()

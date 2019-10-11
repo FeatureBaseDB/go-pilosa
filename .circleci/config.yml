@@ -30,13 +30,13 @@ jobs:
       - *fast-checkout
       - run: make install-gometalinter
       - run: make gometalinter
-  test-golang-1.13-rc: &base-test
+  test-golang-1.13: &base-test
     <<: *defaults
     steps:
       - *fast-checkout
       - run: make test-all
     docker:
-      - image: circleci/golang:1.13-rc
+      - image: circleci/golang:1.13
       - image: pilosa/pilosa:master
   test-golang-1.12:
     <<: *base-test
@@ -51,7 +51,7 @@ workflows:
       - linter:
           requires:
             - build
-      - test-golang-1.13-rc:
+      - test-golang-1.13:
           requires:
             - build
       - test-golang-1.12:

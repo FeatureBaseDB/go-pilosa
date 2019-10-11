@@ -1127,7 +1127,7 @@ func (c *Client) doRequest(host *URI, method, path string, headers map[string]st
 		if tries == 0 {
 			break
 		}
-		c.logger.Printf("request failed with: %s status: %d, retrying after %d more time(s) after %v ", err.Error(), resp.StatusCode, tries, sleepTime)
+		c.logger.Printf("request failed with: %v status: %d, retrying after %d more time(s) after %v ", err, resp.StatusCode, tries, sleepTime)
 		time.Sleep(sleepTime)
 		sleepTime *= 2
 		if sleepTime > c.maxRetrySleepTime {

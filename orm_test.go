@@ -984,6 +984,34 @@ func TestFormatIDKey(t *testing.T) {
 	}
 }
 
+func TestDecodeFieldOptions(t *testing.T) {
+	tests := []struct {
+		in string
+	}{
+		{`{"options":{"type":"bool"}}`},
+		{`{"options":{"cacheSize":50000,"cacheType":"ranked","keys":true,"type":"set"}}`},
+		{`{"options":{"max":1000,"min":-200,"type":"int"}}`},
+	}
+
+	idx := NewIndex("idx")
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("#%d:", i), func(t *testing.T) {
+			fos, err := DecodeFieldOptions(test.in)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			fld := idx.Field(fmt.Sprintf("fld-%d", i), fos...)
+			sopts := fld.Opts().String()
+
+			if sopts != test.in {
+				t.Fatalf("expected %s, but got %s", test.in, sopts)
+			}
+		})
+	}
+}
+
 func comparePQL(t *testing.T, target string, q PQLQuery) {
 	t.Helper()
 	pql := q.Serialize().String()

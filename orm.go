@@ -734,6 +734,79 @@ func (fo FieldOptions) String() string {
 	return fmt.Sprintf(`{"options":%s}`, encodeMap(mopt))
 }
 
+// DecodeFieldOptions takes the string created by
+// FieldOptions.String() and returns a list of FieldOption
+// which can be used as input to Index.Field(string, ...FieldOption)
+// when creating a field.
+// This is an experimental function and will very likely change
+// as the option encoding evolves.
+func DecodeFieldOptions(str string) ([]FieldOption, error) {
+	buf := []byte(str)
+
+	var m map[string]interface{}
+	if err := json.Unmarshal(buf, &m); err != nil {
+		return nil, errors.Wrap(err, "unmarshalling json")
+	}
+
+	fos := []FieldOption{}
+
+	options, ok := m["options"].(map[string]interface{})
+	if !ok {
+		return fos, nil
+	}
+
+	ft, ok := options["type"].(string)
+	if !ok {
+		return fos, nil
+	}
+	fieldType := FieldType(ft)
+
+	switch fieldType {
+	case FieldTypeSet, FieldTypeMutex:
+		var cacheType CacheType
+		if ct, ok := options["cacheType"].(string); ok {
+			cacheType = CacheType(ct)
+		} else {
+			cacheType = CacheTypeDefault
+		}
+
+		var cacheSize int
+		if cs, ok := options["cacheSize"].(float64); ok {
+			cacheSize = int(cs)
+		} else {
+			fmt.Println("cacheSize NOT OK")
+			cacheSize = CacheSizeDefault
+		}
+
+		if fieldType == FieldTypeMutex {
+			fos = append(fos, OptFieldTypeMutex(cacheType, cacheSize))
+		} else {
+			fos = append(fos, OptFieldTypeSet(cacheType, cacheSize))
+		}
+	case FieldTypeInt:
+		limits := []int64{}
+		min, minok := options["min"].(float64)
+		max, maxok := options["max"].(float64)
+
+		if minok && maxok {
+			limits = []int64{int64(min), int64(max)}
+		} else if minok {
+			limits = []int64{int64(min)}
+		}
+
+		fos = append(fos, OptFieldTypeInt(limits...))
+	case FieldTypeBool:
+		fos = append(fos, OptFieldTypeBool())
+	}
+
+	// Keys
+	if keys, ok := options["keys"].(bool); ok {
+		fos = append(fos, OptFieldKeys(keys))
+	}
+
+	return fos, nil
+}
+
 func (fo *FieldOptions) addOptions(options ...FieldOption) {
 	for _, option := range options {
 		if option == nil {

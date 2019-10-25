@@ -39,7 +39,7 @@ func (rim recordImportManager) run(field *Field, iterator RecordIterator, option
 	}
 
 	for i := range recordChans {
-		recordChans[i] = make(chan []Record, options.batchSize)
+		recordChans[i] = make(chan []Record, 16)
 		recordBufs[i] = make([]Record, 0, 16)
 		chans := importWorkerChannels{
 			records: recordChans[i],

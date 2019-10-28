@@ -39,7 +39,7 @@ func (rim recordImportManager) run(field *Field, iterator RecordIterator, option
 	}
 
 	for i := range recordChans {
-		recordChans[i] = make(chan []Record, options.batchSize)
+		recordChans[i] = make(chan []Record, 16)
 		recordBufs[i] = make([]Record, 0, 16)
 		chans := importWorkerChannels{
 			records: recordChans[i],
@@ -128,6 +128,9 @@ func recordImportWorker(id int, client *Client, field *Field, chans importWorker
 
 readRecords:
 	for recordBatch := range recordChan {
+		// It's fine to overrun our allowed batch size slightly, and
+		// we don't want to generate separate batches for part of a
+		// 16-item batch.
 		for _, record := range recordBatch {
 			recordCount++
 			shard := record.Shard(shardWidth)
@@ -135,20 +138,19 @@ readRecords:
 				batchForShard[shard] = make([]Record, 0, batchSize)
 			}
 			batchForShard[shard] = append(batchForShard[shard], record)
-
-			if recordCount >= batchSize {
-				for shard, records := range batchForShard {
-					if len(records) == 0 {
-						continue
-					}
-					err = importRecords(id, client, field, shardNodes, shard, records, options, statusChan, state)
-					if err != nil {
-						break readRecords
-					}
-					batchForShard[shard] = batchForShard[shard][:0]
+		}
+		if recordCount >= batchSize {
+			for shard, records := range batchForShard {
+				if len(records) == 0 {
+					continue
 				}
-				recordCount = 0
+				err = importRecords(id, client, field, shardNodes, shard, records, options, statusChan, state)
+				if err != nil {
+					break readRecords
+				}
+				delete(batchForShard, shard)
 			}
+			recordCount = 0
 		}
 	}
 

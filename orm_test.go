@@ -414,49 +414,49 @@ func TestTopN(t *testing.T) {
 
 func TestFieldLT(t *testing.T) {
 	comparePQL(t,
-		"Range(collaboration < 10)",
+		"Row(collaboration < 10)",
 		collabField.LT(10))
 }
 
 func TestFieldLTE(t *testing.T) {
 	comparePQL(t,
-		"Range(collaboration <= 10)",
+		"Row(collaboration <= 10)",
 		collabField.LTE(10))
 }
 
 func TestFieldGT(t *testing.T) {
 	comparePQL(t,
-		"Range(collaboration > 10)",
+		"Row(collaboration > 10)",
 		collabField.GT(10))
 }
 
 func TestFieldGTE(t *testing.T) {
 	comparePQL(t,
-		"Range(collaboration >= 10)",
+		"Row(collaboration >= 10)",
 		collabField.GTE(10))
 }
 
 func TestFieldEquals(t *testing.T) {
 	comparePQL(t,
-		"Range(collaboration == 10)",
+		"Row(collaboration == 10)",
 		collabField.Equals(10))
 }
 
 func TestFieldNotEquals(t *testing.T) {
 	comparePQL(t,
-		"Range(collaboration != 10)",
+		"Row(collaboration != 10)",
 		collabField.NotEquals(10))
 }
 
 func TestFieldNotNull(t *testing.T) {
 	comparePQL(t,
-		"Range(collaboration != null)",
+		"Row(collaboration != null)",
 		collabField.NotNull())
 }
 
 func TestFieldBetween(t *testing.T) {
 	comparePQL(t,
-		"Range(collaboration >< [10,20])",
+		"Row(collaboration >< [10,20])",
 		collabField.Between(10, 20))
 }
 
@@ -1018,6 +1018,16 @@ func TestBoolFieldOptions(t *testing.T) {
 		t.Fatalf("`%s` != `%s`", targetString, jsonString)
 	}
 	compareFieldOptions(t, field.Options(), FieldTypeBool, TimeQuantumNone, CacheTypeDefault, 0, 0, 0)
+}
+
+func TestDecimalFieldOptions(t *testing.T) {
+	field := sampleIndex.Field("decimal-field", OptFieldTypeDecimal(3, 7, 999))
+	jsonString := field.options.String()
+	targetString := `{"options":{"type":"decimal","scale":3,"max":999,"min":7}}`
+	if sortedString(targetString) != sortedString(jsonString) {
+		t.Fatalf("`%s` != `%s`", targetString, jsonString)
+	}
+	compareFieldOptions(t, field.Options(), FieldTypeDecimal, TimeQuantumNone, CacheTypeDefault, 0, 7, 999)
 }
 
 func TestEncodeMapPanicsOnMarshalFailure(t *testing.T) {

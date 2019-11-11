@@ -757,6 +757,7 @@ type FieldOptions struct {
 	cacheSize      int
 	min            int64
 	max            int64
+	scale          int64
 	keys           bool
 	noStandardView bool
 }
@@ -793,6 +794,11 @@ func (fo FieldOptions) Max() int64 {
 	return fo.max
 }
 
+// Scale returns the scale for a decimal field.
+func (fo FieldOptions) Scale() int64 {
+	return fo.scale
+}
+
 // Keys returns whether this field uses keys instead of IDs
 func (fo FieldOptions) Keys() bool {
 	return fo.keys
@@ -827,6 +833,10 @@ func (fo FieldOptions) String() string {
 	case FieldTypeInt:
 		mopt["min"] = fo.min
 		mopt["max"] = fo.max
+	case FieldTypeDecimal:
+		mopt["min"] = fo.min
+		mopt["max"] = fo.max
+		mopt["scale"] = fo.scale
 	case FieldTypeTime:
 		mopt["timeQuantum"] = string(fo.timeQuantum)
 		mopt["noStandardView"] = fo.noStandardView
@@ -873,7 +883,7 @@ func OptFieldTypeInt(limits ...int64) FieldOption {
 	max := int64(math.MaxInt64)
 
 	if len(limits) > 2 {
-		panic("error: OptFieldTypInt accepts at most 2 arguments")
+		panic("error: OptFieldTypeInt accepts at most 2 arguments")
 	}
 	if len(limits) > 0 {
 		min = limits[0]
@@ -913,6 +923,17 @@ func OptFieldTypeMutex(cacheType CacheType, cacheSize int) FieldOption {
 func OptFieldTypeBool() FieldOption {
 	return func(options *FieldOptions) {
 		options.fieldType = FieldTypeBool
+	}
+}
+
+func OptFieldTypeDecimal(scale int64, minmax ...int64) FieldOption {
+	// reuse int logic for handling min/max
+	intopt := OptFieldTypeInt(minmax...)
+
+	return func(options *FieldOptions) {
+		intopt(options)
+		options.fieldType = FieldTypeDecimal
+		options.scale = scale
 	}
 }
 
@@ -1199,6 +1220,10 @@ const (
 	// FieldTypeBool is the boolean field type.
 	// See: https://www.pilosa.com/docs/latest/data-model/#boolean
 	FieldTypeBool FieldType = "bool"
+	// FieldTypeDecimal can store floating point numbers as integers
+	// with a scale factor. This field type is only available in
+	// Molecula's Pilosa with enterprise extensions.
+	FieldTypeDecimal FieldType = "decimal"
 )
 
 // TimeQuantum type represents valid time quantum values time fields.
@@ -1272,7 +1297,7 @@ func (f *Field) NotEquals(n int) *PQLRowQuery {
 
 // NotNull creates a not equal to null query.
 func (f *Field) NotNull() *PQLRowQuery {
-	text := fmt.Sprintf("Range(%s != null)", f.name)
+	text := fmt.Sprintf("Row(%s != null)", f.name)
 	q := NewPQLRowQuery(text, f.index, nil)
 	q.hasKeys = f.options.keys || f.index.options.keys
 	return q
@@ -1280,7 +1305,7 @@ func (f *Field) NotNull() *PQLRowQuery {
 
 // Between creates a between query.
 func (f *Field) Between(a int, b int) *PQLRowQuery {
-	text := fmt.Sprintf("Range(%s >< [%d,%d])", f.name, a, b)
+	text := fmt.Sprintf("Row(%s >< [%d,%d])", f.name, a, b)
 	q := NewPQLRowQuery(text, f.index, nil)
 	q.hasKeys = f.options.keys || f.index.options.keys
 	return q
@@ -1450,7 +1475,7 @@ func (f *Field) RowsPreviousLimitColumn(rowIDOrKey interface{}, limit int64, col
 }
 
 func (f *Field) binaryOperation(op string, n int) *PQLRowQuery {
-	text := fmt.Sprintf("Range(%s %s %d)", f.name, op, n)
+	text := fmt.Sprintf("Row(%s %s %d)", f.name, op, n)
 	q := NewPQLRowQuery(text, f.index, nil)
 	q.hasKeys = f.options.keys || f.index.options.keys
 	return q

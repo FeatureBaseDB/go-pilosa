@@ -725,6 +725,59 @@ func (c *Client) importValues(field *Field,
 	return errors.Wrap(err, "importing values to nodes")
 }
 
+// Import imports data for a single shard using the regular import
+// endpoint rather than import-roaring. This is good for e.g. mutex or
+// bool fields where import-roaring is not supported.
+func (c *Client) Import(index, field string, shard uint64, vals, ids []uint64, clear bool) error {
+	path, data, err := c.EncodeImport(index, field, shard, vals, ids, clear)
+	if err != nil {
+		return errors.Wrap(err, "encoding import request")
+	}
+	err = c.DoImport(index, shard, path, data)
+	return errors.Wrap(err, "doing import")
+}
+
+// EncodeImport computes the HTTP path and payload for an import
+// request. It is typically followed by a call to DoImport.
+func (c *Client) EncodeImport(index, field string, shard uint64, vals, ids []uint64, clear bool) (path string, data []byte, err error) {
+	msg := &pbuf.ImportRequest{
+		Index:     index,
+		Field:     field,
+		Shard:     shard,
+		RowIDs:    vals,
+		ColumnIDs: ids,
+	}
+	data, err = proto.Marshal(msg)
+	if err != nil {
+		return "", nil, errors.Wrap(err, "marshaling Import to protobuf")
+	}
+	path = fmt.Sprintf("/index/%s/field/%s/import?clear=%s&ignoreKeyCheck=true", index, field, strconv.FormatBool(clear))
+	return path, data, nil
+}
+
+// DoImport takes a path and data payload (normally from EncodeImport
+// or EncodeImportValues), logs the import, finds all nodes which own
+// this shard, and concurrently imports to those nodes.
+func (c *Client) DoImport(index string, shard uint64, path string, data []byte) error {
+	// TODO: figure out if the forwarding logic in Pilosa is the same
+	// for importing values as it is for importing mutex/bool. We may
+	// need to change that...
+	c.logImport(index, path, shard, false, data)
+
+	uris, err := c.getURIsForShard(index, shard)
+	if err != nil {
+		return errors.Wrap(err, "getting uris")
+	}
+
+	eg := errgroup.Group{}
+	for _, uri := range uris {
+		eg.Go(func() error {
+			return c.importData(uri, path, data)
+		})
+	}
+	return errors.Wrap(eg.Wait(), "importing to nodes")
+}
+
 // ImportValues takes the given integer values and column ids (which
 // must all be in the given shard) and imports them into the given
 // index,field,shard on all nodes which should hold that shard. It
@@ -756,30 +809,15 @@ func (c *Client) EncodeImportValues(index, field string, shard uint64, vals []in
 	}
 	data, err = proto.Marshal(msg)
 	if err != nil {
-		return "", nil, errors.Wrap(err, "marshaling to protobuf")
+		return "", nil, errors.Wrap(err, "marshaling ImportValue to protobuf")
 	}
 	path = fmt.Sprintf("/index/%s/field/%s/import?clear=%s&ignoreKeyCheck=true", index, field, strconv.FormatBool(clear))
 	return path, data, nil
 }
 
-// DoImportValues takes a path and data payload (normally from
-// EncodeImportValues), logs the import, finds all nodes which own
-// this shard, and concurrently imports to those nodes.
+// DoImportValues is deprecated. Use DoImport.
 func (c *Client) DoImportValues(index string, shard uint64, path string, data []byte) error {
-	c.logImport(index, path, shard, false, data)
-
-	uris, err := c.getURIsForShard(index, shard)
-	if err != nil {
-		return errors.Wrap(err, "getting uris")
-	}
-
-	eg := errgroup.Group{}
-	for _, uri := range uris {
-		eg.Go(func() error {
-			return c.importData(uri, path, data)
-		})
-	}
-	return errors.Wrap(eg.Wait(), "importing values to nodes")
+	return c.DoImport(index, shard, path, data)
 }
 
 func importPathData(field *Field, shard uint64, msg proto.Message, options *ImportOptions) (path string, data []byte, err error) {
@@ -1940,6 +1978,7 @@ type SchemaOptions struct {
 	TimeQuantum    string    `json:"timeQuantum"`
 	Min            int64     `json:"min"`
 	Max            int64     `json:"max"`
+	Scale          int64     `json:"scale"`
 	Keys           bool      `json:"keys"`
 	NoStandardView bool      `json:"noStandardView"`
 	TrackExistence bool      `json:"trackExistence"`
@@ -1962,6 +2001,7 @@ func (so SchemaOptions) asFieldOptions() *FieldOptions {
 		timeQuantum:    TimeQuantum(so.TimeQuantum),
 		min:            so.Min,
 		max:            so.Max,
+		scale:          so.Scale,
 		keys:           so.Keys,
 		noStandardView: so.NoStandardView,
 	}

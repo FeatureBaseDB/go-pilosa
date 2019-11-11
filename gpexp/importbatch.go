@@ -49,6 +49,7 @@ type RecordBatch interface {
 // | string | set               | keys=true |
 // | uint64 | set               | any       |
 // | int64  | int               | any       |
+// | float64| int               | scale     | TODO
 // | nil    | any               |           |
 //
 // nil values are ignored.
@@ -140,10 +141,17 @@ func NewBatch(client *pilosa.Client, size int, index *pilosa.Index, fields []*pi
 			}
 			rowIDs[i] = make([]uint64, 0, size) // TODO make this on-demand when it gets used. could be a string array field.
 			hasTime = typ == pilosa.FieldTypeTime || hasTime
-		case pilosa.FieldTypeInt:
+		case pilosa.FieldTypeInt, pilosa.FieldTypeDecimal:
 			values[field.Name()] = make([]int64, 0, size)
+		case pilosa.FieldTypeMutex:
+			// similar to set/time fields, but no need to support sets
+			// of values (hence no ttSets)
+			if opts.Keys() {
+				tt[i] = make(map[string][]int)
+			}
+			rowIDs[i] = make([]uint64, 0, size)
 		default:
-			return nil, errors.Errorf("field type %s is not currently supported through Batch", typ)
+			return nil, errors.Errorf("field type '%s' is not currently supported through Batch", typ)
 		}
 	}
 	b := &Batch{
@@ -522,6 +530,9 @@ func (b *Batch) doImport() error {
 	eg.Go(func() error {
 		return b.importValueData()
 	})
+	eg.Go(func() error {
+		return b.importMutexData()
+	})
 	return eg.Wait()
 }
 
@@ -543,6 +554,9 @@ func (b *Batch) makeFragments() (fragments, error) {
 		}
 		field := b.header[i]
 		opts := field.Opts()
+		if opts.Type() == pilosa.FieldTypeMutex {
+			continue // we handle mutex fields separately — they can't use importRoaring
+		}
 		curShard := ^uint64(0) // impossible sentinel value for shard.
 		var curBM *roaring.Bitmap
 		for j := range b.ids {
@@ -688,6 +702,71 @@ func (b *Batch) importValueData() error {
 	}
 	err := eg.Wait()
 	return errors.Wrap(err, "importing value data")
+}
+
+// TODO this should work for bools as well - just need to support them
+// at batch creation time and when calling Add, I think.
+func (b *Batch) importMutexData() error {
+	shardWidth := b.index.ShardWidth()
+	if shardWidth == 0 {
+		shardWidth = pilosa.DefaultShardWidth
+	}
+	eg := errgroup.Group{}
+	ids := make([]uint64, 0, len(b.ids))
+
+	for findex, rowIDs := range b.rowIDs {
+		field := b.header[findex]
+		if field.Opts().Type() != pilosa.FieldTypeMutex {
+			continue
+		}
+		ids = ids[:0]
+
+		// get slice of column ids for non-nil rowIDs and cut nil row
+		// IDs out of rowIDs.
+		idsIndex := 0
+		for i, id := range b.ids {
+			rowID := rowIDs[i]
+			if rowID == nilSentinel {
+				continue
+			}
+			rowIDs[idsIndex] = rowID
+			ids = append(ids, id)
+			idsIndex++
+		}
+		rowIDs = rowIDs[:idsIndex]
+
+		if len(ids) == 0 {
+			continue
+		}
+		curShard := ids[0] / shardWidth
+		startIdx := 0
+		for i := 1; i <= len(ids); i++ {
+			var recordID uint64
+			if i < len(ids) {
+				recordID = ids[i]
+			} else {
+				recordID = (curShard + 2) * shardWidth
+			}
+
+			if recordID/shardWidth != curShard {
+				endIdx := i
+				shard := curShard
+				field := field
+				path, data, err := b.client.EncodeImport(b.index.Name(), field.Name(), shard, rowIDs[startIdx:endIdx], ids[startIdx:endIdx], false)
+				if err != nil {
+					return errors.Wrap(err, "encoding mutex import")
+				}
+				eg.Go(func() error {
+					err := b.client.DoImport(b.index.Name(), shard, path, data)
+					return errors.Wrapf(err, "importing values for %s", field)
+				})
+				startIdx = i
+				curShard = recordID / shardWidth
+			}
+		}
+	}
+	err := eg.Wait()
+	return errors.Wrap(err, "importing mutex data")
 }
 
 // reset is called at the end of importing to ready the batch for the

@@ -203,7 +203,7 @@ func TestBatches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getting new batch: %v", err)
 	}
-	r := Row{Values: make([]interface{}, numFields)}
+	r := Row{Values: make([]interface{}, numFields), Clears: make(map[int]interface{})}
 	r.Time.Set(time.Date(2019, time.January, 2, 15, 45, 0, 0, time.UTC))
 
 	for i := 0; i < 9; i++ {
@@ -225,6 +225,8 @@ func TestBatches(t *testing.T) {
 		}
 		if i == 8 {
 			r.Values[0] = nil
+			r.Clears[1] = uint64(97)
+			r.Clears[2] = "c"
 			r.Values[3] = nil
 			r.Values[4] = nil
 		}
@@ -251,6 +253,12 @@ func TestBatches(t *testing.T) {
 		} else {
 			t.Fatalf("unexpected key %s", k)
 		}
+	}
+	if !reflect.DeepEqual(b.toTranslateClear, map[int]map[string][]int{2: map[string][]int{"c": []int{8}}}) {
+		t.Errorf("unexpected toTranslateClear: %+v", b.toTranslateClear)
+	}
+	if !reflect.DeepEqual(b.clearRowIDs, map[int]map[int]uint64{1: map[int]uint64{8: 97}, 2: map[int]uint64{}}) {
+		t.Errorf("unexpected clearRowIDs: %+v", b.clearRowIDs)
 	}
 
 	if !reflect.DeepEqual(b.values["three"], []int64{99, -10, 99, -10, 99, -10, 99, -10, 0}) {
@@ -336,6 +344,13 @@ func TestBatches(t *testing.T) {
 				t.Fatalf("unexpected row ids for field %d: %v", fidx, rowIDs)
 			}
 		}
+	}
+
+	if !reflect.DeepEqual(b.clearRowIDs[1], map[int]uint64{8: 97}) {
+		t.Errorf("unexpected clearRowIDs after translation: %+v", b.clearRowIDs[1])
+	}
+	if !reflect.DeepEqual(b.clearRowIDs[2], map[int]uint64{8: 2}) && !reflect.DeepEqual(b.clearRowIDs[2], map[int]uint64{8: 1}) {
+		t.Errorf("unexpected clearRowIDs: after translation%+v", b.clearRowIDs[2])
 	}
 
 	err = b.doImport()
@@ -442,7 +457,7 @@ func TestBatches(t *testing.T) {
 		}
 	}
 
-	frags, err := b.makeFragments()
+	frags, _, err := b.makeFragments()
 	if err != nil {
 		t.Fatalf("making fragments: %v", err)
 	}
@@ -527,7 +542,38 @@ func TestBatches(t *testing.T) {
 		t.Fatalf("wrong cols for January: got/want\n%v\n%v", cols, exp)
 	}
 
-	// TODO test non-full batches, test behavior of doing import on empty batch
+	b.reset()
+	r.ID = uint64(0)
+	r.Values[0] = "x"
+	r.Values[1] = "b"
+	r.Clears[0] = "a"
+	r.Clears[1] = "b" // b should get cleared
+	err = b.Add(r)
+	if err != nil {
+		t.Fatalf("adding with clears: %v", err)
+	}
+	err = b.Import()
+	if err != nil {
+		t.Fatalf("importing w/clears: %v", err)
+	}
+	resp, err = client.Query(idx.BatchQuery(
+		fields[0].Row("a"),
+		fields[0].Row("x"),
+		fields[1].Row("b"),
+	))
+	if err != nil {
+		t.Fatalf("querying after clears: %v", err)
+	}
+	if arow := resp.Results()[0].Row().Columns; arow[0] == 0 {
+		t.Errorf("shouldn't have id 0 in row a after clearing! %v", arow)
+	}
+	if xrow := resp.Results()[1].Row().Columns; xrow[0] != 0 {
+		t.Errorf("should have id 0 in row x after setting %v", xrow)
+	}
+	if brow := resp.Results()[2].Row().Columns; brow[0] == 0 {
+		t.Errorf("shouldn't have id 0 in row b after clearing! %v", brow)
+	}
+
 	// TODO test importing across multiple shards
 }
 

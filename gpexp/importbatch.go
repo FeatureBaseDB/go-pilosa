@@ -65,6 +65,13 @@ type Batch struct {
 	// rowIDs is a map of field index (in the header) to slices of
 	// length batchSize which contain row IDs.
 	rowIDs map[int][]uint64
+	// clearRowIDs is a map[fieldIndex][idsIndex]rowID we don't expect
+	// clears to happen very often, so we store the idIndex/value
+	// mapping in a map rather than a slice as we do for rowIDs. This
+	// is a potentially temporary workaround to allow packed boolean
+	// fields to clear "false" values. Packed fields may be more
+	// completely supported by Pilosa in future.
+	clearRowIDs map[int]map[int]uint64
 
 	// rowIDSets is a map from field name to a batchSize slice of
 	// slices of row IDs. When a given record can have more than one
@@ -81,10 +88,11 @@ type Batch struct {
 	// integer field which has nil values.
 	nullIndices map[string][]uint64
 
-	// TODO support mutex and bool fields.
+	// TODO support bool fields.
 
 	// for each field, keep a map of key to which record indexes that key mapped to
-	toTranslate map[int]map[string][]int
+	toTranslate      map[int]map[string][]int
+	toTranslateClear map[int]map[string][]int
 
 	// toTranslateSets is a map from field name to a map of string
 	// keys that need to be translated to sets of record indexes which
@@ -155,19 +163,21 @@ func NewBatch(client *pilosa.Client, size int, index *pilosa.Index, fields []*pi
 		}
 	}
 	b := &Batch{
-		client:          client,
-		header:          fields,
-		headerMap:       headerMap,
-		index:           index,
-		ids:             make([]uint64, 0, size),
-		rowIDs:          rowIDs,
-		rowIDSets:       make(map[string][][]uint64),
-		values:          values,
-		nullIndices:     make(map[string][]uint64),
-		toTranslate:     tt,
-		toTranslateSets: ttSets,
-		toTranslateID:   make(map[string][]int),
-		transCache:      NewMapTranslator(),
+		client:           client,
+		header:           fields,
+		headerMap:        headerMap,
+		index:            index,
+		ids:              make([]uint64, 0, size),
+		rowIDs:           rowIDs,
+		clearRowIDs:      make(map[int]map[int]uint64),
+		rowIDSets:        make(map[string][][]uint64),
+		values:           values,
+		nullIndices:      make(map[string][]uint64),
+		toTranslate:      tt,
+		toTranslateClear: make(map[int]map[string][]int),
+		toTranslateSets:  ttSets,
+		toTranslateID:    make(map[string][]int),
+		transCache:       NewMapTranslator(),
 	}
 	if hasTime {
 		b.times = make([]QuantizedTime, 0, size)
@@ -185,6 +195,7 @@ func NewBatch(client *pilosa.Client, size int, index *pilosa.Index, fields []*pi
 type Row struct {
 	ID     interface{}
 	Values []interface{}
+	Clears map[int]interface{}
 	Time   QuantizedTime
 }
 
@@ -269,7 +280,9 @@ func (qt *QuantizedTime) views(q pilosa.TimeQuantum) ([]string, error) {
 // Add adds a record to the batch. Performance will be best if record
 // IDs are shard-sorted. That is, all records which belong to the same
 // Pilosa shard are added adjacent to each other. If the records are
-// also in-order within a shard this will likely help as well.
+// also in-order within a shard this will likely help as well. Add
+// clears rec.Clears when it returns normally (either a nil error or
+// BatchNowFull), it does not clear rec.Values although... TODO.
 func (b *Batch) Add(rec Row) error {
 	if len(b.ids) == cap(b.ids) {
 		return ErrBatchAlreadyFull
@@ -368,7 +381,7 @@ func (b *Batch) Add(rec Row) error {
 			}
 			b.rowIDSets[field.Name()] = append(rowIDSets, rowIDs)
 		case nil:
-			if field.Opts().Type() == pilosa.FieldTypeInt {
+			if field.Opts().Type() == pilosa.FieldTypeInt || field.Opts().Type() == pilosa.FieldTypeDecimal {
 				b.values[field.Name()] = append(b.values[field.Name()], 0)
 				nullIndices, ok := b.nullIndices[field.Name()]
 				if !ok {
@@ -384,8 +397,44 @@ func (b *Batch) Add(rec Row) error {
 			return errors.Errorf("Val %v Type %[1]T is not currently supported. Use string, uint64 (row id), or int64 (integer value)", val)
 		}
 	}
+
+	for i, uval := range rec.Clears {
+		field := b.header[i]
+		if _, ok := b.clearRowIDs[i]; !ok {
+			b.clearRowIDs[i] = make(map[int]uint64)
+		}
+		switch val := uval.(type) {
+		case string:
+			clearRows := b.clearRowIDs[i]
+			// translate val and add to clearRows
+			if rowID, ok, err := b.transCache.GetRow(b.index.Name(), field.Name(), val); err != nil {
+				return errors.Wrap(err, "translating row")
+			} else if ok {
+				clearRows[curPos] = rowID
+			} else {
+				_, ok := b.toTranslateClear[i]
+				if !ok {
+					b.toTranslateClear[i] = make(map[string][]int)
+				}
+				ints, ok := b.toTranslateClear[i][val]
+				if !ok {
+					ints = make([]int, 0)
+				}
+				ints = append(ints, curPos)
+				b.toTranslateClear[i][val] = ints
+			}
+		case uint64:
+			b.clearRowIDs[i][curPos] = val
+		default:
+			return errors.Errorf("Clearing a value '%v' Type %[1]T is not currently supported (field '%s')", val, field.Name())
+		}
+	}
+
 	if len(b.ids) == cap(b.ids) {
 		return ErrBatchNowFull
+	}
+	for k := range rec.Clears {
+		delete(rec.Clears, k)
 	}
 	return nil
 }
@@ -456,6 +505,14 @@ func (b *Batch) doTranslation() error {
 		for k := range tt {
 			keys = append(keys, k)
 		}
+		// append keys to clear so we can translate them all in one
+		// request. ttEnd is the index where clearing starts which we
+		// use later on.
+		ttEnd := len(keys)
+		ttc := b.toTranslateClear[i]
+		for k := range ttc {
+			keys = append(keys, k)
+		}
 
 		if len(keys) == 0 {
 			continue
@@ -472,10 +529,20 @@ func (b *Batch) doTranslation() error {
 
 		// fill out missing IDs in local batch records with translated IDs
 		rows := b.rowIDs[i]
-		for j, key := range keys {
+		for j := 0; j < ttEnd; j++ {
+			key := keys[j]
 			id := ids[j]
 			for _, recordIdx := range tt[key] {
 				rows[recordIdx] = id
+			}
+		}
+		// fill out missing IDs in clear lists.
+		clearRows := b.clearRowIDs[i]
+		for j := ttEnd; j < len(keys); j++ {
+			key := keys[j]
+			id := ids[j]
+			for _, recordIdx := range ttc[key] {
+				clearRows[recordIdx] = id
 			}
 		}
 	}
@@ -513,15 +580,23 @@ func (b *Batch) doTranslation() error {
 func (b *Batch) doImport() error {
 	eg := errgroup.Group{}
 
-	frags, err := b.makeFragments()
+	frags, clearFrags, err := b.makeFragments()
 	if err != nil {
 		return errors.Wrap(err, "making fragments")
 	}
+
 	for shard, fieldMap := range frags {
 		for field, viewMap := range fieldMap {
 			field := field
 			viewMap := viewMap
 			eg.Go(func() error {
+				clearViewMap := clearFrags.GetViewMap(shard, field)
+				if len(clearViewMap) > 0 {
+					err := b.client.ImportRoaringBitmap(b.index.Field(field), shard, clearViewMap, true)
+					if err != nil {
+						return errors.Wrapf(err, "import clearing clearing data for %s", field)
+					}
+				}
 				err := b.client.ImportRoaringBitmap(b.index.Field(field), shard, viewMap, false)
 				return errors.Wrapf(err, "importing data for %s", field)
 			})
@@ -542,15 +617,21 @@ func (b *Batch) doImport() error {
 // if needed though).
 var nilSentinel = ^uint64(0)
 
-func (b *Batch) makeFragments() (fragments, error) {
+func (b *Batch) makeFragments() (frags fragments, clearFrags fragments, err error) {
 	shardWidth := b.index.ShardWidth()
 	if shardWidth == 0 {
 		shardWidth = pilosa.DefaultShardWidth
 	}
-	frags := make(fragments)
+	frags = make(fragments)
+	clearFrags = make(fragments)
+	emptyClearRows := make(map[int]uint64)
 	for i, rowIDs := range b.rowIDs {
 		if len(rowIDs) == 0 {
 			continue // this can happen when the values that came in for this field were string slices
+		}
+		clearRows := b.clearRowIDs[i]
+		if clearRows == nil {
+			clearRows = emptyClearRows
 		}
 		field := b.header[i]
 		opts := field.Opts()
@@ -559,32 +640,42 @@ func (b *Batch) makeFragments() (fragments, error) {
 		}
 		curShard := ^uint64(0) // impossible sentinel value for shard.
 		var curBM *roaring.Bitmap
+		var clearBM *roaring.Bitmap
 		for j := range b.ids {
 			col, row := b.ids[j], rowIDs[j]
-			if row == nilSentinel {
-				continue
-			}
 			if col/shardWidth != curShard {
 				curShard = col / shardWidth
 				curBM = frags.GetOrCreate(curShard, field.Name(), "")
+				clearBM = clearFrags.GetOrCreate(curShard, field.Name(), "")
 			}
-			// TODO this is super ugly, but we want to avoid setting
-			// bits on the standard view in the specific case when
-			// there isn't one. Should probably refactor this whole
-			// loop to be more general w.r.t. views. Also... tests for
-			// the NoStandardView case would be great.
-			if !(opts.Type() == pilosa.FieldTypeTime && opts.NoStandardView()) {
-				curBM.DirectAdd(row*shardWidth + (col % shardWidth))
+			if row != nilSentinel {
+				// TODO this is super ugly, but we want to avoid setting
+				// bits on the standard view in the specific case when
+				// there isn't one. Should probably refactor this whole
+				// loop to be more general w.r.t. views. Also... tests for
+				// the NoStandardView case would be great.
+				if !(opts.Type() == pilosa.FieldTypeTime && opts.NoStandardView()) {
+					curBM.DirectAdd(row*shardWidth + (col % shardWidth))
+				}
+				if opts.Type() == pilosa.FieldTypeTime {
+					views, err := b.times[j].views(opts.TimeQuantum())
+					if err != nil {
+						return nil, nil, errors.Wrap(err, "calculating views")
+					}
+					for _, view := range views {
+						tbm := frags.GetOrCreate(curShard, field.Name(), view)
+						tbm.DirectAdd(row*shardWidth + (col % shardWidth))
+					}
+				}
 			}
-			if opts.Type() == pilosa.FieldTypeTime {
-				views, err := b.times[j].views(opts.TimeQuantum())
-				if err != nil {
-					return nil, errors.Wrap(err, "calculating views")
-				}
-				for _, view := range views {
-					tbm := frags.GetOrCreate(curShard, field.Name(), view)
-					tbm.DirectAdd(row*shardWidth + (col % shardWidth))
-				}
+
+			clearRow, ok := clearRows[j]
+			if ok {
+				clearBM.DirectAddN(clearRow*shardWidth + (col % shardWidth))
+				// we're going to execute the clear before the set, so
+				// we want to make sure that at this point, the "set"
+				// fragments don't contian the bit that we're clearing
+				curBM.DirectRemoveN(clearRow*shardWidth + (col % shardWidth))
 			}
 		}
 	}
@@ -619,7 +710,7 @@ func (b *Batch) makeFragments() (fragments, error) {
 			if opts.Type() == pilosa.FieldTypeTime {
 				views, err := b.times[j].views(opts.TimeQuantum())
 				if err != nil {
-					return nil, errors.Wrap(err, "calculating views")
+					return nil, nil, errors.Wrap(err, "calculating views")
 				}
 				for _, view := range views {
 					tbm := frags.GetOrCreate(curShard, fname, view)
@@ -630,7 +721,7 @@ func (b *Batch) makeFragments() (fragments, error) {
 			}
 		}
 	}
-	return frags, nil
+	return frags, clearFrags, nil
 }
 
 // importValueData imports data for int fields.
@@ -788,6 +879,16 @@ func (b *Batch) reset() {
 			delete(m, k)
 		}
 	}
+	for _, rowIDs := range b.clearRowIDs {
+		for k := range rowIDs {
+			delete(rowIDs, k)
+		}
+	}
+	for _, clearMap := range b.toTranslateClear {
+		for k := range clearMap {
+			delete(clearMap, k)
+		}
+	}
 	for k := range b.toTranslateID {
 		delete(b.toTranslateID, k) // TODO pool these slices
 	}
@@ -819,4 +920,16 @@ func (f fragments) GetOrCreate(shard uint64, field, view string) *roaring.Bitmap
 	fieldMap[field] = viewMap
 	f[shard] = fieldMap
 	return bm
+}
+
+func (f fragments) GetViewMap(shard uint64, field string) map[string]*roaring.Bitmap {
+	fieldMap, ok := f[shard]
+	if !ok {
+		return nil
+	}
+	viewMap, ok := fieldMap[field]
+	if !ok {
+		return nil
+	}
+	return viewMap
 }

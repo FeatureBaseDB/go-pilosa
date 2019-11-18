@@ -284,6 +284,16 @@ func (qt *QuantizedTime) views(q pilosa.TimeQuantum) ([]string, error) {
 // clears rec.Clears when it returns normally (either a nil error or
 // BatchNowFull), it does not clear rec.Values although... TODO.
 func (b *Batch) Add(rec Row) error {
+	// Clear recValues and rec.Clears upon return.
+	defer func() {
+		for i := range rec.Values {
+			rec.Values[i] = nil
+		}
+		for k := range rec.Clears {
+			delete(rec.Clears, k)
+		}
+	}()
+
 	if len(b.ids) == cap(b.ids) {
 		return ErrBatchAlreadyFull
 	}
@@ -432,9 +442,6 @@ func (b *Batch) Add(rec Row) error {
 
 	if len(b.ids) == cap(b.ids) {
 		return ErrBatchNowFull
-	}
-	for k := range rec.Clears {
-		delete(rec.Clears, k)
 	}
 	return nil
 }

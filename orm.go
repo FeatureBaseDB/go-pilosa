@@ -39,6 +39,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -396,6 +397,7 @@ func OptOptionsShards(shards ...uint64) OptionsOption {
 // Index is a Pilosa index. The purpose of the Index is to represent a data namespace.
 // You cannot perform cross-index queries. Column-level attributes are global to the Index.
 type Index struct {
+	mu         sync.Mutex
 	name       string
 	options    *IndexOptions
 	fields     map[string]*Field
@@ -422,6 +424,8 @@ func (idx *Index) ShardWidth() uint64 {
 
 // Fields return a copy of the fields in this index
 func (idx *Index) Fields() map[string]*Field {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
 	result := make(map[string]*Field)
 	for k, v := range idx.fields {
 		result[k] = v.copy()
@@ -431,11 +435,15 @@ func (idx *Index) Fields() map[string]*Field {
 
 // HasFields returns true if the given field exists in the index.
 func (idx *Index) HasField(fieldName string) bool {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
 	_, ok := idx.fields[fieldName]
 	return ok
 }
 
 func (idx *Index) copy() *Index {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
 	fields := make(map[string]*Field)
 	for name, f := range idx.fields {
 		fields[name] = f.copy()
@@ -462,6 +470,8 @@ func (idx *Index) Opts() IndexOptions {
 
 // Field creates a Field struct with the specified name and defaults.
 func (idx *Index) Field(name string, options ...FieldOption) *Field {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
 	if field, ok := idx.fields[name]; ok {
 		return field
 	}

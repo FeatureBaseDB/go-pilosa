@@ -340,7 +340,7 @@ func TestBatches(t *testing.T) {
 				t.Fatalf("expected no rowIDs for int field, but got: %v", rowIDs)
 			}
 		} else {
-			if !reflect.DeepEqual(rowIDs, []uint64{1, 2, 1, 2, 1, 2, 1, 2, 1, 1}) && !reflect.DeepEqual(rowIDs, []uint64{2, 1, 2, 1, 2, 1, 2, 1, 2, 2}) {
+			if !reflect.DeepEqual(rowIDs, []uint64{1, 2, 1, 2, 1, 2, 1, 2, 1, nilSentinel}) && !reflect.DeepEqual(rowIDs, []uint64{2, 1, 2, 1, 2, 1, 2, 1, 2, nilSentinel}) {
 				t.Fatalf("unexpected row ids for field %d: %v", fidx, rowIDs)
 			}
 		}
@@ -482,17 +482,16 @@ func TestBatches(t *testing.T) {
 	}
 
 	results := resp.Results()
-	for _, j := range []int{0, 3} {
+	for _, j := range []int{0, 2, 3} {
 		cols := results[j].Row().Columns
 		if !reflect.DeepEqual(cols, []uint64{0, 2, 4, 6, 10, 12, 14, 16, 18}) {
 			t.Fatalf("unexpected columns for a: %v", cols)
 		}
 	}
-	for i, res := range results[1:3] {
-		cols := res.Row().Columns
-		if !reflect.DeepEqual(cols, []uint64{0, 2, 4, 6, 8, 10, 12, 14, 16, 18}) {
-			t.Fatalf("unexpected columns at %d: %v", i, cols)
-		}
+	res = results[1]
+	cols := res.Row().Columns
+	if !reflect.DeepEqual(cols, []uint64{0, 2, 4, 6, 8, 10, 12, 14, 16, 18}) {
+		t.Fatalf("unexpected columns for field 1 row b: %v", cols)
 	}
 
 	resp, err = client.Query(idx.BatchQuery(fields[0].Row("d"),

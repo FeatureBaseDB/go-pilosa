@@ -579,12 +579,12 @@ type groupByBuilder struct {
 	aggregate *PQLBaseQuery
 }
 
-// groupByBuilderOption is a functional option type for index.GroupBy
-type groupByBuilderOption func(g *groupByBuilder) error
+// GroupByBuilderOption is a functional option type for index.GroupBy
+type GroupByBuilderOption func(g *groupByBuilder) error
 
 // OptGroupByBuilderRows is a functional option on groupByBuilder
 // used to set the rows.
-func OptGroupByBuilderRows(rows ...*PQLRowsQuery) groupByBuilderOption {
+func OptGroupByBuilderRows(rows ...*PQLRowsQuery) GroupByBuilderOption {
 	return func(g *groupByBuilder) error {
 		g.rows = rows
 		return nil
@@ -593,7 +593,7 @@ func OptGroupByBuilderRows(rows ...*PQLRowsQuery) groupByBuilderOption {
 
 // OptGroupByBuilderLimit is a functional option on groupByBuilder
 // used to set the limit.
-func OptGroupByBuilderLimit(l int64) groupByBuilderOption {
+func OptGroupByBuilderLimit(l int64) GroupByBuilderOption {
 	return func(g *groupByBuilder) error {
 		g.limit = l
 		return nil
@@ -602,7 +602,7 @@ func OptGroupByBuilderLimit(l int64) groupByBuilderOption {
 
 // OptGroupByBuilderFilter is a functional option on groupByBuilder
 // used to set the filter.
-func OptGroupByBuilderFilter(q *PQLRowQuery) groupByBuilderOption {
+func OptGroupByBuilderFilter(q *PQLRowQuery) GroupByBuilderOption {
 	return func(g *groupByBuilder) error {
 		g.filter = q
 		return nil
@@ -611,7 +611,7 @@ func OptGroupByBuilderFilter(q *PQLRowQuery) groupByBuilderOption {
 
 // OptGroupByBuilderAggregate is a functional option on groupByBuilder
 // used to set the aggregate.
-func OptGroupByBuilderAggregate(agg *PQLBaseQuery) groupByBuilderOption {
+func OptGroupByBuilderAggregate(agg *PQLBaseQuery) GroupByBuilderOption {
 	return func(g *groupByBuilder) error {
 		g.aggregate = agg
 		return nil
@@ -619,7 +619,7 @@ func OptGroupByBuilderAggregate(agg *PQLBaseQuery) groupByBuilderOption {
 }
 
 // GroupByBase creates a GroupBy query with the given functional options.
-func (idx *Index) GroupByBase(opts ...groupByBuilderOption) *PQLBaseQuery {
+func (idx *Index) GroupByBase(opts ...GroupByBuilderOption) *PQLBaseQuery {
 	bldr := &groupByBuilder{}
 	for _, opt := range opts {
 		err := opt(bldr)

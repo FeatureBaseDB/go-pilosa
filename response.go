@@ -460,6 +460,7 @@ type FieldRow struct {
 type GroupCount struct {
 	Groups []FieldRow `json:"groups"`
 	Count  int64      `json:"count"`
+	Sum    int64      `json:"sum"`
 }
 
 // GroupCountResult is returned from GroupBy call.
@@ -539,6 +540,7 @@ func groupCountsFromInternal(items []*pbuf.GroupCount) GroupCountResult {
 		result = append(result, GroupCount{
 			Groups: groups,
 			Count:  int64(g.Count),
+			Sum:    int64(g.Sum),
 		})
 	}
 	return GroupCountResult(result)

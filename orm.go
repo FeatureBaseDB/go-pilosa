@@ -572,6 +572,93 @@ func (idx *Index) Options(row *PQLRowQuery, opts ...OptionsOption) *PQLBaseQuery
 	return NewPQLBaseQuery(text, idx, nil)
 }
 
+type groupByBuilder struct {
+	rows      []*PQLRowsQuery
+	limit     int64
+	filter    *PQLRowQuery
+	aggregate *PQLBaseQuery
+}
+
+// GroupByBuilderOption is a functional option type for index.GroupBy
+type GroupByBuilderOption func(g *groupByBuilder) error
+
+// OptGroupByBuilderRows is a functional option on groupByBuilder
+// used to set the rows.
+func OptGroupByBuilderRows(rows ...*PQLRowsQuery) GroupByBuilderOption {
+	return func(g *groupByBuilder) error {
+		g.rows = rows
+		return nil
+	}
+}
+
+// OptGroupByBuilderLimit is a functional option on groupByBuilder
+// used to set the limit.
+func OptGroupByBuilderLimit(l int64) GroupByBuilderOption {
+	return func(g *groupByBuilder) error {
+		g.limit = l
+		return nil
+	}
+}
+
+// OptGroupByBuilderFilter is a functional option on groupByBuilder
+// used to set the filter.
+func OptGroupByBuilderFilter(q *PQLRowQuery) GroupByBuilderOption {
+	return func(g *groupByBuilder) error {
+		g.filter = q
+		return nil
+	}
+}
+
+// OptGroupByBuilderAggregate is a functional option on groupByBuilder
+// used to set the aggregate.
+func OptGroupByBuilderAggregate(agg *PQLBaseQuery) GroupByBuilderOption {
+	return func(g *groupByBuilder) error {
+		g.aggregate = agg
+		return nil
+	}
+}
+
+// GroupByBase creates a GroupBy query with the given functional options.
+func (idx *Index) GroupByBase(opts ...GroupByBuilderOption) *PQLBaseQuery {
+	bldr := &groupByBuilder{}
+	for _, opt := range opts {
+		err := opt(bldr)
+		if err != nil {
+			return NewPQLBaseQuery("", idx, errors.Wrap(err, "applying option"))
+		}
+	}
+
+	if len(bldr.rows) < 1 {
+		return NewPQLBaseQuery("", idx, errors.New("there should be at least one rows query"))
+	}
+	if bldr.limit < 0 {
+		return NewPQLBaseQuery("", idx, errors.New("limit must be non-negative"))
+	}
+
+	// rows
+	text := fmt.Sprintf("GroupBy(%s", strings.Join(serializeGroupBy(bldr.rows...), ","))
+
+	// limit
+	if bldr.limit > 0 {
+		text += fmt.Sprintf(",limit=%d", bldr.limit)
+	}
+
+	// filter
+	if bldr.filter != nil {
+		filterText := bldr.filter.serialize().String()
+		text += fmt.Sprintf(",filter=%s", filterText)
+	}
+
+	// aggregate
+	if bldr.aggregate != nil {
+		aggregateText := bldr.aggregate.Serialize().String()
+		text += fmt.Sprintf(",aggregate=%s", aggregateText)
+	}
+
+	text += ")"
+	return NewPQLBaseQuery(text, idx, nil)
+}
+
 // GroupBy creates a GroupBy query with the given Rows queries
 func (idx *Index) GroupBy(rowsQueries ...*PQLRowsQuery) *PQLBaseQuery {
 	if len(rowsQueries) < 1 {

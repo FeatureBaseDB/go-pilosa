@@ -872,6 +872,78 @@ func TestGroupByLimitFilter(t *testing.T) {
 	}
 }
 
+func TestGroupByBase(t *testing.T) {
+	field := sampleIndex.Field("test")
+	comparePQL(t,
+		"GroupBy(Rows(field='collaboration'))",
+		sampleIndex.GroupByBase(
+			OptGroupByBuilderRows(collabField.Rows()),
+		),
+	)
+	comparePQL(t,
+		"GroupBy(Rows(field='collaboration'),Rows(field='test'))",
+		sampleIndex.GroupByBase(
+			OptGroupByBuilderRows(collabField.Rows(), field.Rows()),
+		),
+	)
+
+	comparePQL(t,
+		"GroupBy(Rows(field='collaboration'),limit=10)",
+		sampleIndex.GroupByBase(
+			OptGroupByBuilderLimit(10),
+			OptGroupByBuilderRows(collabField.Rows()),
+		),
+	)
+	comparePQL(t,
+		"GroupBy(Rows(field='collaboration'),Rows(field='test'),limit=10)",
+		sampleIndex.GroupByBase(
+			OptGroupByBuilderLimit(10),
+			OptGroupByBuilderRows(collabField.Rows(), field.Rows()),
+		),
+	)
+
+	comparePQL(t,
+		"GroupBy(Rows(field='collaboration'),filter=Row(test=5))",
+		sampleIndex.GroupByBase(
+			OptGroupByBuilderFilter(field.Row(5)),
+			OptGroupByBuilderRows(collabField.Rows()),
+		),
+	)
+	comparePQL(t,
+		"GroupBy(Rows(field='collaboration'),Rows(field='test'),filter=Row(test=5))",
+		sampleIndex.GroupByBase(
+			OptGroupByBuilderFilter(field.Row(5)),
+			OptGroupByBuilderRows(collabField.Rows(), field.Rows()),
+		),
+	)
+
+	comparePQL(t,
+		"GroupBy(Rows(field='collaboration'),limit=10,filter=Row(test=5))",
+		sampleIndex.GroupByBase(
+			OptGroupByBuilderLimit(10),
+			OptGroupByBuilderFilter(field.Row(5)),
+			OptGroupByBuilderRows(collabField.Rows()),
+		),
+	)
+	comparePQL(t,
+		"GroupBy(Rows(field='collaboration'),Rows(field='test'),limit=10,filter=Row(test=5))",
+		sampleIndex.GroupByBase(
+			OptGroupByBuilderLimit(10),
+			OptGroupByBuilderFilter(field.Row(5)),
+			OptGroupByBuilderRows(collabField.Rows(), field.Rows()),
+		),
+	)
+
+	field2 := sampleIndex.Field("age")
+	comparePQL(t,
+		"GroupBy(Rows(field='collaboration'),Rows(field='test'),aggregate=Sum(Row(age=20),field='age'))",
+		sampleIndex.GroupByBase(
+			OptGroupByBuilderRows(collabField.Rows(), field.Rows()),
+			OptGroupByBuilderAggregate(field2.Sum(field2.Row(20))),
+		),
+	)
+}
+
 func TestFieldOptions(t *testing.T) {
 	field := sampleIndex.Field("foo", OptFieldKeys(true))
 	if true != field.Opts().Keys() {

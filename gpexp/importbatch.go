@@ -596,6 +596,7 @@ func (b *Batch) doImport() error {
 		for field, viewMap := range fieldMap {
 			field := field
 			viewMap := viewMap
+			shard := shard
 			eg.Go(func() error {
 				clearViewMap := clearFrags.GetViewMap(shard, field)
 				if len(clearViewMap) > 0 {

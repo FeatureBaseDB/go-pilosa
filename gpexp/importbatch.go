@@ -36,6 +36,9 @@ import (
 type RecordBatch interface {
 	Add(Row) error
 	Import() error
+	// Len reports the number of records which have been added to the
+	// batch since the last call to Import (or since it was created).
+	Len() int
 }
 
 // Batch implements RecordBatch.
@@ -110,6 +113,8 @@ type Batch struct {
 
 	transCache Translator
 }
+
+func (b *Batch) Len() int { return len(b.ids) }
 
 // BatchOption is a functional option for Batch objects.
 type BatchOption func(b *Batch) error

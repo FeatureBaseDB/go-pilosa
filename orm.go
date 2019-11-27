@@ -405,7 +405,7 @@ type Index struct {
 }
 
 func (idx *Index) String() string {
-	return fmt.Sprintf("%#v", idx)
+	return fmt.Sprintf(`{name: "%s", options: "%s", fields: %s, shardWidth: %d}`, idx.name, idx.options, idx.fields, idx.shardWidth)
 }
 
 // NewIndex creates an index with a name.
@@ -964,7 +964,7 @@ type Field struct {
 }
 
 func (f *Field) String() string {
-	return fmt.Sprintf("%#v", f)
+	return fmt.Sprintf(`{name: "%s", index: "%s", options: "%s"}`, f.name, f.index.name, f.options)
 }
 
 func newField(name string, index *Index) *Field {
@@ -1511,4 +1511,21 @@ func encodeMap(m map[string]interface{}) string {
 		panic(err)
 	}
 	return string(result)
+}
+
+func encodeFieldMap(m map[string]*Field) string {
+	sb := strings.Builder{}
+	sb.WriteRune('{')
+	first := true
+	for k, v := range m {
+		if first {
+			first = false
+		} else {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(k + ": ")
+		sb.WriteString(v.String())
+	}
+	sb.WriteRune('}')
+	return sb.String()
 }

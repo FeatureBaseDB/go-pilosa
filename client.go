@@ -134,6 +134,7 @@ func (c *Client) Close() error {
 // see if it still matches, and if not it drops the whole cache.
 func (c *Client) detectClusterChanges() {
 	c.shardNodes.mu.Lock()
+	needsUnlock := true
 	// we rely on Go's random map iteration order to get a random
 	// element. If it doesn't end up being random, it shouldn't
 	// actually matter.
@@ -142,6 +143,7 @@ func (c *Client) detectClusterChanges() {
 			delete(shardMap, shard)
 			c.shardNodes.data[index] = shardMap
 			c.shardNodes.mu.Unlock()
+			needsUnlock = false
 			newURIs, err := c.getURIsForShard(index, shard) // refetch URIs from server.
 			if err != nil {
 				c.logger.Printf("problem invalidating shard node cache: %v", err)
@@ -163,6 +165,9 @@ func (c *Client) detectClusterChanges() {
 			break
 		}
 		break
+	}
+	if needsUnlock {
+		c.shardNodes.mu.Unlock()
 	}
 }
 
@@ -1227,7 +1232,7 @@ func (c *Client) TranslateRowKeys(field *Field, keys []string) ([]uint64, error)
 		Field: field.name,
 		Keys:  keys,
 	}
-	return c.translateKeys(req, keys)
+	return c.translateKeys(req)
 }
 
 func (c *Client) TranslateColumnKeys(index *Index, keys []string) ([]uint64, error) {
@@ -1235,10 +1240,13 @@ func (c *Client) TranslateColumnKeys(index *Index, keys []string) ([]uint64, err
 		Index: index.name,
 		Keys:  keys,
 	}
-	return c.translateKeys(req, keys)
+	return c.translateKeys(req)
 }
 
-func (c *Client) translateKeys(req *pbuf.TranslateKeysRequest, keys []string) ([]uint64, error) {
+func (c *Client) translateKeys(req *pbuf.TranslateKeysRequest) ([]uint64, error) {
+	if len(req.Keys) == 0 {
+		return []uint64{}, nil
+	}
 	reqData, err := proto.Marshal(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "marshalling traslate keys request")

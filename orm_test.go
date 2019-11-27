@@ -185,9 +185,9 @@ func TestIndexFields(t *testing.T) {
 func TestIndexToString(t *testing.T) {
 	schema1 := NewSchema()
 	index := schema1.Index("test-index")
-	target := fmt.Sprintf(`&pilosa.Index{name:"test-index", options:(*pilosa.IndexOptions)(%p), fields:map[string]*pilosa.Field{}, shardWidth:0x0}`, index.options)
+	target := `{name: "test-index", options: "{"options":{}}", fields: map[], shardWidth: 0}`
 	if target != index.String() {
-		t.Fatalf("%s != %s", target, index.String())
+		t.Fatalf("indexes not equal exp/got:\n%s\n%s", target, index.String())
 	}
 }
 
@@ -214,8 +214,7 @@ func TestFieldToString(t *testing.T) {
 	schema1 := NewSchema()
 	index := schema1.Index("test-index")
 	field := index.Field("test-field")
-	target := fmt.Sprintf(`&pilosa.Field{name:"test-field", index:(*pilosa.Index)(%p), options:(*pilosa.FieldOptions)(%p)}`,
-		field.index, field.options)
+	target := `{name: "test-field", index: "test-index", options: "{"options":{"type":"set"}}"}`
 	if target != field.String() {
 		t.Fatalf("%s != %s", target, field.String())
 	}

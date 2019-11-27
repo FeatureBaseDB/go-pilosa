@@ -152,7 +152,6 @@ func NewBatch(client *pilosa.Client, size int, index *pilosa.Index, fields []*pi
 				tt[i] = make(map[string][]int)
 				ttSets[field.Name()] = make(map[string][]int)
 			}
-			rowIDs[i] = make([]uint64, 0, size) // TODO make this on-demand when it gets used. could be a string array field.
 			hasTime = typ == pilosa.FieldTypeTime || hasTime
 		case pilosa.FieldTypeInt, pilosa.FieldTypeDecimal:
 			values[field.Name()] = make([]int64, 0, size)
@@ -352,6 +351,10 @@ func (b *Batch) Add(rec Row) error {
 		field := b.header[i]
 		switch val := rec.Values[i].(type) {
 		case string:
+			// nil-extend
+			for len(b.rowIDs[i]) < curPos {
+				b.rowIDs[i] = append(b.rowIDs[i], nilSentinel)
+			}
 			rowIDs := b.rowIDs[i]
 			// translate val and append to b.rowIDs[i]
 			if rowID, ok, err := b.transCache.GetRow(b.index.Name(), field.Name(), val); err != nil {
@@ -368,10 +371,17 @@ func (b *Batch) Add(rec Row) error {
 				b.rowIDs[i] = append(rowIDs, 0)
 			}
 		case uint64:
+			// nil-extend
+			for len(b.rowIDs[i]) < curPos {
+				b.rowIDs[i] = append(b.rowIDs[i], nilSentinel)
+			}
 			b.rowIDs[i] = append(b.rowIDs[i], val)
 		case int64:
 			b.values[field.Name()] = append(b.values[field.Name()], val)
 		case []string:
+			if len(val) == 0 {
+				continue
+			}
 			rowIDSets, ok := b.rowIDSets[field.Name()]
 			if !ok {
 				rowIDSets = make([][]uint64, len(b.ids)-1, cap(b.ids))
@@ -395,6 +405,18 @@ func (b *Batch) Add(rec Row) error {
 				}
 			}
 			b.rowIDSets[field.Name()] = append(rowIDSets, rowIDs)
+		case []uint64:
+			if len(val) == 0 {
+				continue
+			}
+			rowIDSets, ok := b.rowIDSets[field.Name()]
+			if !ok {
+				rowIDSets = make([][]uint64, len(b.ids)-1, cap(b.ids))
+			} else {
+				rowIDSets = rowIDSets[:len(b.ids)] // grow this field's rowIDSets if necessary
+			}
+			rowIDSets[len(b.ids)-1] = val // TODO do we need to copy val here?
+			b.rowIDSets[field.Name()] = rowIDSets
 		case nil:
 			if field.Opts().Type() == pilosa.FieldTypeInt || field.Opts().Type() == pilosa.FieldTypeDecimal {
 				b.values[field.Name()] = append(b.values[field.Name()], 0)
@@ -406,7 +428,15 @@ func (b *Batch) Add(rec Row) error {
 				b.nullIndices[field.Name()] = nullIndices
 
 			} else {
-				b.rowIDs[i] = append(b.rowIDs[i], nilSentinel)
+				// only append nil to rowIDs if this field already has
+				// rowIDs. Otherwise, this could be a []string or
+				// []uint64 field where we've only seen nil values so
+				// far. when we see a uint64 or string value, we'll
+				// "nil-extend" rowIDs to make sure it's the right
+				// length.
+				if rowIDs, ok := b.rowIDs[i]; ok {
+					b.rowIDs[i] = append(rowIDs, nilSentinel)
+				}
 			}
 		default:
 			return errors.Errorf("Val %v Type %[1]T is not currently supported. Use string, uint64 (row id), or int64 (integer value)", val)
@@ -687,7 +717,7 @@ func (b *Batch) makeFragments() (frags fragments, clearFrags fragments, err erro
 				clearBM.DirectAddN(clearRow*shardWidth + (col % shardWidth))
 				// we're going to execute the clear before the set, so
 				// we want to make sure that at this point, the "set"
-				// fragments don't contian the bit that we're clearing
+				// fragments don't contain the bit that we're clearing
 				curBM.DirectRemoveN(clearRow*shardWidth + (col % shardWidth))
 			}
 		}

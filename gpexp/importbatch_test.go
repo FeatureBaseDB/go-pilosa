@@ -72,6 +72,77 @@ func TestImportBatchInts(t *testing.T) {
 	}
 }
 
+func TestStringSliceEmptyAndNil(t *testing.T) {
+	client := pilosa.DefaultClient()
+	schema := pilosa.NewSchema()
+	idx := schema.Index("test-string-slice-nil")
+	fields := make([]*pilosa.Field, 1)
+	fields[0] = idx.Field("strslice", pilosa.OptFieldKeys(true), pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 100))
+	err := client.SyncSchema(schema)
+	if err != nil {
+		t.Fatalf("syncing schema: %v", err)
+	}
+	defer func() {
+		err := client.DeleteIndex(idx)
+		if err != nil {
+			t.Logf("problem cleaning up from test: %v", err)
+		}
+	}()
+
+	b, err := NewBatch(client, 5, idx, fields)
+	if err != nil {
+		t.Fatalf("creating new batch: %v", err)
+	}
+
+	r := Row{Values: make([]interface{}, len(fields))}
+	r.ID = uint64(0)
+	r.Values[0] = []string{"a"}
+	err = b.Add(r)
+	if err != nil {
+		t.Fatalf("adding to batch: %v", err)
+	}
+
+	r.ID = uint64(1)
+	r.Values[0] = nil
+	err = b.Add(r)
+	if err != nil {
+		t.Fatalf("adding batch with nil stringslice to r: %v", err)
+	}
+
+	r.ID = uint64(2)
+	r.Values[0] = []uint64{0, 1, 2, 222}
+	err = b.Add(r)
+	if err != nil {
+		t.Fatalf("adding batch with nil stringslice to r: %v", err)
+	}
+
+	r.ID = uint64(3)
+	r.Values[0] = []string{"b", "c"}
+	err = b.Add(r)
+	if err != nil {
+		t.Fatalf("adding batch with nil stringslice to r: %v", err)
+	}
+
+	err = b.Import()
+	if err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
+	rows := []interface{}{0, 1, 2, 222, "c"}
+	resp, err := client.Query(idx.BatchQuery(fields[0].Row(rows[0]), fields[0].Row(rows[1]), fields[0].Row(rows[2]), fields[0].Row(rows[3]), fields[0].Row(rows[4])))
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+
+	expectations := [][]uint64{{2}, {0, 2}, {2, 3}, {2}, {3}}
+	for i, re := range resp.Results() {
+		if !reflect.DeepEqual(re.Row().Columns, expectations[i]) {
+			t.Errorf("expected row %v to have columns %v, but got %v", rows[i], expectations[i], re.Row().Columns)
+		}
+	}
+
+}
+
 func TestStringSlice(t *testing.T) {
 	client := pilosa.DefaultClient()
 	schema := pilosa.NewSchema()
@@ -488,7 +559,7 @@ func TestBatches(t *testing.T) {
 			t.Fatalf("unexpected columns for a: %v", cols)
 		}
 	}
-	res = results[1]
+	res := results[1]
 	cols := res.Row().Columns
 	if !reflect.DeepEqual(cols, []uint64{0, 2, 4, 6, 8, 10, 12, 14, 16, 18}) {
 		t.Fatalf("unexpected columns for field 1 row b: %v", cols)
@@ -518,7 +589,7 @@ func TestBatches(t *testing.T) {
 		t.Fatalf("querying: %v", err)
 	}
 	results = resp.Results()
-	cols := results[0].Row().Columns
+	cols = results[0].Row().Columns
 	if !reflect.DeepEqual(cols, []uint64{0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28}) {
 		t.Fatalf("all columns (but 8) should be greater than -11, but got: %v", cols)
 	}

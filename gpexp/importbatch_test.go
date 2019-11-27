@@ -325,10 +325,10 @@ func TestBatches(t *testing.T) {
 			t.Fatalf("unexpected key %s", k)
 		}
 	}
-	if !reflect.DeepEqual(b.toTranslateClear, map[int]map[string][]int{2: map[string][]int{"c": []int{8}}}) {
+	if !reflect.DeepEqual(b.toTranslateClear, map[int]map[string][]int{2: {"c": {8}}}) {
 		t.Errorf("unexpected toTranslateClear: %+v", b.toTranslateClear)
 	}
-	if !reflect.DeepEqual(b.clearRowIDs, map[int]map[int]uint64{1: map[int]uint64{8: 97}, 2: map[int]uint64{}}) {
+	if !reflect.DeepEqual(b.clearRowIDs, map[int]map[int]uint64{1: {8: 97}, 2: {}}) {
 		t.Errorf("unexpected clearRowIDs: %+v", b.clearRowIDs)
 	}
 

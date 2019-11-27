@@ -89,12 +89,31 @@ func TestStringSliceEmptyAndNil(t *testing.T) {
 		}
 	}()
 
-	b, err := NewBatch(client, 5, idx, fields)
+	// first create a batch and test adding a single value with empty
+	// string - this failed with a translation error at one point, and
+	// how we catch it and treat it like a nil.
+	b, err := NewBatch(client, 2, idx, fields)
 	if err != nil {
 		t.Fatalf("creating new batch: %v", err)
 	}
-
 	r := Row{Values: make([]interface{}, len(fields))}
+	r.ID = uint64(1)
+	r.Values[0] = ""
+	err = b.Add(r)
+	if err != nil {
+		t.Fatalf("adding: %v", err)
+	}
+	err = b.Import()
+	if err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
+	// now create a batch and add a mixture of string slice values
+	b, err = NewBatch(client, 6, idx, fields)
+	if err != nil {
+		t.Fatalf("creating new batch: %v", err)
+	}
+	r = Row{Values: make([]interface{}, len(fields))}
 	r.ID = uint64(0)
 	r.Values[0] = []string{"a"}
 	err = b.Add(r)
@@ -110,17 +129,24 @@ func TestStringSliceEmptyAndNil(t *testing.T) {
 	}
 
 	r.ID = uint64(2)
-	r.Values[0] = []uint64{0, 1, 2, 222}
+	r.Values[0] = []uint64{0, 1, 222}
 	err = b.Add(r)
 	if err != nil {
-		t.Fatalf("adding batch with nil stringslice to r: %v", err)
+		t.Fatalf("adding batch with  idslice to r: %v", err)
 	}
 
 	r.ID = uint64(3)
 	r.Values[0] = []string{"b", "c"}
 	err = b.Add(r)
 	if err != nil {
-		t.Fatalf("adding batch with nil stringslice to r: %v", err)
+		t.Fatalf("adding batch with stringslice to r: %v", err)
+	}
+
+	r.ID = uint64(4)
+	r.Values[0] = []string{}
+	err = b.Add(r)
+	if err != nil {
+		t.Fatalf("adding batch with stringslice to r: %v", err)
 	}
 
 	err = b.Import()
@@ -128,13 +154,13 @@ func TestStringSliceEmptyAndNil(t *testing.T) {
 		t.Fatalf("importing: %v", err)
 	}
 
-	rows := []interface{}{0, 1, 2, 222, "c"}
+	rows := []interface{}{0, "a", "b", "c", 222}
 	resp, err := client.Query(idx.BatchQuery(fields[0].Row(rows[0]), fields[0].Row(rows[1]), fields[0].Row(rows[2]), fields[0].Row(rows[3]), fields[0].Row(rows[4])))
 	if err != nil {
 		t.Fatalf("querying: %v", err)
 	}
 
-	expectations := [][]uint64{{2}, {0, 2}, {2, 3}, {2}, {3}}
+	expectations := [][]uint64{{2}, {0, 2}, {3}, {3}, {2}}
 	for i, re := range resp.Results() {
 		if !reflect.DeepEqual(re.Row().Columns, expectations[i]) {
 			t.Errorf("expected row %v to have columns %v, but got %v", rows[i], expectations[i], re.Row().Columns)

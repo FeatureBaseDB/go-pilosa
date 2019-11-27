@@ -356,8 +356,11 @@ func (b *Batch) Add(rec Row) error {
 				b.rowIDs[i] = append(b.rowIDs[i], nilSentinel)
 			}
 			rowIDs := b.rowIDs[i]
-			// translate val and append to b.rowIDs[i]
-			if rowID, ok, err := b.transCache.GetRow(b.index.Name(), field.Name(), val); err != nil {
+			// empty string is not a valid value at this point (Pilosa refuses to translate it)
+			if val == "" { //
+				b.rowIDs[i] = append(rowIDs, nilSentinel)
+
+			} else if rowID, ok, err := b.transCache.GetRow(b.index.Name(), field.Name(), val); err != nil {
 				return errors.Wrap(err, "translating row")
 			} else if ok {
 				b.rowIDs[i] = append(rowIDs, rowID)
@@ -384,13 +387,15 @@ func (b *Batch) Add(rec Row) error {
 			}
 			rowIDSets, ok := b.rowIDSets[field.Name()]
 			if !ok {
-				rowIDSets = make([][]uint64, len(b.ids)-1, cap(b.ids))
-			} else {
-				rowIDSets = rowIDSets[:len(b.ids)-1] // grow this field's rowIDSets if necessary
+				rowIDSets = make([][]uint64, cap(b.ids))
+				b.rowIDSets[field.Name()] = rowIDSets
 			}
 
 			rowIDs := make([]uint64, 0, len(val))
 			for _, k := range val {
+				if k == "" {
+					continue
+				}
 				if rowID, ok, err := b.transCache.GetRow(b.index.Name(), field.Name(), k); err != nil {
 					return errors.Wrap(err, "translating row from []string")
 				} else if ok {
@@ -404,16 +409,14 @@ func (b *Batch) Add(rec Row) error {
 					b.toTranslateSets[field.Name()][k] = ints
 				}
 			}
-			b.rowIDSets[field.Name()] = append(rowIDSets, rowIDs)
+			rowIDSets[curPos] = rowIDs
 		case []uint64:
 			if len(val) == 0 {
 				continue
 			}
 			rowIDSets, ok := b.rowIDSets[field.Name()]
 			if !ok {
-				rowIDSets = make([][]uint64, len(b.ids)-1, cap(b.ids))
-			} else {
-				rowIDSets = rowIDSets[:len(b.ids)] // grow this field's rowIDSets if necessary
+				rowIDSets = make([][]uint64, cap(b.ids))
 			}
 			rowIDSets[len(b.ids)-1] = val // TODO do we need to copy val here?
 			b.rowIDSets[field.Name()] = rowIDSets

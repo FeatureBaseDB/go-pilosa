@@ -162,11 +162,15 @@ type PQLBaseQuery struct {
 
 // NewPQLBaseQuery creates a new PQLQuery with the given PQL and index.
 func NewPQLBaseQuery(pql string, index *Index, err error) *PQLBaseQuery {
+	var hasKeys bool
+	if index != nil {
+		hasKeys = index.options.keys
+	}
 	return &PQLBaseQuery{
 		index:   index,
 		pql:     pql,
 		err:     err,
-		hasKeys: index.options.keys,
+		hasKeys: hasKeys,
 	}
 }
 
@@ -577,6 +581,7 @@ type groupByBuilder struct {
 	limit     int64
 	filter    *PQLRowQuery
 	aggregate *PQLBaseQuery
+	having    *PQLBaseQuery
 }
 
 // GroupByBuilderOption is a functional option type for index.GroupBy
@@ -618,6 +623,15 @@ func OptGroupByBuilderAggregate(agg *PQLBaseQuery) GroupByBuilderOption {
 	}
 }
 
+// OptGroupByBuilderHaving is a functional option on groupByBuilder
+// used to set the having clause.
+func OptGroupByBuilderHaving(having *PQLBaseQuery) GroupByBuilderOption {
+	return func(g *groupByBuilder) error {
+		g.having = having
+		return nil
+	}
+}
+
 // GroupByBase creates a GroupBy query with the given functional options.
 func (idx *Index) GroupByBase(opts ...GroupByBuilderOption) *PQLBaseQuery {
 	bldr := &groupByBuilder{}
@@ -653,6 +667,12 @@ func (idx *Index) GroupByBase(opts ...GroupByBuilderOption) *PQLBaseQuery {
 	if bldr.aggregate != nil {
 		aggregateText := bldr.aggregate.Serialize().String()
 		text += fmt.Sprintf(",aggregate=%s", aggregateText)
+	}
+
+	// having
+	if bldr.having != nil {
+		havingText := bldr.having.Serialize().String()
+		text += fmt.Sprintf(",having=%s", havingText)
 	}
 
 	text += ")"

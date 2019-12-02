@@ -387,8 +387,11 @@ func (b *Batch) Add(rec Row) error {
 			}
 			rowIDSets, ok := b.rowIDSets[field.Name()]
 			if !ok {
-				rowIDSets = make([][]uint64, cap(b.ids))
+				rowIDSets = make([][]uint64, len(b.ids)-1, cap(b.ids))
 				b.rowIDSets[field.Name()] = rowIDSets
+			}
+			for len(rowIDSets) < len(b.ids)-1 {
+				rowIDSets = append(rowIDSets, nil) // nil extend
 			}
 
 			rowIDs := make([]uint64, 0, len(val))
@@ -409,17 +412,19 @@ func (b *Batch) Add(rec Row) error {
 					b.toTranslateSets[field.Name()][k] = ints
 				}
 			}
-			rowIDSets[curPos] = rowIDs
+			b.rowIDSets[field.Name()] = append(rowIDSets, rowIDs)
 		case []uint64:
 			if len(val) == 0 {
 				continue
 			}
 			rowIDSets, ok := b.rowIDSets[field.Name()]
 			if !ok {
-				rowIDSets = make([][]uint64, cap(b.ids))
+				rowIDSets = make([][]uint64, len(b.ids)-1, cap(b.ids))
 			}
-			rowIDSets[len(b.ids)-1] = val // TODO do we need to copy val here?
-			b.rowIDSets[field.Name()] = rowIDSets
+			for len(rowIDSets) < len(b.ids)-1 {
+				rowIDSets = append(rowIDSets, nil) // nil extend
+			}
+			b.rowIDSets[field.Name()] = append(rowIDSets, val)
 		case nil:
 			if field.Opts().Type() == pilosa.FieldTypeInt || field.Opts().Type() == pilosa.FieldTypeDecimal {
 				b.values[field.Name()] = append(b.values[field.Name()], 0)
@@ -611,6 +616,8 @@ func (b *Batch) doTranslation() error {
 			return errors.Wrap(err, "adding rows to cache")
 		}
 		rowIDSets := b.rowIDSets[fieldName]
+		rowIDSets = rowIDSets[:cap(b.ids)]
+		b.rowIDSets[fieldName] = rowIDSets
 		for j, key := range keys {
 			rowID := ids[j]
 			for _, recordIdx := range tt[key] {
@@ -729,6 +736,12 @@ func (b *Batch) makeFragments() (frags fragments, clearFrags fragments, err erro
 	for fname, rowIDSets := range b.rowIDSets {
 		if len(rowIDSets) == 0 {
 			continue
+		} else if len(rowIDSets) < len(b.ids) {
+			// rowIDSets is guaranteed to have capacity == to b.ids,
+			// but if the last record had a nil for this field, it
+			// might not have the same length, so we re-slice it to
+			// ensure the lengths are the same.
+			rowIDSets = rowIDSets[:len(b.ids)]
 		}
 		field := b.headerMap[fname]
 		opts := field.Opts()
@@ -912,18 +925,19 @@ func (b *Batch) reset() {
 	b.ids = b.ids[:0]
 	b.times = b.times[:0]
 	for i, rowIDs := range b.rowIDs {
-		fieldName := b.header[i].Name()
 		b.rowIDs[i] = rowIDs[:0]
-		rowIDSet := b.rowIDSets[fieldName]
-		b.rowIDSets[fieldName] = rowIDSet[:0]
 		m := b.toTranslate[i]
 		for k := range m {
 			delete(m, k) // TODO pool these slices
 		}
-		m = b.toTranslateSets[fieldName]
-		for k := range m {
-			delete(m, k)
+	}
+	for _, tts := range b.toTranslateSets {
+		for k := range tts {
+			delete(tts, k)
 		}
+	}
+	for field, rowIDSet := range b.rowIDSets {
+		b.rowIDSets[field] = rowIDSet[:0]
 	}
 	for _, rowIDs := range b.clearRowIDs {
 		for k := range rowIDs {

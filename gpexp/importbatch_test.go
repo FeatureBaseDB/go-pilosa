@@ -2,6 +2,7 @@ package gpexp
 
 import (
 	"reflect"
+	"sort"
 	"strconv"
 	"testing"
 	"time"
@@ -11,6 +12,139 @@ import (
 )
 
 // TODO test against cluster
+
+func TestStringSliceCombos(t *testing.T) {
+	client := pilosa.DefaultClient()
+	schema := pilosa.NewSchema()
+	idx := schema.Index("test-string-slicecombos")
+	fields := make([]*pilosa.Field, 1)
+	fields[0] = idx.Field("a1", pilosa.OptFieldKeys(true), pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 100))
+	err := client.SyncSchema(schema)
+	if err != nil {
+		t.Fatalf("syncing schema: %v", err)
+	}
+	defer func() {
+		err := client.DeleteIndex(idx)
+		if err != nil {
+			t.Logf("problem cleaning up from test: %v", err)
+		}
+	}()
+
+	b, err := NewBatch(client, 5, idx, fields)
+	if err != nil {
+		t.Fatalf("creating new batch: %v", err)
+	}
+
+	records := []Row{
+		{ID: uint64(0), Values: []interface{}{[]string{"a", "b", "c"}}},
+		{ID: uint64(1), Values: []interface{}{[]string{"z"}}},
+		{ID: uint64(2), Values: []interface{}{[]string{}}},
+		{ID: uint64(3), Values: []interface{}{[]string{"q", "r", "s", "t", "c"}}},
+		{ID: uint64(4), Values: []interface{}{nil}},
+		{ID: uint64(5), Values: []interface{}{[]string{"a", "b", "c"}}},
+		{ID: uint64(6), Values: []interface{}{[]string{"a", "b", "c"}}},
+		{ID: uint64(7), Values: []interface{}{[]string{"z"}}},
+		{ID: uint64(8), Values: []interface{}{[]string{}}},
+		{ID: uint64(9), Values: []interface{}{[]string{"q", "r", "s", "t"}}},
+		{ID: uint64(10), Values: []interface{}{nil}},
+		{ID: uint64(11), Values: []interface{}{[]string{"a", "b", "c"}}},
+	}
+
+	err = ingestRecords(records, b)
+	if err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
+	a1 := fields[0]
+
+	result := tq(t, client, a1.TopN(10))
+	rez := sortableCRI(result.CountItems())
+	sort.Sort(rez)
+	exp := sortableCRI{
+		{Key: "a", Count: 4},
+		{Key: "b", Count: 4},
+		{Key: "c", Count: 5},
+		{Key: "q", Count: 2},
+		{Key: "r", Count: 2},
+		{Key: "s", Count: 2},
+		{Key: "t", Count: 2},
+		{Key: "z", Count: 2},
+	}
+	sort.Sort(exp)
+	errorIfNotEqual(t, exp, rez)
+
+	result = tq(t, client, a1.Row("a"))
+	errorIfNotEqual(t, result.Row().Columns, []uint64{0, 5, 6, 11})
+	result = tq(t, client, a1.Row("b"))
+	errorIfNotEqual(t, result.Row().Columns, []uint64{0, 5, 6, 11})
+	result = tq(t, client, a1.Row("c"))
+	errorIfNotEqual(t, result.Row().Columns, []uint64{0, 3, 5, 6, 11})
+	result = tq(t, client, a1.Row("z"))
+	errorIfNotEqual(t, result.Row().Columns, []uint64{1, 7})
+	result = tq(t, client, a1.Row("q"))
+	errorIfNotEqual(t, result.Row().Columns, []uint64{3, 9})
+	result = tq(t, client, a1.Row("r"))
+	errorIfNotEqual(t, result.Row().Columns, []uint64{3, 9})
+	result = tq(t, client, a1.Row("s"))
+	errorIfNotEqual(t, result.Row().Columns, []uint64{3, 9})
+	result = tq(t, client, a1.Row("t"))
+	errorIfNotEqual(t, result.Row().Columns, []uint64{3, 9})
+}
+
+func errorIfNotEqual(t *testing.T, exp, got interface{}) {
+	t.Helper()
+	if !reflect.DeepEqual(exp, got) {
+		t.Errorf("unequal exp/got:\n%v\n%v", exp, got)
+	}
+}
+
+type sortableCRI []pilosa.CountResultItem
+
+func (s sortableCRI) Len() int { return len(s) }
+func (s sortableCRI) Less(i, j int) bool {
+	if s[i].Count != s[j].Count {
+		return s[i].Count > s[j].Count
+	}
+	if s[i].ID != s[j].ID {
+		return s[i].ID < s[j].ID
+	}
+	if s[i].Key != s[j].Key {
+		return s[i].Key < s[j].Key
+	}
+	return true
+}
+func (s sortableCRI) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+func tq(t *testing.T, client *pilosa.Client, query pilosa.PQLQuery) pilosa.QueryResult {
+	resp, err := client.Query(query)
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+	return resp.Results()[0]
+}
+
+func ingestRecords(records []Row, batch *Batch) error {
+	for _, rec := range records {
+		err := batch.Add(rec)
+		if err == ErrBatchNowFull {
+			err = batch.Import()
+			if err != nil {
+				return errors.Wrap(err, "importing batch")
+			}
+		} else if err != nil {
+			return errors.Wrap(err, "while adding record")
+		}
+	}
+	if batch.Len() > 0 {
+		err := batch.Import()
+		if err != nil {
+			return errors.Wrap(err, "importing batch")
+		}
+	}
+	return nil
+}
 
 func TestImportBatchInts(t *testing.T) {
 	client := pilosa.DefaultClient()

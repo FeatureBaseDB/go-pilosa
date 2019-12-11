@@ -306,6 +306,9 @@ func (b *Batch) Add(rec Row) error {
 	}
 
 	handleStringID := func(rid string) error {
+		if rid == "" {
+			return errors.Errorf("record identifier cannot be an empty string")
+		}
 		if colID, ok, err := b.transCache.GetCol(b.index.Name(), rid); err != nil {
 			return errors.Wrap(err, "translating column")
 		} else if ok {
@@ -610,7 +613,7 @@ func (b *Batch) doTranslation() error {
 		// translate keys from Pilosa
 		ids, err := b.client.TranslateRowKeys(b.headerMap[fieldName], keys)
 		if err != nil {
-			return errors.Wrap(err, "translating row keys")
+			return errors.Wrap(err, "translating row keys (sets)")
 		}
 		if err := b.transCache.AddRows(b.index.Name(), fieldName, keys, ids); err != nil {
 			return errors.Wrap(err, "adding rows to cache")

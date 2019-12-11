@@ -1042,9 +1042,9 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 	var response *http.Response
 	var err error
 	for i := 0; i < maxHosts; i++ {
-		host, err := c.host(useCoordinator)
-		if err != nil {
-			return nil, nil, err
+		host, herr := c.host(useCoordinator)
+		if herr != nil {
+			return nil, nil, errors.Wrapf(herr, "getting host, previous err: %v", err)
 		}
 		response, err = c.doRequest(host, method, path, c.augmentHeaders(headers), data)
 		if err == nil {
@@ -1056,6 +1056,7 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 				c.coordinatorURI = nil
 				c.coordinatorLock.Unlock()
 			} else {
+				c.logger.Printf("removing host due to '%v'\n", err)
 				c.cluster.RemoveHost(host)
 			}
 		}
@@ -1063,7 +1064,7 @@ func (c *Client) httpRequest(method string, path string, data []byte, headers ma
 		time.Sleep(1 * time.Second)
 	}
 	if response == nil {
-		return nil, nil, ErrTriedMaxHosts
+		return nil, nil, errors.Wrap(err, ErrTriedMaxHosts.Error())
 	}
 	defer response.Body.Close()
 	warning := response.Header.Get("warning")
@@ -1693,10 +1694,10 @@ func (co *ClientOptions) withDefaults() (updated *ClientOptions) {
 		updated.ConnectTimeout = time.Second * 60
 	}
 	if updated.PoolSizePerRoute <= 0 {
-		updated.PoolSizePerRoute = 10
+		updated.PoolSizePerRoute = 50
 	}
 	if updated.TotalPoolSize <= 0 {
-		updated.TotalPoolSize = 100
+		updated.TotalPoolSize = 500
 	}
 	if updated.TLSConfig == nil {
 		updated.TLSConfig = &tls.Config{}

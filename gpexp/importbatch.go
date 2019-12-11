@@ -4,9 +4,9 @@ import (
 	"time"
 
 	"github.com/pilosa/go-pilosa"
+	"github.com/pilosa/go-pilosa/egpool"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 )
 
 // TODO if using column translation, column ids might get way out of
@@ -633,7 +633,7 @@ func (b *Batch) doTranslation() error {
 }
 
 func (b *Batch) doImport() error {
-	eg := errgroup.Group{}
+	eg := egpool.Group{PoolSize: 50}
 
 	frags, clearFrags, err := b.makeFragments()
 	if err != nil {
@@ -792,7 +792,7 @@ func (b *Batch) importValueData() error {
 	if shardWidth == 0 {
 		shardWidth = pilosa.DefaultShardWidth
 	}
-	eg := errgroup.Group{}
+	eg := egpool.Group{PoolSize: 50}
 	ids := make([]uint64, len(b.ids))
 	for field, values := range b.values {
 		// grow our temp ids slice to full length
@@ -864,7 +864,7 @@ func (b *Batch) importMutexData() error {
 	if shardWidth == 0 {
 		shardWidth = pilosa.DefaultShardWidth
 	}
-	eg := errgroup.Group{}
+	eg := egpool.Group{PoolSize: 50}
 	ids := make([]uint64, 0, len(b.ids))
 
 	for findex, rowIDs := range b.rowIDs {

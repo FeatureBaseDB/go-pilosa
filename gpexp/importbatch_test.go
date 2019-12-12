@@ -294,6 +294,7 @@ func TestStringSliceEmptyAndNil(t *testing.T) {
 		t.Fatalf("querying: %v", err)
 	}
 
+	// TODO test is flaky because we can't guarantee what a,b,c map to
 	expectations := [][]uint64{{2}, {0, 2}, {3}, {3}, {2}}
 	for i, re := range resp.Results() {
 		if !reflect.DeepEqual(re.Row().Columns, expectations[i]) {
@@ -405,6 +406,55 @@ func TestStringSlice(t *testing.T) {
 	result := resp.Result()
 	if !reflect.DeepEqual(result.Row().Columns, []uint64{0, 1}) {
 		t.Fatalf("expected a to be [0,1], got %v", result.Row().Columns)
+	}
+
+}
+
+func TestSingleClearBatchRegression(t *testing.T) {
+	client := pilosa.DefaultClient()
+	schema := pilosa.NewSchema()
+	idx := schema.Index("gopilosatest-blah")
+	numFields := 1
+	fields := make([]*pilosa.Field, numFields)
+	fields[0] = idx.Field("zero", pilosa.OptFieldKeys(true))
+
+	err := client.SyncSchema(schema)
+	if err != nil {
+		t.Fatalf("syncing schema: %v", err)
+	}
+	defer func() {
+		err := client.DeleteIndex(idx)
+		if err != nil {
+			t.Logf("problem cleaning up from test: %v", err)
+		}
+	}()
+
+	_, err = client.Query(fields[0].Set("row1", 1))
+	if err != nil {
+		t.Fatalf("setting bit: %v", err)
+	}
+
+	b, err := NewBatch(client, 1, idx, fields)
+	if err != nil {
+		t.Fatalf("getting new batch: %v", err)
+	}
+	r := Row{ID: uint64(1), Values: make([]interface{}, numFields), Clears: make(map[int]interface{})}
+	r.Values[0] = nil
+	r.Clears[0] = "row1"
+	err = b.Add(r)
+	if err != ErrBatchNowFull {
+		t.Fatalf("wrong error from batch add: %v", err)
+	}
+
+	err = b.Import()
+	if err != nil {
+		t.Fatalf("error importing: %v", err)
+	}
+
+	resp, err := client.Query(fields[0].Row("row1"))
+	result := resp.Results()[0].Row().Columns
+	if len(result) != 0 {
+		t.Fatalf("unexpected values in row: result %+v", result)
 	}
 
 }
@@ -847,21 +897,9 @@ func TestBatchesStringIDs(t *testing.T) {
 	if len(b.toTranslateID) != 3 {
 		t.Fatalf("id translation table unexpected size: %v", b.toTranslateID)
 	}
-	for k, indexes := range b.toTranslateID {
-		if k == "0" {
-			if !reflect.DeepEqual(indexes, []int{0}) {
-				t.Fatalf("unexpected result k: %s, indexes: %v", k, indexes)
-			}
-		}
-		if k == "1" {
-			if !reflect.DeepEqual(indexes, []int{1}) {
-				t.Fatalf("unexpected result k: %s, indexes: %v", k, indexes)
-			}
-		}
-		if k == "2" {
-			if !reflect.DeepEqual(indexes, []int{2}) {
-				t.Fatalf("unexpected result k: %s, indexes: %v", k, indexes)
-			}
+	for i, k := range b.toTranslateID {
+		if ik, err := strconv.Atoi(k); err != nil || ik != i {
+			t.Errorf("unexpected toTranslateID key %s at index %d", k, i)
 		}
 	}
 

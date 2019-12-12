@@ -5,6 +5,7 @@ import (
 
 	"github.com/pilosa/go-pilosa"
 	"github.com/pilosa/go-pilosa/egpool"
+	"github.com/pilosa/pilosa/logger"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
 )
@@ -102,16 +103,13 @@ type Batch struct {
 	// those keys map to.
 	toTranslateSets map[string]map[string][]int
 
-	// for string ids which we weren't able to immediately translate,
-	// keep a map of which record(s) each string id maps to.
-	//
-	// TODO:
-	// this is probably super inefficient in the (common) case where
-	// each record has a different string ID. In that case, a simple
-	// slice of strings would probably work better.
-	toTranslateID map[string][]int
+	// toTranslateID maps each string key to a record index - this
+	// will get translated into Batch.rowIDs
+	toTranslateID []string
 
 	transCache Translator
+
+	log logger.Logger
 }
 
 func (b *Batch) Len() int { return len(b.ids) }
@@ -124,6 +122,13 @@ type BatchOption func(b *Batch) error
 func OptTranslator(t Translator) BatchOption {
 	return func(b *Batch) error {
 		b.transCache = t
+		return nil
+	}
+}
+
+func OptLogger(l logger.Logger) BatchOption {
+	return func(b *Batch) error {
+		b.log = l
 		return nil
 	}
 }
@@ -180,8 +185,9 @@ func NewBatch(client *pilosa.Client, size int, index *pilosa.Index, fields []*pi
 		toTranslate:      tt,
 		toTranslateClear: make(map[int]map[string][]int),
 		toTranslateSets:  ttSets,
-		toTranslateID:    make(map[string][]int),
 		transCache:       NewMapTranslator(),
+
+		log: logger.NopLogger,
 	}
 	if hasTime {
 		b.times = make([]QuantizedTime, 0, size)
@@ -314,12 +320,10 @@ func (b *Batch) Add(rec Row) error {
 		} else if ok {
 			b.ids = append(b.ids, colID)
 		} else {
-			ints, ok := b.toTranslateID[rid]
-			if !ok {
-				ints = make([]int, 0)
+			if b.toTranslateID == nil {
+				b.toTranslateID = make([]string, cap(b.ids))
 			}
-			ints = append(ints, len(b.ids))
-			b.toTranslateID[rid] = ints
+			b.toTranslateID[len(b.ids)] = rid
 			b.ids = append(b.ids, 0)
 		}
 		return nil
@@ -484,6 +488,13 @@ func (b *Batch) Add(rec Row) error {
 		default:
 			return errors.Errorf("Clearing a value '%v' Type %[1]T is not currently supported (field '%s')", val, field.Name())
 		}
+		// nil extend b.rowIDs so we don't run into a horrible bug
+		// where we skip doing clears because b.rowIDs doesn't have a
+		// value for htis field
+		for len(b.rowIDs[i]) <= curPos {
+			b.rowIDs[i] = append(b.rowIDs[i], nilSentinel)
+		}
+
 	}
 
 	if len(b.ids) == cap(b.ids) {
@@ -524,29 +535,29 @@ func (b *Batch) Import() error {
 }
 
 func (b *Batch) doTranslation() error {
-	var keys []string
+	keys := make([]string, 0)
+	var indexes []int
 
 	// translate column keys if there are any
-	if len(b.toTranslateID) > 0 {
-		keys = make([]string, 0, len(b.toTranslateID))
-		for k := range b.toTranslateID {
+	for i, k := range b.toTranslateID {
+		if k != "" {
 			keys = append(keys, k)
+			indexes = append(indexes, i)
 		}
+	}
+	if len(keys) > 0 {
+		start := time.Now()
 		ids, err := b.client.TranslateColumnKeys(b.index, keys)
 		if err != nil {
 			return errors.Wrap(err, "translating col keys")
 		}
+		b.log.Debugf("translating %d column keys took %v", len(keys), time.Since(start))
 		if err := b.transCache.AddCols(b.index.Name(), keys, ids); err != nil {
 			return errors.Wrap(err, "adding cols to cache")
 		}
-		for j, key := range keys {
-			id := ids[j]
-			for _, recordIdx := range b.toTranslateID[key] {
-				b.ids[recordIdx] = id
-			}
+		for j, id := range ids {
+			b.ids[indexes[j]] = id
 		}
-	} else {
-		keys = make([]string, 0)
 	}
 
 	// translate row keys
@@ -572,10 +583,12 @@ func (b *Batch) doTranslation() error {
 		}
 
 		// translate keys from Pilosa
+		start := time.Now()
 		ids, err := b.client.TranslateRowKeys(b.headerMap[fieldName], keys)
 		if err != nil {
 			return errors.Wrap(err, "translating row keys")
 		}
+		b.log.Debugf("translating %d row keys for %s took %v", len(keys), fieldName, time.Since(start))
 		if err := b.transCache.AddRows(b.index.Name(), fieldName, keys, ids); err != nil {
 			return errors.Wrap(err, "adding rows to cache")
 		}
@@ -611,10 +624,12 @@ func (b *Batch) doTranslation() error {
 			continue
 		}
 		// translate keys from Pilosa
+		start := time.Now()
 		ids, err := b.client.TranslateRowKeys(b.headerMap[fieldName], keys)
 		if err != nil {
 			return errors.Wrap(err, "translating row keys (sets)")
 		}
+		b.log.Debugf("translating %d row keys(sets) for %s took %v", len(keys), fieldName, time.Since(start))
 		if err := b.transCache.AddRows(b.index.Name(), fieldName, keys, ids); err != nil {
 			return errors.Wrap(err, "adding rows to cache")
 		}
@@ -645,15 +660,20 @@ func (b *Batch) doImport() error {
 			field := field
 			viewMap := viewMap
 			shard := shard
+
 			eg.Go(func() error {
 				clearViewMap := clearFrags.GetViewMap(shard, field)
 				if len(clearViewMap) > 0 {
+					start := time.Now()
 					err := b.client.ImportRoaringBitmap(b.index.Field(field), shard, clearViewMap, true)
 					if err != nil {
 						return errors.Wrapf(err, "import clearing clearing data for %s", field)
 					}
+					b.log.Debugf("imp-roar-clr %s,shard:%d,views:%d %v", field, shard, len(clearViewMap), time.Since(start))
 				}
+				start := time.Now()
 				err := b.client.ImportRoaringBitmap(b.index.Field(field), shard, viewMap, false)
+				b.log.Debugf("imp-roar     %s,shard:%d,views:%d %v", field, shard, len(clearViewMap), time.Since(start))
 				return errors.Wrapf(err, "importing data for %s", field)
 			})
 		}
@@ -845,7 +865,9 @@ func (b *Batch) importValueData() error {
 					return errors.Wrap(err, "encoding import values")
 				}
 				eg.Go(func() error {
+					start := time.Now()
 					err := b.client.DoImportValues(b.index.Name(), shard, path, data)
+					b.log.Debugf("imp-vals %s,shard:%d,data:%d %v", field, shard, len(data), time.Since(start))
 					return errors.Wrapf(err, "importing values for %s", field)
 				})
 				startIdx = i
@@ -910,7 +932,9 @@ func (b *Batch) importMutexData() error {
 					return errors.Wrap(err, "encoding mutex import")
 				}
 				eg.Go(func() error {
+					start := time.Now()
 					err := b.client.DoImport(b.index.Name(), shard, path, data)
+					b.log.Debugf("imp-vals %s,shard:%d,data:%d %v", field, shard, len(data), time.Since(start))
 					return errors.Wrapf(err, "importing values for %s", field)
 				})
 				startIdx = i
@@ -952,8 +976,8 @@ func (b *Batch) reset() {
 			delete(clearMap, k)
 		}
 	}
-	for k := range b.toTranslateID {
-		delete(b.toTranslateID, k) // TODO pool these slices
+	for i := range b.toTranslateID {
+		b.toTranslateID[i] = ""
 	}
 	for k := range b.values {
 		delete(b.values, k) // TODO pool these slices

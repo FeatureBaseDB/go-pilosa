@@ -2,6 +2,7 @@ package gpexp
 
 import (
 	"reflect"
+	"sort"
 	"strconv"
 	"testing"
 	"time"
@@ -11,6 +12,139 @@ import (
 )
 
 // TODO test against cluster
+
+func TestStringSliceCombos(t *testing.T) {
+	client := pilosa.DefaultClient()
+	schema := pilosa.NewSchema()
+	idx := schema.Index("test-string-slicecombos")
+	fields := make([]*pilosa.Field, 1)
+	fields[0] = idx.Field("a1", pilosa.OptFieldKeys(true), pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 100))
+	err := client.SyncSchema(schema)
+	if err != nil {
+		t.Fatalf("syncing schema: %v", err)
+	}
+	defer func() {
+		err := client.DeleteIndex(idx)
+		if err != nil {
+			t.Logf("problem cleaning up from test: %v", err)
+		}
+	}()
+
+	b, err := NewBatch(client, 5, idx, fields)
+	if err != nil {
+		t.Fatalf("creating new batch: %v", err)
+	}
+
+	records := []Row{
+		{ID: uint64(0), Values: []interface{}{[]string{"a", "b", "c"}}},
+		{ID: uint64(1), Values: []interface{}{[]string{"z"}}},
+		{ID: uint64(2), Values: []interface{}{[]string{}}},
+		{ID: uint64(3), Values: []interface{}{[]string{"q", "r", "s", "t", "c"}}},
+		{ID: uint64(4), Values: []interface{}{nil}},
+		{ID: uint64(5), Values: []interface{}{[]string{"a", "b", "c"}}},
+		{ID: uint64(6), Values: []interface{}{[]string{"a", "b", "c"}}},
+		{ID: uint64(7), Values: []interface{}{[]string{"z"}}},
+		{ID: uint64(8), Values: []interface{}{[]string{}}},
+		{ID: uint64(9), Values: []interface{}{[]string{"q", "r", "s", "t"}}},
+		{ID: uint64(10), Values: []interface{}{nil}},
+		{ID: uint64(11), Values: []interface{}{[]string{"a", "b", "c"}}},
+	}
+
+	err = ingestRecords(records, b)
+	if err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
+	a1 := fields[0]
+
+	result := tq(t, client, a1.TopN(10))
+	rez := sortableCRI(result.CountItems())
+	sort.Sort(rez)
+	exp := sortableCRI{
+		{Key: "a", Count: 4},
+		{Key: "b", Count: 4},
+		{Key: "c", Count: 5},
+		{Key: "q", Count: 2},
+		{Key: "r", Count: 2},
+		{Key: "s", Count: 2},
+		{Key: "t", Count: 2},
+		{Key: "z", Count: 2},
+	}
+	sort.Sort(exp)
+	errorIfNotEqual(t, exp, rez)
+
+	result = tq(t, client, a1.Row("a"))
+	errorIfNotEqual(t, result.Row().Columns, []uint64{0, 5, 6, 11})
+	result = tq(t, client, a1.Row("b"))
+	errorIfNotEqual(t, result.Row().Columns, []uint64{0, 5, 6, 11})
+	result = tq(t, client, a1.Row("c"))
+	errorIfNotEqual(t, result.Row().Columns, []uint64{0, 3, 5, 6, 11})
+	result = tq(t, client, a1.Row("z"))
+	errorIfNotEqual(t, result.Row().Columns, []uint64{1, 7})
+	result = tq(t, client, a1.Row("q"))
+	errorIfNotEqual(t, result.Row().Columns, []uint64{3, 9})
+	result = tq(t, client, a1.Row("r"))
+	errorIfNotEqual(t, result.Row().Columns, []uint64{3, 9})
+	result = tq(t, client, a1.Row("s"))
+	errorIfNotEqual(t, result.Row().Columns, []uint64{3, 9})
+	result = tq(t, client, a1.Row("t"))
+	errorIfNotEqual(t, result.Row().Columns, []uint64{3, 9})
+}
+
+func errorIfNotEqual(t *testing.T, exp, got interface{}) {
+	t.Helper()
+	if !reflect.DeepEqual(exp, got) {
+		t.Errorf("unequal exp/got:\n%v\n%v", exp, got)
+	}
+}
+
+type sortableCRI []pilosa.CountResultItem
+
+func (s sortableCRI) Len() int { return len(s) }
+func (s sortableCRI) Less(i, j int) bool {
+	if s[i].Count != s[j].Count {
+		return s[i].Count > s[j].Count
+	}
+	if s[i].ID != s[j].ID {
+		return s[i].ID < s[j].ID
+	}
+	if s[i].Key != s[j].Key {
+		return s[i].Key < s[j].Key
+	}
+	return true
+}
+func (s sortableCRI) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+func tq(t *testing.T, client *pilosa.Client, query pilosa.PQLQuery) pilosa.QueryResult {
+	resp, err := client.Query(query)
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+	return resp.Results()[0]
+}
+
+func ingestRecords(records []Row, batch *Batch) error {
+	for _, rec := range records {
+		err := batch.Add(rec)
+		if err == ErrBatchNowFull {
+			err = batch.Import()
+			if err != nil {
+				return errors.Wrap(err, "importing batch")
+			}
+		} else if err != nil {
+			return errors.Wrap(err, "while adding record")
+		}
+	}
+	if batch.Len() > 0 {
+		err := batch.Import()
+		if err != nil {
+			return errors.Wrap(err, "importing batch")
+		}
+	}
+	return nil
+}
 
 func TestImportBatchInts(t *testing.T) {
 	client := pilosa.DefaultClient()
@@ -70,6 +204,104 @@ func TestImportBatchInts(t *testing.T) {
 			t.Errorf("expected %v for %d, but got %v", []uint64{uint64(i)}, i, result.Row().Columns)
 		}
 	}
+}
+
+func TestStringSliceEmptyAndNil(t *testing.T) {
+	client := pilosa.DefaultClient()
+	schema := pilosa.NewSchema()
+	idx := schema.Index("test-string-slice-nil")
+	fields := make([]*pilosa.Field, 1)
+	fields[0] = idx.Field("strslice", pilosa.OptFieldKeys(true), pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 100))
+	err := client.SyncSchema(schema)
+	if err != nil {
+		t.Fatalf("syncing schema: %v", err)
+	}
+	defer func() {
+		err := client.DeleteIndex(idx)
+		if err != nil {
+			t.Logf("problem cleaning up from test: %v", err)
+		}
+	}()
+
+	// first create a batch and test adding a single value with empty
+	// string - this failed with a translation error at one point, and
+	// how we catch it and treat it like a nil.
+	b, err := NewBatch(client, 2, idx, fields)
+	if err != nil {
+		t.Fatalf("creating new batch: %v", err)
+	}
+	r := Row{Values: make([]interface{}, len(fields))}
+	r.ID = uint64(1)
+	r.Values[0] = ""
+	err = b.Add(r)
+	if err != nil {
+		t.Fatalf("adding: %v", err)
+	}
+	err = b.Import()
+	if err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
+	// now create a batch and add a mixture of string slice values
+	b, err = NewBatch(client, 6, idx, fields)
+	if err != nil {
+		t.Fatalf("creating new batch: %v", err)
+	}
+	r = Row{Values: make([]interface{}, len(fields))}
+	r.ID = uint64(0)
+	r.Values[0] = []string{"a"}
+	err = b.Add(r)
+	if err != nil {
+		t.Fatalf("adding to batch: %v", err)
+	}
+
+	r.ID = uint64(1)
+	r.Values[0] = nil
+	err = b.Add(r)
+	if err != nil {
+		t.Fatalf("adding batch with nil stringslice to r: %v", err)
+	}
+
+	r.ID = uint64(2)
+	r.Values[0] = []uint64{0, 1, 222}
+	err = b.Add(r)
+	if err != nil {
+		t.Fatalf("adding batch with  idslice to r: %v", err)
+	}
+
+	r.ID = uint64(3)
+	r.Values[0] = []string{"b", "c"}
+	err = b.Add(r)
+	if err != nil {
+		t.Fatalf("adding batch with stringslice to r: %v", err)
+	}
+
+	r.ID = uint64(4)
+	r.Values[0] = []string{}
+	err = b.Add(r)
+	if err != nil {
+		t.Fatalf("adding batch with stringslice to r: %v", err)
+	}
+
+	err = b.Import()
+	if err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
+	rows := []interface{}{0, "a", "b", "c", 222}
+	resp, err := client.Query(idx.BatchQuery(fields[0].Row(rows[0]), fields[0].Row(rows[1]), fields[0].Row(rows[2]), fields[0].Row(rows[3]), fields[0].Row(rows[4])))
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+
+	// TODO test is flaky because we can't guarantee what a,b,c map to
+	expectations := [][]uint64{{2}, {0, 2}, {3}, {3}, {2}}
+	for i, re := range resp.Results() {
+		if !reflect.DeepEqual(re.Row().Columns, expectations[i]) {
+			t.Errorf("expected row %v to have columns %v, but got %v", rows[i], expectations[i], re.Row().Columns)
+		}
+	}
+
 }
 
 func TestStringSlice(t *testing.T) {
@@ -178,6 +410,55 @@ func TestStringSlice(t *testing.T) {
 
 }
 
+func TestSingleClearBatchRegression(t *testing.T) {
+	client := pilosa.DefaultClient()
+	schema := pilosa.NewSchema()
+	idx := schema.Index("gopilosatest-blah")
+	numFields := 1
+	fields := make([]*pilosa.Field, numFields)
+	fields[0] = idx.Field("zero", pilosa.OptFieldKeys(true))
+
+	err := client.SyncSchema(schema)
+	if err != nil {
+		t.Fatalf("syncing schema: %v", err)
+	}
+	defer func() {
+		err := client.DeleteIndex(idx)
+		if err != nil {
+			t.Logf("problem cleaning up from test: %v", err)
+		}
+	}()
+
+	_, err = client.Query(fields[0].Set("row1", 1))
+	if err != nil {
+		t.Fatalf("setting bit: %v", err)
+	}
+
+	b, err := NewBatch(client, 1, idx, fields)
+	if err != nil {
+		t.Fatalf("getting new batch: %v", err)
+	}
+	r := Row{ID: uint64(1), Values: make([]interface{}, numFields), Clears: make(map[int]interface{})}
+	r.Values[0] = nil
+	r.Clears[0] = "row1"
+	err = b.Add(r)
+	if err != ErrBatchNowFull {
+		t.Fatalf("wrong error from batch add: %v", err)
+	}
+
+	err = b.Import()
+	if err != nil {
+		t.Fatalf("error importing: %v", err)
+	}
+
+	resp, err := client.Query(fields[0].Row("row1"))
+	result := resp.Results()[0].Row().Columns
+	if len(result) != 0 {
+		t.Fatalf("unexpected values in row: result %+v", result)
+	}
+
+}
+
 func TestBatches(t *testing.T) {
 	client := pilosa.DefaultClient()
 	schema := pilosa.NewSchema()
@@ -203,7 +484,7 @@ func TestBatches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getting new batch: %v", err)
 	}
-	r := Row{Values: make([]interface{}, numFields)}
+	r := Row{Values: make([]interface{}, numFields), Clears: make(map[int]interface{})}
 	r.Time.Set(time.Date(2019, time.January, 2, 15, 45, 0, 0, time.UTC))
 
 	for i := 0; i < 9; i++ {
@@ -225,6 +506,8 @@ func TestBatches(t *testing.T) {
 		}
 		if i == 8 {
 			r.Values[0] = nil
+			r.Clears[1] = uint64(97)
+			r.Clears[2] = "c"
 			r.Values[3] = nil
 			r.Values[4] = nil
 		}
@@ -251,6 +534,12 @@ func TestBatches(t *testing.T) {
 		} else {
 			t.Fatalf("unexpected key %s", k)
 		}
+	}
+	if !reflect.DeepEqual(b.toTranslateClear, map[int]map[string][]int{2: {"c": {8}}}) {
+		t.Errorf("unexpected toTranslateClear: %+v", b.toTranslateClear)
+	}
+	if !reflect.DeepEqual(b.clearRowIDs, map[int]map[int]uint64{1: {8: 97}, 2: {}}) {
+		t.Errorf("unexpected clearRowIDs: %+v", b.clearRowIDs)
 	}
 
 	if !reflect.DeepEqual(b.values["three"], []int64{99, -10, 99, -10, 99, -10, 99, -10, 0}) {
@@ -332,10 +621,17 @@ func TestBatches(t *testing.T) {
 				t.Fatalf("expected no rowIDs for int field, but got: %v", rowIDs)
 			}
 		} else {
-			if !reflect.DeepEqual(rowIDs, []uint64{1, 2, 1, 2, 1, 2, 1, 2, 1, 1}) && !reflect.DeepEqual(rowIDs, []uint64{2, 1, 2, 1, 2, 1, 2, 1, 2, 2}) {
+			if !reflect.DeepEqual(rowIDs, []uint64{1, 2, 1, 2, 1, 2, 1, 2, 1, nilSentinel}) && !reflect.DeepEqual(rowIDs, []uint64{2, 1, 2, 1, 2, 1, 2, 1, 2, nilSentinel}) {
 				t.Fatalf("unexpected row ids for field %d: %v", fidx, rowIDs)
 			}
 		}
+	}
+
+	if !reflect.DeepEqual(b.clearRowIDs[1], map[int]uint64{8: 97}) {
+		t.Errorf("unexpected clearRowIDs after translation: %+v", b.clearRowIDs[1])
+	}
+	if !reflect.DeepEqual(b.clearRowIDs[2], map[int]uint64{8: 2}) && !reflect.DeepEqual(b.clearRowIDs[2], map[int]uint64{8: 1}) {
+		t.Errorf("unexpected clearRowIDs: after translation%+v", b.clearRowIDs[2])
 	}
 
 	err = b.doImport()
@@ -442,7 +738,7 @@ func TestBatches(t *testing.T) {
 		}
 	}
 
-	frags, err := b.makeFragments()
+	frags, _, err := b.makeFragments()
 	if err != nil {
 		t.Fatalf("making fragments: %v", err)
 	}
@@ -467,17 +763,16 @@ func TestBatches(t *testing.T) {
 	}
 
 	results := resp.Results()
-	for _, j := range []int{0, 3} {
+	for _, j := range []int{0, 2, 3} {
 		cols := results[j].Row().Columns
 		if !reflect.DeepEqual(cols, []uint64{0, 2, 4, 6, 10, 12, 14, 16, 18}) {
 			t.Fatalf("unexpected columns for a: %v", cols)
 		}
 	}
-	for i, res := range results[1:3] {
-		cols := res.Row().Columns
-		if !reflect.DeepEqual(cols, []uint64{0, 2, 4, 6, 8, 10, 12, 14, 16, 18}) {
-			t.Fatalf("unexpected columns at %d: %v", i, cols)
-		}
+	res := results[1]
+	cols := res.Row().Columns
+	if !reflect.DeepEqual(cols, []uint64{0, 2, 4, 6, 8, 10, 12, 14, 16, 18}) {
+		t.Fatalf("unexpected columns for field 1 row b: %v", cols)
 	}
 
 	resp, err = client.Query(idx.BatchQuery(fields[0].Row("d"),
@@ -504,7 +799,7 @@ func TestBatches(t *testing.T) {
 		t.Fatalf("querying: %v", err)
 	}
 	results = resp.Results()
-	cols := results[0].Row().Columns
+	cols = results[0].Row().Columns
 	if !reflect.DeepEqual(cols, []uint64{0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28}) {
 		t.Fatalf("all columns (but 8) should be greater than -11, but got: %v", cols)
 	}
@@ -527,7 +822,38 @@ func TestBatches(t *testing.T) {
 		t.Fatalf("wrong cols for January: got/want\n%v\n%v", cols, exp)
 	}
 
-	// TODO test non-full batches, test behavior of doing import on empty batch
+	b.reset()
+	r.ID = uint64(0)
+	r.Values[0] = "x"
+	r.Values[1] = "b"
+	r.Clears[0] = "a"
+	r.Clears[1] = "b" // b should get cleared
+	err = b.Add(r)
+	if err != nil {
+		t.Fatalf("adding with clears: %v", err)
+	}
+	err = b.Import()
+	if err != nil {
+		t.Fatalf("importing w/clears: %v", err)
+	}
+	resp, err = client.Query(idx.BatchQuery(
+		fields[0].Row("a"),
+		fields[0].Row("x"),
+		fields[1].Row("b"),
+	))
+	if err != nil {
+		t.Fatalf("querying after clears: %v", err)
+	}
+	if arow := resp.Results()[0].Row().Columns; arow[0] == 0 {
+		t.Errorf("shouldn't have id 0 in row a after clearing! %v", arow)
+	}
+	if xrow := resp.Results()[1].Row().Columns; xrow[0] != 0 {
+		t.Errorf("should have id 0 in row x after setting %v", xrow)
+	}
+	if brow := resp.Results()[2].Row().Columns; brow[0] == 0 {
+		t.Errorf("shouldn't have id 0 in row b after clearing! %v", brow)
+	}
+
 	// TODO test importing across multiple shards
 }
 
@@ -571,21 +897,9 @@ func TestBatchesStringIDs(t *testing.T) {
 	if len(b.toTranslateID) != 3 {
 		t.Fatalf("id translation table unexpected size: %v", b.toTranslateID)
 	}
-	for k, indexes := range b.toTranslateID {
-		if k == "0" {
-			if !reflect.DeepEqual(indexes, []int{0}) {
-				t.Fatalf("unexpected result k: %s, indexes: %v", k, indexes)
-			}
-		}
-		if k == "1" {
-			if !reflect.DeepEqual(indexes, []int{1}) {
-				t.Fatalf("unexpected result k: %s, indexes: %v", k, indexes)
-			}
-		}
-		if k == "2" {
-			if !reflect.DeepEqual(indexes, []int{2}) {
-				t.Fatalf("unexpected result k: %s, indexes: %v", k, indexes)
-			}
+	for i, k := range b.toTranslateID {
+		if ik, err := strconv.Atoi(k); err != nil || ik != i {
+			t.Errorf("unexpected toTranslateID key %s at index %d", k, i)
 		}
 	}
 

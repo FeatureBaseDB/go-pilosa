@@ -4,9 +4,10 @@ import (
 	"time"
 
 	"github.com/pilosa/go-pilosa"
+	"github.com/pilosa/go-pilosa/egpool"
+	"github.com/pilosa/pilosa/logger"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 )
 
 // TODO if using column translation, column ids might get way out of
@@ -36,6 +37,9 @@ import (
 type RecordBatch interface {
 	Add(Row) error
 	Import() error
+	// Len reports the number of records which have been added to the
+	// batch since the last call to Import (or since it was created).
+	Len() int
 }
 
 // Batch implements RecordBatch.
@@ -49,6 +53,7 @@ type RecordBatch interface {
 // | string | set               | keys=true |
 // | uint64 | set               | any       |
 // | int64  | int               | any       |
+// | float64| int               | scale     | TODO
 // | nil    | any               |           |
 //
 // nil values are ignored.
@@ -64,6 +69,13 @@ type Batch struct {
 	// rowIDs is a map of field index (in the header) to slices of
 	// length batchSize which contain row IDs.
 	rowIDs map[int][]uint64
+	// clearRowIDs is a map[fieldIndex][idsIndex]rowID we don't expect
+	// clears to happen very often, so we store the idIndex/value
+	// mapping in a map rather than a slice as we do for rowIDs. This
+	// is a potentially temporary workaround to allow packed boolean
+	// fields to clear "false" values. Packed fields may be more
+	// completely supported by Pilosa in future.
+	clearRowIDs map[int]map[int]uint64
 
 	// rowIDSets is a map from field name to a batchSize slice of
 	// slices of row IDs. When a given record can have more than one
@@ -80,27 +92,27 @@ type Batch struct {
 	// integer field which has nil values.
 	nullIndices map[string][]uint64
 
-	// TODO support mutex and bool fields.
+	// TODO support bool fields.
 
 	// for each field, keep a map of key to which record indexes that key mapped to
-	toTranslate map[int]map[string][]int
+	toTranslate      map[int]map[string][]int
+	toTranslateClear map[int]map[string][]int
 
 	// toTranslateSets is a map from field name to a map of string
 	// keys that need to be translated to sets of record indexes which
 	// those keys map to.
 	toTranslateSets map[string]map[string][]int
 
-	// for string ids which we weren't able to immediately translate,
-	// keep a map of which record(s) each string id maps to.
-	//
-	// TODO:
-	// this is probably super inefficient in the (common) case where
-	// each record has a different string ID. In that case, a simple
-	// slice of strings would probably work better.
-	toTranslateID map[string][]int
+	// toTranslateID maps each string key to a record index - this
+	// will get translated into Batch.rowIDs
+	toTranslateID []string
 
 	transCache Translator
+
+	log logger.Logger
 }
+
+func (b *Batch) Len() int { return len(b.ids) }
 
 // BatchOption is a functional option for Batch objects.
 type BatchOption func(b *Batch) error
@@ -110,6 +122,13 @@ type BatchOption func(b *Batch) error
 func OptTranslator(t Translator) BatchOption {
 	return func(b *Batch) error {
 		b.transCache = t
+		return nil
+	}
+}
+
+func OptLogger(l logger.Logger) BatchOption {
+	return func(b *Batch) error {
+		b.log = l
 		return nil
 	}
 }
@@ -138,28 +157,37 @@ func NewBatch(client *pilosa.Client, size int, index *pilosa.Index, fields []*pi
 				tt[i] = make(map[string][]int)
 				ttSets[field.Name()] = make(map[string][]int)
 			}
-			rowIDs[i] = make([]uint64, 0, size) // TODO make this on-demand when it gets used. could be a string array field.
 			hasTime = typ == pilosa.FieldTypeTime || hasTime
-		case pilosa.FieldTypeInt:
+		case pilosa.FieldTypeInt, pilosa.FieldTypeDecimal:
 			values[field.Name()] = make([]int64, 0, size)
+		case pilosa.FieldTypeMutex:
+			// similar to set/time fields, but no need to support sets
+			// of values (hence no ttSets)
+			if opts.Keys() {
+				tt[i] = make(map[string][]int)
+			}
+			rowIDs[i] = make([]uint64, 0, size)
 		default:
-			return nil, errors.Errorf("field type %s is not currently supported through Batch", typ)
+			return nil, errors.Errorf("field type '%s' is not currently supported through Batch", typ)
 		}
 	}
 	b := &Batch{
-		client:          client,
-		header:          fields,
-		headerMap:       headerMap,
-		index:           index,
-		ids:             make([]uint64, 0, size),
-		rowIDs:          rowIDs,
-		rowIDSets:       make(map[string][][]uint64),
-		values:          values,
-		nullIndices:     make(map[string][]uint64),
-		toTranslate:     tt,
-		toTranslateSets: ttSets,
-		toTranslateID:   make(map[string][]int),
-		transCache:      NewMapTranslator(),
+		client:           client,
+		header:           fields,
+		headerMap:        headerMap,
+		index:            index,
+		ids:              make([]uint64, 0, size),
+		rowIDs:           rowIDs,
+		clearRowIDs:      make(map[int]map[int]uint64),
+		rowIDSets:        make(map[string][][]uint64),
+		values:           values,
+		nullIndices:      make(map[string][]uint64),
+		toTranslate:      tt,
+		toTranslateClear: make(map[int]map[string][]int),
+		toTranslateSets:  ttSets,
+		transCache:       NewMapTranslator(),
+
+		log: logger.NopLogger,
 	}
 	if hasTime {
 		b.times = make([]QuantizedTime, 0, size)
@@ -177,6 +205,7 @@ func NewBatch(client *pilosa.Client, size int, index *pilosa.Index, fields []*pi
 type Row struct {
 	ID     interface{}
 	Values []interface{}
+	Clears map[int]interface{}
 	Time   QuantizedTime
 }
 
@@ -261,8 +290,20 @@ func (qt *QuantizedTime) views(q pilosa.TimeQuantum) ([]string, error) {
 // Add adds a record to the batch. Performance will be best if record
 // IDs are shard-sorted. That is, all records which belong to the same
 // Pilosa shard are added adjacent to each other. If the records are
-// also in-order within a shard this will likely help as well.
+// also in-order within a shard this will likely help as well. Add
+// clears rec.Clears when it returns normally (either a nil error or
+// BatchNowFull), it does not clear rec.Values although... TODO.
 func (b *Batch) Add(rec Row) error {
+	// Clear recValues and rec.Clears upon return.
+	defer func() {
+		for i := range rec.Values {
+			rec.Values[i] = nil
+		}
+		for k := range rec.Clears {
+			delete(rec.Clears, k)
+		}
+	}()
+
 	if len(b.ids) == cap(b.ids) {
 		return ErrBatchAlreadyFull
 	}
@@ -271,17 +312,18 @@ func (b *Batch) Add(rec Row) error {
 	}
 
 	handleStringID := func(rid string) error {
+		if rid == "" {
+			return errors.Errorf("record identifier cannot be an empty string")
+		}
 		if colID, ok, err := b.transCache.GetCol(b.index.Name(), rid); err != nil {
 			return errors.Wrap(err, "translating column")
 		} else if ok {
 			b.ids = append(b.ids, colID)
 		} else {
-			ints, ok := b.toTranslateID[rid]
-			if !ok {
-				ints = make([]int, 0)
+			if b.toTranslateID == nil {
+				b.toTranslateID = make([]string, cap(b.ids))
 			}
-			ints = append(ints, len(b.ids))
-			b.toTranslateID[rid] = ints
+			b.toTranslateID[len(b.ids)] = rid
 			b.ids = append(b.ids, 0)
 		}
 		return nil
@@ -316,9 +358,16 @@ func (b *Batch) Add(rec Row) error {
 		field := b.header[i]
 		switch val := rec.Values[i].(type) {
 		case string:
+			// nil-extend
+			for len(b.rowIDs[i]) < curPos {
+				b.rowIDs[i] = append(b.rowIDs[i], nilSentinel)
+			}
 			rowIDs := b.rowIDs[i]
-			// translate val and append to b.rowIDs[i]
-			if rowID, ok, err := b.transCache.GetRow(b.index.Name(), field.Name(), val); err != nil {
+			// empty string is not a valid value at this point (Pilosa refuses to translate it)
+			if val == "" { //
+				b.rowIDs[i] = append(rowIDs, nilSentinel)
+
+			} else if rowID, ok, err := b.transCache.GetRow(b.index.Name(), field.Name(), val); err != nil {
 				return errors.Wrap(err, "translating row")
 			} else if ok {
 				b.rowIDs[i] = append(rowIDs, rowID)
@@ -332,19 +381,31 @@ func (b *Batch) Add(rec Row) error {
 				b.rowIDs[i] = append(rowIDs, 0)
 			}
 		case uint64:
+			// nil-extend
+			for len(b.rowIDs[i]) < curPos {
+				b.rowIDs[i] = append(b.rowIDs[i], nilSentinel)
+			}
 			b.rowIDs[i] = append(b.rowIDs[i], val)
 		case int64:
 			b.values[field.Name()] = append(b.values[field.Name()], val)
 		case []string:
+			if len(val) == 0 {
+				continue
+			}
 			rowIDSets, ok := b.rowIDSets[field.Name()]
 			if !ok {
 				rowIDSets = make([][]uint64, len(b.ids)-1, cap(b.ids))
-			} else {
-				rowIDSets = rowIDSets[:len(b.ids)-1] // grow this field's rowIDSets if necessary
+				b.rowIDSets[field.Name()] = rowIDSets
+			}
+			for len(rowIDSets) < len(b.ids)-1 {
+				rowIDSets = append(rowIDSets, nil) // nil extend
 			}
 
 			rowIDs := make([]uint64, 0, len(val))
 			for _, k := range val {
+				if k == "" {
+					continue
+				}
 				if rowID, ok, err := b.transCache.GetRow(b.index.Name(), field.Name(), k); err != nil {
 					return errors.Wrap(err, "translating row from []string")
 				} else if ok {
@@ -359,8 +420,20 @@ func (b *Batch) Add(rec Row) error {
 				}
 			}
 			b.rowIDSets[field.Name()] = append(rowIDSets, rowIDs)
+		case []uint64:
+			if len(val) == 0 {
+				continue
+			}
+			rowIDSets, ok := b.rowIDSets[field.Name()]
+			if !ok {
+				rowIDSets = make([][]uint64, len(b.ids)-1, cap(b.ids))
+			}
+			for len(rowIDSets) < len(b.ids)-1 {
+				rowIDSets = append(rowIDSets, nil) // nil extend
+			}
+			b.rowIDSets[field.Name()] = append(rowIDSets, val)
 		case nil:
-			if field.Opts().Type() == pilosa.FieldTypeInt {
+			if field.Opts().Type() == pilosa.FieldTypeInt || field.Opts().Type() == pilosa.FieldTypeDecimal {
 				b.values[field.Name()] = append(b.values[field.Name()], 0)
 				nullIndices, ok := b.nullIndices[field.Name()]
 				if !ok {
@@ -370,12 +443,60 @@ func (b *Batch) Add(rec Row) error {
 				b.nullIndices[field.Name()] = nullIndices
 
 			} else {
-				b.rowIDs[i] = append(b.rowIDs[i], nilSentinel)
+				// only append nil to rowIDs if this field already has
+				// rowIDs. Otherwise, this could be a []string or
+				// []uint64 field where we've only seen nil values so
+				// far. when we see a uint64 or string value, we'll
+				// "nil-extend" rowIDs to make sure it's the right
+				// length.
+				if rowIDs, ok := b.rowIDs[i]; ok {
+					b.rowIDs[i] = append(rowIDs, nilSentinel)
+				}
 			}
 		default:
 			return errors.Errorf("Val %v Type %[1]T is not currently supported. Use string, uint64 (row id), or int64 (integer value)", val)
 		}
 	}
+
+	for i, uval := range rec.Clears {
+		field := b.header[i]
+		if _, ok := b.clearRowIDs[i]; !ok {
+			b.clearRowIDs[i] = make(map[int]uint64)
+		}
+		switch val := uval.(type) {
+		case string:
+			clearRows := b.clearRowIDs[i]
+			// translate val and add to clearRows
+			if rowID, ok, err := b.transCache.GetRow(b.index.Name(), field.Name(), val); err != nil {
+				return errors.Wrap(err, "translating row")
+			} else if ok {
+				clearRows[curPos] = rowID
+			} else {
+				_, ok := b.toTranslateClear[i]
+				if !ok {
+					b.toTranslateClear[i] = make(map[string][]int)
+				}
+				ints, ok := b.toTranslateClear[i][val]
+				if !ok {
+					ints = make([]int, 0)
+				}
+				ints = append(ints, curPos)
+				b.toTranslateClear[i][val] = ints
+			}
+		case uint64:
+			b.clearRowIDs[i][curPos] = val
+		default:
+			return errors.Errorf("Clearing a value '%v' Type %[1]T is not currently supported (field '%s')", val, field.Name())
+		}
+		// nil extend b.rowIDs so we don't run into a horrible bug
+		// where we skip doing clears because b.rowIDs doesn't have a
+		// value for htis field
+		for len(b.rowIDs[i]) <= curPos {
+			b.rowIDs[i] = append(b.rowIDs[i], nilSentinel)
+		}
+
+	}
+
 	if len(b.ids) == cap(b.ids) {
 		return ErrBatchNowFull
 	}
@@ -414,29 +535,29 @@ func (b *Batch) Import() error {
 }
 
 func (b *Batch) doTranslation() error {
-	var keys []string
+	keys := make([]string, 0)
+	var indexes []int
 
 	// translate column keys if there are any
-	if len(b.toTranslateID) > 0 {
-		keys = make([]string, 0, len(b.toTranslateID))
-		for k := range b.toTranslateID {
+	for i, k := range b.toTranslateID {
+		if k != "" {
 			keys = append(keys, k)
+			indexes = append(indexes, i)
 		}
+	}
+	if len(keys) > 0 {
+		start := time.Now()
 		ids, err := b.client.TranslateColumnKeys(b.index, keys)
 		if err != nil {
 			return errors.Wrap(err, "translating col keys")
 		}
+		b.log.Debugf("translating %d column keys took %v", len(keys), time.Since(start))
 		if err := b.transCache.AddCols(b.index.Name(), keys, ids); err != nil {
 			return errors.Wrap(err, "adding cols to cache")
 		}
-		for j, key := range keys {
-			id := ids[j]
-			for _, recordIdx := range b.toTranslateID[key] {
-				b.ids[recordIdx] = id
-			}
+		for j, id := range ids {
+			b.ids[indexes[j]] = id
 		}
-	} else {
-		keys = make([]string, 0)
 	}
 
 	// translate row keys
@@ -448,26 +569,46 @@ func (b *Batch) doTranslation() error {
 		for k := range tt {
 			keys = append(keys, k)
 		}
+		// append keys to clear so we can translate them all in one
+		// request. ttEnd is the index where clearing starts which we
+		// use later on.
+		ttEnd := len(keys)
+		ttc := b.toTranslateClear[i]
+		for k := range ttc {
+			keys = append(keys, k)
+		}
 
 		if len(keys) == 0 {
 			continue
 		}
 
 		// translate keys from Pilosa
+		start := time.Now()
 		ids, err := b.client.TranslateRowKeys(b.headerMap[fieldName], keys)
 		if err != nil {
 			return errors.Wrap(err, "translating row keys")
 		}
+		b.log.Debugf("translating %d row keys for %s took %v", len(keys), fieldName, time.Since(start))
 		if err := b.transCache.AddRows(b.index.Name(), fieldName, keys, ids); err != nil {
 			return errors.Wrap(err, "adding rows to cache")
 		}
 
 		// fill out missing IDs in local batch records with translated IDs
 		rows := b.rowIDs[i]
-		for j, key := range keys {
+		for j := 0; j < ttEnd; j++ {
+			key := keys[j]
 			id := ids[j]
 			for _, recordIdx := range tt[key] {
 				rows[recordIdx] = id
+			}
+		}
+		// fill out missing IDs in clear lists.
+		clearRows := b.clearRowIDs[i]
+		for j := ttEnd; j < len(keys); j++ {
+			key := keys[j]
+			id := ids[j]
+			for _, recordIdx := range ttc[key] {
+				clearRows[recordIdx] = id
 			}
 		}
 	}
@@ -483,14 +624,18 @@ func (b *Batch) doTranslation() error {
 			continue
 		}
 		// translate keys from Pilosa
+		start := time.Now()
 		ids, err := b.client.TranslateRowKeys(b.headerMap[fieldName], keys)
 		if err != nil {
-			return errors.Wrap(err, "translating row keys")
+			return errors.Wrap(err, "translating row keys (sets)")
 		}
+		b.log.Debugf("translating %d row keys(sets) for %s took %v", len(keys), fieldName, time.Since(start))
 		if err := b.transCache.AddRows(b.index.Name(), fieldName, keys, ids); err != nil {
 			return errors.Wrap(err, "adding rows to cache")
 		}
 		rowIDSets := b.rowIDSets[fieldName]
+		rowIDSets = rowIDSets[:cap(b.ids)]
+		b.rowIDSets[fieldName] = rowIDSets
 		for j, key := range keys {
 			rowID := ids[j]
 			for _, recordIdx := range tt[key] {
@@ -503,24 +648,41 @@ func (b *Batch) doTranslation() error {
 }
 
 func (b *Batch) doImport() error {
-	eg := errgroup.Group{}
+	eg := egpool.Group{PoolSize: 50}
 
-	frags, err := b.makeFragments()
+	frags, clearFrags, err := b.makeFragments()
 	if err != nil {
 		return errors.Wrap(err, "making fragments")
 	}
+
 	for shard, fieldMap := range frags {
 		for field, viewMap := range fieldMap {
 			field := field
 			viewMap := viewMap
+			shard := shard
+
 			eg.Go(func() error {
+				clearViewMap := clearFrags.GetViewMap(shard, field)
+				if len(clearViewMap) > 0 {
+					start := time.Now()
+					err := b.client.ImportRoaringBitmap(b.index.Field(field), shard, clearViewMap, true)
+					if err != nil {
+						return errors.Wrapf(err, "import clearing clearing data for %s", field)
+					}
+					b.log.Debugf("imp-roar-clr %s,shard:%d,views:%d %v", field, shard, len(clearViewMap), time.Since(start))
+				}
+				start := time.Now()
 				err := b.client.ImportRoaringBitmap(b.index.Field(field), shard, viewMap, false)
+				b.log.Debugf("imp-roar     %s,shard:%d,views:%d %v", field, shard, len(clearViewMap), time.Since(start))
 				return errors.Wrapf(err, "importing data for %s", field)
 			})
 		}
 	}
 	eg.Go(func() error {
 		return b.importValueData()
+	})
+	eg.Go(func() error {
+		return b.importMutexData()
 	})
 	return eg.Wait()
 }
@@ -531,46 +693,65 @@ func (b *Batch) doImport() error {
 // if needed though).
 var nilSentinel = ^uint64(0)
 
-func (b *Batch) makeFragments() (fragments, error) {
+func (b *Batch) makeFragments() (frags fragments, clearFrags fragments, err error) {
 	shardWidth := b.index.ShardWidth()
 	if shardWidth == 0 {
 		shardWidth = pilosa.DefaultShardWidth
 	}
-	frags := make(fragments)
+	frags = make(fragments)
+	clearFrags = make(fragments)
+	emptyClearRows := make(map[int]uint64)
 	for i, rowIDs := range b.rowIDs {
 		if len(rowIDs) == 0 {
 			continue // this can happen when the values that came in for this field were string slices
 		}
+		clearRows := b.clearRowIDs[i]
+		if clearRows == nil {
+			clearRows = emptyClearRows
+		}
 		field := b.header[i]
 		opts := field.Opts()
+		if opts.Type() == pilosa.FieldTypeMutex {
+			continue // we handle mutex fields separately — they can't use importRoaring
+		}
 		curShard := ^uint64(0) // impossible sentinel value for shard.
 		var curBM *roaring.Bitmap
+		var clearBM *roaring.Bitmap
 		for j := range b.ids {
 			col, row := b.ids[j], rowIDs[j]
-			if row == nilSentinel {
-				continue
-			}
 			if col/shardWidth != curShard {
 				curShard = col / shardWidth
 				curBM = frags.GetOrCreate(curShard, field.Name(), "")
+				clearBM = clearFrags.GetOrCreate(curShard, field.Name(), "")
 			}
-			// TODO this is super ugly, but we want to avoid setting
-			// bits on the standard view in the specific case when
-			// there isn't one. Should probably refactor this whole
-			// loop to be more general w.r.t. views. Also... tests for
-			// the NoStandardView case would be great.
-			if !(opts.Type() == pilosa.FieldTypeTime && opts.NoStandardView()) {
-				curBM.DirectAdd(row*shardWidth + (col % shardWidth))
+			if row != nilSentinel {
+				// TODO this is super ugly, but we want to avoid setting
+				// bits on the standard view in the specific case when
+				// there isn't one. Should probably refactor this whole
+				// loop to be more general w.r.t. views. Also... tests for
+				// the NoStandardView case would be great.
+				if !(opts.Type() == pilosa.FieldTypeTime && opts.NoStandardView()) {
+					curBM.DirectAdd(row*shardWidth + (col % shardWidth))
+				}
+				if opts.Type() == pilosa.FieldTypeTime {
+					views, err := b.times[j].views(opts.TimeQuantum())
+					if err != nil {
+						return nil, nil, errors.Wrap(err, "calculating views")
+					}
+					for _, view := range views {
+						tbm := frags.GetOrCreate(curShard, field.Name(), view)
+						tbm.DirectAdd(row*shardWidth + (col % shardWidth))
+					}
+				}
 			}
-			if opts.Type() == pilosa.FieldTypeTime {
-				views, err := b.times[j].views(opts.TimeQuantum())
-				if err != nil {
-					return nil, errors.Wrap(err, "calculating views")
-				}
-				for _, view := range views {
-					tbm := frags.GetOrCreate(curShard, field.Name(), view)
-					tbm.DirectAdd(row*shardWidth + (col % shardWidth))
-				}
+
+			clearRow, ok := clearRows[j]
+			if ok {
+				clearBM.DirectAddN(clearRow*shardWidth + (col % shardWidth))
+				// we're going to execute the clear before the set, so
+				// we want to make sure that at this point, the "set"
+				// fragments don't contain the bit that we're clearing
+				curBM.DirectRemoveN(clearRow*shardWidth + (col % shardWidth))
 			}
 		}
 	}
@@ -578,6 +759,12 @@ func (b *Batch) makeFragments() (fragments, error) {
 	for fname, rowIDSets := range b.rowIDSets {
 		if len(rowIDSets) == 0 {
 			continue
+		} else if len(rowIDSets) < len(b.ids) {
+			// rowIDSets is guaranteed to have capacity == to b.ids,
+			// but if the last record had a nil for this field, it
+			// might not have the same length, so we re-slice it to
+			// ensure the lengths are the same.
+			rowIDSets = rowIDSets[:len(b.ids)]
 		}
 		field := b.headerMap[fname]
 		opts := field.Opts()
@@ -605,7 +792,7 @@ func (b *Batch) makeFragments() (fragments, error) {
 			if opts.Type() == pilosa.FieldTypeTime {
 				views, err := b.times[j].views(opts.TimeQuantum())
 				if err != nil {
-					return nil, errors.Wrap(err, "calculating views")
+					return nil, nil, errors.Wrap(err, "calculating views")
 				}
 				for _, view := range views {
 					tbm := frags.GetOrCreate(curShard, fname, view)
@@ -616,7 +803,7 @@ func (b *Batch) makeFragments() (fragments, error) {
 			}
 		}
 	}
-	return frags, nil
+	return frags, clearFrags, nil
 }
 
 // importValueData imports data for int fields.
@@ -625,7 +812,7 @@ func (b *Batch) importValueData() error {
 	if shardWidth == 0 {
 		shardWidth = pilosa.DefaultShardWidth
 	}
-	eg := errgroup.Group{}
+	eg := egpool.Group{PoolSize: 50}
 	ids := make([]uint64, len(b.ids))
 	for field, values := range b.values {
 		// grow our temp ids slice to full length
@@ -678,7 +865,9 @@ func (b *Batch) importValueData() error {
 					return errors.Wrap(err, "encoding import values")
 				}
 				eg.Go(func() error {
+					start := time.Now()
 					err := b.client.DoImportValues(b.index.Name(), shard, path, data)
+					b.log.Debugf("imp-vals %s,shard:%d,data:%d %v", field, shard, len(data), time.Since(start))
 					return errors.Wrapf(err, "importing values for %s", field)
 				})
 				startIdx = i
@@ -690,27 +879,105 @@ func (b *Batch) importValueData() error {
 	return errors.Wrap(err, "importing value data")
 }
 
+// TODO this should work for bools as well - just need to support them
+// at batch creation time and when calling Add, I think.
+func (b *Batch) importMutexData() error {
+	shardWidth := b.index.ShardWidth()
+	if shardWidth == 0 {
+		shardWidth = pilosa.DefaultShardWidth
+	}
+	eg := egpool.Group{PoolSize: 50}
+	ids := make([]uint64, 0, len(b.ids))
+
+	for findex, rowIDs := range b.rowIDs {
+		field := b.header[findex]
+		if field.Opts().Type() != pilosa.FieldTypeMutex {
+			continue
+		}
+		ids = ids[:0]
+
+		// get slice of column ids for non-nil rowIDs and cut nil row
+		// IDs out of rowIDs.
+		idsIndex := 0
+		for i, id := range b.ids {
+			rowID := rowIDs[i]
+			if rowID == nilSentinel {
+				continue
+			}
+			rowIDs[idsIndex] = rowID
+			ids = append(ids, id)
+			idsIndex++
+		}
+		rowIDs = rowIDs[:idsIndex]
+
+		if len(ids) == 0 {
+			continue
+		}
+		curShard := ids[0] / shardWidth
+		startIdx := 0
+		for i := 1; i <= len(ids); i++ {
+			var recordID uint64
+			if i < len(ids) {
+				recordID = ids[i]
+			} else {
+				recordID = (curShard + 2) * shardWidth
+			}
+
+			if recordID/shardWidth != curShard {
+				endIdx := i
+				shard := curShard
+				field := field
+				path, data, err := b.client.EncodeImport(b.index.Name(), field.Name(), shard, rowIDs[startIdx:endIdx], ids[startIdx:endIdx], false)
+				if err != nil {
+					return errors.Wrap(err, "encoding mutex import")
+				}
+				eg.Go(func() error {
+					start := time.Now()
+					err := b.client.DoImport(b.index.Name(), shard, path, data)
+					b.log.Debugf("imp-vals %s,shard:%d,data:%d %v", field, shard, len(data), time.Since(start))
+					return errors.Wrapf(err, "importing values for %s", field)
+				})
+				startIdx = i
+				curShard = recordID / shardWidth
+			}
+		}
+	}
+	err := eg.Wait()
+	return errors.Wrap(err, "importing mutex data")
+}
+
 // reset is called at the end of importing to ready the batch for the
 // next round. Where possible it does not re-allocate memory.
 func (b *Batch) reset() {
 	b.ids = b.ids[:0]
 	b.times = b.times[:0]
 	for i, rowIDs := range b.rowIDs {
-		fieldName := b.header[i].Name()
 		b.rowIDs[i] = rowIDs[:0]
-		rowIDSet := b.rowIDSets[fieldName]
-		b.rowIDSets[fieldName] = rowIDSet[:0]
 		m := b.toTranslate[i]
 		for k := range m {
 			delete(m, k) // TODO pool these slices
 		}
-		m = b.toTranslateSets[fieldName]
-		for k := range m {
-			delete(m, k)
+	}
+	for _, tts := range b.toTranslateSets {
+		for k := range tts {
+			delete(tts, k)
 		}
 	}
-	for k := range b.toTranslateID {
-		delete(b.toTranslateID, k) // TODO pool these slices
+	for field, rowIDSet := range b.rowIDSets {
+		b.rowIDSets[field] = rowIDSet[:0]
+	}
+	for _, rowIDs := range b.clearRowIDs {
+		for k := range rowIDs {
+			delete(rowIDs, k)
+		}
+	}
+	for _, clearMap := range b.toTranslateClear {
+		for k := range clearMap {
+			delete(clearMap, k)
+		}
+	}
+	for i := range b.toTranslateID {
+		b.toTranslateID[i] = ""
 	}
 	for k := range b.values {
 		delete(b.values, k) // TODO pool these slices
@@ -740,4 +1007,16 @@ func (f fragments) GetOrCreate(shard uint64, field, view string) *roaring.Bitmap
 	fieldMap[field] = viewMap
 	f[shard] = fieldMap
 	return bm
+}
+
+func (f fragments) GetViewMap(shard uint64, field string) map[string]*roaring.Bitmap {
+	fieldMap, ok := f[shard]
+	if !ok {
+		return nil
+	}
+	viewMap, ok := fieldMap[field]
+	if !ok {
+		return nil
+	}
+	return viewMap
 }

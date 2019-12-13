@@ -185,9 +185,9 @@ func TestIndexFields(t *testing.T) {
 func TestIndexToString(t *testing.T) {
 	schema1 := NewSchema()
 	index := schema1.Index("test-index")
-	target := fmt.Sprintf(`&pilosa.Index{name:"test-index", options:(*pilosa.IndexOptions)(%p), fields:map[string]*pilosa.Field{}, shardWidth:0x0}`, index.options)
+	target := `{name: "test-index", options: "{"options":{}}", fields: map[], shardWidth: 0}`
 	if target != index.String() {
-		t.Fatalf("%s != %s", target, index.String())
+		t.Fatalf("indexes not equal exp/got:\n%s\n%s", target, index.String())
 	}
 }
 
@@ -214,8 +214,7 @@ func TestFieldToString(t *testing.T) {
 	schema1 := NewSchema()
 	index := schema1.Index("test-index")
 	field := index.Field("test-field")
-	target := fmt.Sprintf(`&pilosa.Field{name:"test-field", index:(*pilosa.Index)(%p), options:(*pilosa.FieldOptions)(%p)}`,
-		field.index, field.options)
+	target := `{name: "test-field", index: "test-index", options: "{"options":{"type":"set"}}"}`
 	if target != field.String() {
 		t.Fatalf("%s != %s", target, field.String())
 	}
@@ -414,49 +413,49 @@ func TestTopN(t *testing.T) {
 
 func TestFieldLT(t *testing.T) {
 	comparePQL(t,
-		"Range(collaboration < 10)",
+		"Row(collaboration < 10)",
 		collabField.LT(10))
 }
 
 func TestFieldLTE(t *testing.T) {
 	comparePQL(t,
-		"Range(collaboration <= 10)",
+		"Row(collaboration <= 10)",
 		collabField.LTE(10))
 }
 
 func TestFieldGT(t *testing.T) {
 	comparePQL(t,
-		"Range(collaboration > 10)",
+		"Row(collaboration > 10)",
 		collabField.GT(10))
 }
 
 func TestFieldGTE(t *testing.T) {
 	comparePQL(t,
-		"Range(collaboration >= 10)",
+		"Row(collaboration >= 10)",
 		collabField.GTE(10))
 }
 
 func TestFieldEquals(t *testing.T) {
 	comparePQL(t,
-		"Range(collaboration == 10)",
+		"Row(collaboration == 10)",
 		collabField.Equals(10))
 }
 
 func TestFieldNotEquals(t *testing.T) {
 	comparePQL(t,
-		"Range(collaboration != 10)",
+		"Row(collaboration != 10)",
 		collabField.NotEquals(10))
 }
 
 func TestFieldNotNull(t *testing.T) {
 	comparePQL(t,
-		"Range(collaboration != null)",
+		"Row(collaboration != null)",
 		collabField.NotNull())
 }
 
 func TestFieldBetween(t *testing.T) {
 	comparePQL(t,
-		"Range(collaboration >< [10,20])",
+		"Row(collaboration >< [10,20])",
 		collabField.Between(10, 20))
 }
 
@@ -1018,6 +1017,16 @@ func TestBoolFieldOptions(t *testing.T) {
 		t.Fatalf("`%s` != `%s`", targetString, jsonString)
 	}
 	compareFieldOptions(t, field.Options(), FieldTypeBool, TimeQuantumNone, CacheTypeDefault, 0, 0, 0)
+}
+
+func TestDecimalFieldOptions(t *testing.T) {
+	field := sampleIndex.Field("decimal-field", OptFieldTypeDecimal(3, 7, 999))
+	jsonString := field.options.String()
+	targetString := `{"options":{"type":"decimal","scale":3,"max":999,"min":7}}`
+	if sortedString(targetString) != sortedString(jsonString) {
+		t.Fatalf("`%s` != `%s`", targetString, jsonString)
+	}
+	compareFieldOptions(t, field.Options(), FieldTypeDecimal, TimeQuantumNone, CacheTypeDefault, 0, 7, 999)
 }
 
 func TestEncodeMapPanicsOnMarshalFailure(t *testing.T) {

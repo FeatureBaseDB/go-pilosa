@@ -237,6 +237,26 @@ func TestOrmCount(t *testing.T) {
 	}
 }
 
+func TestDecimalField(t *testing.T) {
+	client := getClient()
+	defer client.Close()
+	decField := index.Field("a-decimal", OptFieldTypeDecimal(3))
+	err := client.EnsureField(decField)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sch, err := client.Schema()
+	if err != nil {
+		t.Fatalf("getting schema: %v", err)
+	}
+	idx := sch.indexes["go-testindex"]
+	if opts := idx.Field("a-decimal").Options(); opts.scale != 3 {
+		t.Fatalf("scale should be 3, but: %v", opts)
+	}
+
+}
+
 func TestIntersectReturns(t *testing.T) {
 	client := getClient()
 	defer client.Close()

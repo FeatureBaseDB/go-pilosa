@@ -39,6 +39,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -396,6 +397,7 @@ func OptOptionsShards(shards ...uint64) OptionsOption {
 // Index is a Pilosa index. The purpose of the Index is to represent a data namespace.
 // You cannot perform cross-index queries. Column-level attributes are global to the Index.
 type Index struct {
+	mu         sync.Mutex
 	name       string
 	options    *IndexOptions
 	fields     map[string]*Field
@@ -403,7 +405,7 @@ type Index struct {
 }
 
 func (idx *Index) String() string {
-	return fmt.Sprintf("%#v", idx)
+	return fmt.Sprintf(`{name: "%s", options: "%s", fields: %s, shardWidth: %d}`, idx.name, idx.options, idx.fields, idx.shardWidth)
 }
 
 // NewIndex creates an index with a name.
@@ -422,6 +424,8 @@ func (idx *Index) ShardWidth() uint64 {
 
 // Fields return a copy of the fields in this index
 func (idx *Index) Fields() map[string]*Field {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
 	result := make(map[string]*Field)
 	for k, v := range idx.fields {
 		result[k] = v.copy()
@@ -431,11 +435,15 @@ func (idx *Index) Fields() map[string]*Field {
 
 // HasFields returns true if the given field exists in the index.
 func (idx *Index) HasField(fieldName string) bool {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
 	_, ok := idx.fields[fieldName]
 	return ok
 }
 
 func (idx *Index) copy() *Index {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
 	fields := make(map[string]*Field)
 	for name, f := range idx.fields {
 		fields[name] = f.copy()
@@ -462,6 +470,8 @@ func (idx *Index) Opts() IndexOptions {
 
 // Field creates a Field struct with the specified name and defaults.
 func (idx *Index) Field(name string, options ...FieldOption) *Field {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
 	if field, ok := idx.fields[name]; ok {
 		return field
 	}
@@ -757,6 +767,7 @@ type FieldOptions struct {
 	cacheSize      int
 	min            int64
 	max            int64
+	scale          int64
 	keys           bool
 	noStandardView bool
 }
@@ -793,6 +804,11 @@ func (fo FieldOptions) Max() int64 {
 	return fo.max
 }
 
+// Scale returns the scale for a decimal field.
+func (fo FieldOptions) Scale() int64 {
+	return fo.scale
+}
+
 // Keys returns whether this field uses keys instead of IDs
 func (fo FieldOptions) Keys() bool {
 	return fo.keys
@@ -827,6 +843,10 @@ func (fo FieldOptions) String() string {
 	case FieldTypeInt:
 		mopt["min"] = fo.min
 		mopt["max"] = fo.max
+	case FieldTypeDecimal:
+		mopt["min"] = fo.min
+		mopt["max"] = fo.max
+		mopt["scale"] = fo.scale
 	case FieldTypeTime:
 		mopt["timeQuantum"] = string(fo.timeQuantum)
 		mopt["noStandardView"] = fo.noStandardView
@@ -873,7 +893,7 @@ func OptFieldTypeInt(limits ...int64) FieldOption {
 	max := int64(math.MaxInt64)
 
 	if len(limits) > 2 {
-		panic("error: OptFieldTypInt accepts at most 2 arguments")
+		panic("error: OptFieldTypeInt accepts at most 2 arguments")
 	}
 	if len(limits) > 0 {
 		min = limits[0]
@@ -916,6 +936,17 @@ func OptFieldTypeBool() FieldOption {
 	}
 }
 
+func OptFieldTypeDecimal(scale int64, minmax ...int64) FieldOption {
+	// reuse int logic for handling min/max
+	intopt := OptFieldTypeInt(minmax...)
+
+	return func(options *FieldOptions) {
+		intopt(options)
+		options.fieldType = FieldTypeDecimal
+		options.scale = scale
+	}
+}
+
 // OptFieldKeys sets whether field uses string keys.
 func OptFieldKeys(keys bool) FieldOption {
 	return func(options *FieldOptions) {
@@ -933,7 +964,7 @@ type Field struct {
 }
 
 func (f *Field) String() string {
-	return fmt.Sprintf("%#v", f)
+	return fmt.Sprintf(`{name: "%s", index: "%s", options: "%s"}`, f.name, f.index.name, f.options)
 }
 
 func newField(name string, index *Index) *Field {
@@ -1199,6 +1230,10 @@ const (
 	// FieldTypeBool is the boolean field type.
 	// See: https://www.pilosa.com/docs/latest/data-model/#boolean
 	FieldTypeBool FieldType = "bool"
+	// FieldTypeDecimal can store floating point numbers as integers
+	// with a scale factor. This field type is only available in
+	// Molecula's Pilosa with enterprise extensions.
+	FieldTypeDecimal FieldType = "decimal"
 )
 
 // TimeQuantum type represents valid time quantum values time fields.
@@ -1272,7 +1307,7 @@ func (f *Field) NotEquals(n int) *PQLRowQuery {
 
 // NotNull creates a not equal to null query.
 func (f *Field) NotNull() *PQLRowQuery {
-	text := fmt.Sprintf("Range(%s != null)", f.name)
+	text := fmt.Sprintf("Row(%s != null)", f.name)
 	q := NewPQLRowQuery(text, f.index, nil)
 	q.hasKeys = f.options.keys || f.index.options.keys
 	return q
@@ -1280,7 +1315,7 @@ func (f *Field) NotNull() *PQLRowQuery {
 
 // Between creates a between query.
 func (f *Field) Between(a int, b int) *PQLRowQuery {
-	text := fmt.Sprintf("Range(%s >< [%d,%d])", f.name, a, b)
+	text := fmt.Sprintf("Row(%s >< [%d,%d])", f.name, a, b)
 	q := NewPQLRowQuery(text, f.index, nil)
 	q.hasKeys = f.options.keys || f.index.options.keys
 	return q
@@ -1450,7 +1485,7 @@ func (f *Field) RowsPreviousLimitColumn(rowIDOrKey interface{}, limit int64, col
 }
 
 func (f *Field) binaryOperation(op string, n int) *PQLRowQuery {
-	text := fmt.Sprintf("Range(%s %s %d)", f.name, op, n)
+	text := fmt.Sprintf("Row(%s %s %d)", f.name, op, n)
 	q := NewPQLRowQuery(text, f.index, nil)
 	q.hasKeys = f.options.keys || f.index.options.keys
 	return q
@@ -1476,4 +1511,21 @@ func encodeMap(m map[string]interface{}) string {
 		panic(err)
 	}
 	return string(result)
+}
+
+func encodeFieldMap(m map[string]*Field) string {
+	sb := strings.Builder{}
+	sb.WriteRune('{')
+	first := true
+	for k, v := range m {
+		if first {
+			first = false
+		} else {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(k + ": ")
+		sb.WriteString(v.String())
+	}
+	sb.WriteRune('}')
+	return sb.String()
 }

@@ -954,6 +954,21 @@ func (f *Field) Opts() FieldOptions {
 	return *f.options
 }
 
+func (f Field) HasRoaringImport() bool {
+	// Roaring imports is not available for indexes with trackExistence=true
+	if f.index.options.TrackExistence() {
+		return false
+	}
+	if f.options.fieldType != FieldTypeSet &&
+		f.options.fieldType != FieldTypeDefault &&
+		f.options.fieldType != FieldTypeBool &&
+		f.options.fieldType != FieldTypeTime {
+		// Roaring imports is available for only set, bool and time fields.
+		return false
+	}
+	return true
+}
+
 func (f *Field) copy() *Field {
 	field := newField(f.name, f.index)
 	*field.options = *f.options

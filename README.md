@@ -1,5 +1,8 @@
 # Go Client for Pilosa
 
+This repo archived Sept 2022 as part of the transition from Pilosa to FeatureBase.
+Please contact community[at]featurebase[dot]com with any questions.
+
 <a href="https://github.com/pilosa"><img src="https://img.shields.io/badge/pilosa-1.3-blue.svg"></a>
 <a href="https://godoc.org/github.com/pilosa/go-pilosa"><img src="https://godoc.org/github.com/pilosa/go-pilosa?status.svg" alt="GoDoc"></a>
 <a href="https://travis-ci.org/pilosa/go-pilosa"><img src="https://api.travis-ci.org/pilosa/go-pilosa.svg?branch=master"></a>
